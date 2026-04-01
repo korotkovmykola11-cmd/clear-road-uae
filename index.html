@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Clear Road UAE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body { margin: 0; font-family: Arial; }
+    #map { height: 60vh; width: 100%; }
+
+    .panel {
+      padding: 12px;
+      background: white;
+      border-bottom: 1px solid #ddd;
+    }
+
+    input {
+      width: 44%;
+      padding: 10px;
+      margin: 3px;
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      font-size: 16px;
+      background: #007AFF;
+      color: white;
+      border: none;
+      border-radius: 6px;
+    }
+
+    .routes {
+      padding: 10px;
+    }
+
+    .route {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+
+    .best {
+      border: 2px solid green;
+    }
+
+    .tag {
+      display: inline-block;
+      background: #eee;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="panel">
+  <input id="start" placeholder="Start (e.g. Dubai Marina)">
+  <input id="end" placeholder="Destination">
+  <button onclick="calculateRoutes()">Compare Routes</button>
+</div>
+
+<div id="map"></div>
+
+<div class="routes" id="routes"></div>
+
+<script>
+let map, directionsService, renderers = [];
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: { lat: 25.2048, lng: 55.2708 },
+    zoom: 11,
+  });
+
+  directionsService = new google.maps.DirectionsService();
+}
+
+function calculateRoutes() {
+  clearRoutes();
+
+  const start = document.getElementById("start").value;
+  const end = document.getElementById("end").value;
+
+  directionsService.route({
+    origin: start,
+    destination: end,
+    travelMode: 'DRIVING',
+    provideRouteAlternatives: true
+  }, (result, status) => {
+
+    if (status !== 'OK') return;
+
+    let routes = result.routes;
+    let bestIndex = 0;
+    let bestScore = Infinity;
+
+    let analyzed = routes.map((route, i) => {
+      let leg = route.legs[0];
+
+      let time = leg.duration.value; // seconds
+      let distance = leg.distance.value;
+
+      // простая оценка трафика (заглушка)
+      let trafficLevel = time / distance;
+
+      // стопы (приблизительно)
+      let stops = route.legs[0].steps.length;
+
+      let score = time + (stops * 30);
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+
+      return { route, time, distance, stops, trafficLevel, score };
+    });
+
+    analyzed.forEach((r, i) => {
+      drawRoute(r.route, i === bestIndex);
+      renderCard(r, i, i === bestIndex);
+    });
+
+  });
+}
+
+function drawRoute(route, isBest) {
+  let renderer = new google.maps.DirectionsRenderer({
+    map: map,
+    directions: { routes: [route] },
+    polylineOptions: {
+      strokeColor: isBest ? "green" : "gray",
+      strokeWeight: isBest ? 6 : 4
+    },
+    suppressMarkers: false
+  });
+
+  renderers.push(renderer);
+}
+
+function renderCard(r, index, isBest) {
+  let div = document.createElement("div");
+  div.className = "route";
+  if (isBest) div.classList.add("best");
+
+  let minutes = Math.round(r.time / 60);
+
+  let explanation = isBest
+    ? "Best route: less stops & smoother traffic"
+    : "Alternative route";
+
+  div.innerHTML = `
+    <b>Route ${index + 1}</b><br>
+    ⏱ ${minutes} min<br>
+    📏 ${(r.distance/1000).toFixed(1)} km<br>
+    🚦 Stops: ${r.stops}<br>
+    <div class="tag">${explanation}</div>
+  `;
+
+  div.onclick = () => {
+    map.fitBounds(r.route.bounds);
+  };
+
+  document.getElementById("routes").appendChild(div);
+}
+
+function clearRoutes() {
+  renderers.forEach(r => r.setMap(null));
+  renderers = [];
+  document.getElementById("routes").innerHTML = "";
+}
+</script>
+
+<!-- ВСТАВЬ СВОЙ API KEY -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAg6eNRDhunMRYQUaAbUeWU&callback=initMap" async defer></script>
+
+</body>
+</html>
