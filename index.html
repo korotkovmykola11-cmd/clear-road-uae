@@ -110,6 +110,7 @@
       background: #fff1f1;
       border: 1px solid #f0b3b3;
       border-radius: 8px;
+      margin: 10px;
     }
   </style>
 </head>
@@ -168,18 +169,45 @@ function getTrafficLevel(timeSeconds, distanceMeters) {
   return "high";
 }
 
+/*
+  Сейчас DirectionsService сам по себе не даёт тебе готовые поля
+  "лужи" и "аварии" в твоём текущем коде.
+  Поэтому пока ставим архитектурную заготовку.
+
+  Когда подключишь источник событий по дороге, меняешь только эту функцию.
+*/
+function getRoadEvents(route, leg) {
+  return {
+    accidents: 0,
+    puddles: 0,
+    incidentsKnown: false
+  };
+}
+
+/* ТЗ1: новая логика score */
 function scoreRoute(routeData) {
-  let score = routeData.time;
+  let score = 0;
 
-  score += routeData.stops * 80;
+  // 1. Время — главный фактор
+  score += routeData.time;
 
-  if (routeData.traffic === "high") score += 700;
-  if (routeData.traffic === "medium") score += 250;
-  if (routeData.traffic === "low") score -= 120;
+  // 2. Stops — сильный штраф
+  score += routeData.stops * 120;
 
-  if (routeData.highway) score -= 180;
+  // 3. Трафик — сильный фактор
+  if (routeData.traffic === "high") score += 1200;
+  if (routeData.traffic === "medium") score += 400;
+  if (routeData.traffic === "low") score -= 150;
 
-  score += (routeData.distance / 1000) * 5;
+  // 4. Хайвей — заметный бонус для UAE
+  if (routeData.highway) score -= 450;
+
+  // 5. Дистанция — слабый дополнительный штраф
+  score += (routeData.distance / 1000) * 2;
+
+  // 6. Дорожные события — заготовка под будущее подключение
+  score += routeData.accidents * 900;
+  score += routeData.puddles * 350;
 
   return score;
 }
@@ -196,16 +224,24 @@ function buildReasons(r, bestRoute, fastestMinutes) {
     if (diffVsFastest <= 0) {
       reasons.push("самый быстрый вариант");
     } else {
-      reasons.push("самый сбалансированный вариант");
+      reasons.push("лучший общий вариант");
     }
 
     if (r.highway) reasons.push("больше движения по хайвею");
     if (r.stops <= 18) reasons.push("меньше остановок по пути");
 
     if (r.traffic === "low") {
-      reasons.push("ожидается менее плотный трафик");
+      reasons.push("менее плотный трафик");
     } else if (r.traffic === "medium") {
       reasons.push("умеренная дорожная нагрузка");
+    }
+
+    if (r.accidents > 0) {
+      reasons.push(`есть аварии: ${r.accidents}`);
+    }
+
+    if (r.puddles > 0) {
+      reasons.push(`есть участки с водой: ${r.puddles}`);
     }
   } else {
     if (diffVsBest > 0) reasons.push(`дольше лучшего маршрута на ${diffVsBest} мин`);
@@ -213,6 +249,18 @@ function buildReasons(r, bestRoute, fastestMinutes) {
     if (r.traffic === "high") reasons.push("ожидается плотный трафик");
     if (r.stops > bestRoute.stops) reasons.push("больше остановок по пути");
     if (!r.highway && bestRoute.highway) reasons.push("меньше участков по хайвею");
+
+    if (r.accidents > 0) {
+      reasons.push(`аварии по пути: ${r.accidents}`);
+    }
+
+    if (r.puddles > 0) {
+      reasons.push(`возможны лужи/вода: ${r.puddles}`);
+    }
+  }
+
+  if (reasons.length === 0) {
+    reasons.push("маршрут без выраженных преимуществ");
   }
 
   return reasons.slice(0, 3);
@@ -242,7 +290,9 @@ function renderCard(r, bestRoute, fastestMinutes) {
   const minutes = Math.round(r.time / 60);
   const km = (r.distance / 1000).toFixed(1);
 
-  const title = r.index === bestRoute.index ? "Лучший маршрут" : `Route ${r.displayIndex}`;
+  const title = r.index === bestRoute.index
+    ? "Лучший маршрут"
+    : `Route ${r.displayIndex}`;
 
   const tags = [];
 
@@ -250,8 +300,10 @@ function renderCard(r, bestRoute, fastestMinutes) {
   if (r.highway) tags.push("Хайвей");
 
   if (r.stops <= 15) {
-    tags.push("Меньше остановок");
-  } else if (r.stops >= 21) {
+    tags.push("Мало остановок");
+  } else if (r.stops <= 20) {
+    tags.push("Средне остановок");
+  } else {
     tags.push("Много остановок");
   }
 
@@ -263,6 +315,14 @@ function renderCard(r, bestRoute, fastestMinutes) {
     tags.push("Плотный трафик");
   }
 
+  if (r.accidents > 0) {
+    tags.push(`Аварии: ${r.accidents}`);
+  }
+
+  if (r.puddles > 0) {
+    tags.push(`Лужи: ${r.puddles}`);
+  }
+
   const reasons = buildReasons(r, bestRoute, fastestMinutes);
 
   div.innerHTML = `
@@ -270,7 +330,7 @@ function renderCard(r, bestRoute, fastestMinutes) {
     <div class="metric">⏱ ${minutes} min</div>
     <div class="metric">📏 ${km} km</div>
     <div class="metric">🚦 Stops: ${r.stops}</div>
-    <div>${tags.map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
+    <div>${tags.slice(0, 4).map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
     <div class="explanation">
       <b>Почему:</b> ${reasons.join(", ")}
     </div>
@@ -332,6 +392,7 @@ function calculateRoutes() {
         const stops = leg.steps.length;
         const highway = isHighway(route);
         const traffic = getTrafficLevel(time, distance);
+        const roadEvents = getRoadEvents(route, leg);
 
         return {
           route,
@@ -341,7 +402,10 @@ function calculateRoutes() {
           distance,
           stops,
           highway,
-          traffic
+          traffic,
+          accidents: roadEvents.accidents,
+          puddles: roadEvents.puddles,
+          incidentsKnown: roadEvents.incidentsKnown
         };
       });
 
@@ -351,11 +415,16 @@ function calculateRoutes() {
       }));
 
       let bestRoute = analyzedRoutes[0];
+
       analyzedRoutes.forEach(r => {
-        if (r.score < bestRoute.score) bestRoute = r;
+        if (r.score < bestRoute.score) {
+          bestRoute = r;
+        }
       });
 
-      const fastestMinutes = Math.min(...analyzedRoutes.map(r => Math.round(r.time / 60)));
+      const fastestMinutes = Math.min(
+        ...analyzedRoutes.map(r => Math.round(r.time / 60))
+      );
 
       analyzedRoutes.forEach(r => {
         drawRoute(result, r.index, r.index === bestRoute.index);
