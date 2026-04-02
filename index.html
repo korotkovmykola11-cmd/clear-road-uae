@@ -169,13 +169,12 @@ function getTrafficLevel(timeSeconds, distanceMeters) {
   return "high";
 }
 
-/*
-  Сейчас DirectionsService сам по себе не даёт тебе готовые поля
-  "лужи" и "аварии" в твоём текущем коде.
-  Поэтому пока ставим архитектурную заготовку.
+function trafficRank(level) {
+  if (level === "low") return 1;
+  if (level === "medium") return 2;
+  return 3;
+}
 
-  Когда подключишь источник событий по дороге, меняешь только эту функцию.
-*/
 function getRoadEvents(route, leg) {
   return {
     accidents: 0,
@@ -184,79 +183,151 @@ function getRoadEvents(route, leg) {
   };
 }
 
-/* ТЗ1: новая логика score */
 function scoreRoute(routeData) {
   let score = 0;
 
-  // 1. Время — главный фактор
   score += routeData.time;
-
-  // 2. Stops — сильный штраф
   score += routeData.stops * 120;
 
-  // 3. Трафик — сильный фактор
   if (routeData.traffic === "high") score += 1200;
   if (routeData.traffic === "medium") score += 400;
   if (routeData.traffic === "low") score -= 150;
 
-  // 4. Хайвей — заметный бонус для UAE
   if (routeData.highway) score -= 450;
 
-  // 5. Дистанция — слабый дополнительный штраф
   score += (routeData.distance / 1000) * 2;
 
-  // 6. Дорожные события — заготовка под будущее подключение
   score += routeData.accidents * 900;
   score += routeData.puddles * 350;
 
   return score;
 }
 
-function buildReasons(r, bestRoute, fastestMinutes) {
+/*
+  ТЗ2:
+  Выбор лучшего маршрута не только по score,
+  а с дополнительной защитой от логических конфликтов.
+*/
+function selectBestRoute(routes) {
+  if (!routes || !routes.length) return null;
+  if (routes.length === 1) return routes[0];
+
+  const sortedByScore = [...routes].sort((a, b) => a.score - b.score);
+  const sortedByTime = [...routes].sort((a, b) => a.time - b.time);
+
+  const scoreBest = sortedByScore[0];
+  const fastest = sortedByTime[0];
+
+  let best = scoreBest;
+
+  // Правило 1:
+  // если scoreBest заметно медленнее самого быстрого,
+  // а по остановкам не лучше, то берём fastest
+  const scoreBestSlowerByMin = Math.round((scoreBest.time - fastest.time) / 60);
+  if (
+    scoreBest.index !== fastest.index &&
+    scoreBestSlowerByMin >= 3 &&
+    scoreBest.stops >= fastest.stops &&
+    trafficRank(scoreBest.traffic) >= trafficRank(fastest.traffic)
+  ) {
+    best = fastest;
+  }
+
+  // Правило 2:
+  // если есть highway-маршрут почти с тем же временем,
+  // но с не худшими остановками — даём приоритет ему
+  routes.forEach(route => {
+    const diffMin = Math.round((route.time - best.time) / 60);
+
+    if (
+      route.index !== best.index &&
+      route.highway &&
+      !best.highway &&
+      diffMin <= 3 &&
+      route.stops <= best.stops &&
+      trafficRank(route.traffic) <= trafficRank(best.traffic)
+    ) {
+      best = route;
+    }
+  });
+
+  // Правило 3:
+  // если текущий best имеет слишком много остановок,
+  // а есть почти такой же по времени маршрут с меньшим числом остановок
+  routes.forEach(route => {
+    const diffMin = Math.round((route.time - best.time) / 60);
+
+    if (
+      route.index !== best.index &&
+      diffMin <= 2 &&
+      route.stops + 3 <= best.stops &&
+      trafficRank(route.traffic) <= trafficRank(best.traffic)
+    ) {
+      best = route;
+    }
+  });
+
+  // Правило 4:
+  // если есть маршрут чуть дольше, но он лучше по highway + traffic + stops
+  routes.forEach(route => {
+    const diffMin = Math.round((route.time - best.time) / 60);
+
+    if (
+      route.index !== best.index &&
+      diffMin <= 2 &&
+      route.highway &&
+      !best.highway &&
+      route.stops <= best.stops &&
+      trafficRank(route.traffic) < trafficRank(best.traffic)
+    ) {
+      best = route;
+    }
+  });
+
+  return best;
+}
+
+function buildReasons(r, bestRoute, fastestRoute) {
   const reasons = [];
 
   const currentMinutes = Math.round(r.time / 60);
   const bestMinutes = Math.round(bestRoute.time / 60);
+  const fastestMinutes = Math.round(fastestRoute.time / 60);
+
   const diffVsBest = currentMinutes - bestMinutes;
   const diffVsFastest = currentMinutes - fastestMinutes;
 
   if (r.index === bestRoute.index) {
-    if (diffVsFastest <= 0) {
+    if (r.index === fastestRoute.index) {
       reasons.push("самый быстрый вариант");
+    } else if (diffVsFastest <= 2) {
+      reasons.push("почти такой же быстрый, но надёжнее");
     } else {
       reasons.push("лучший общий вариант");
     }
 
     if (r.highway) reasons.push("больше движения по хайвею");
-    if (r.stops <= 18) reasons.push("меньше остановок по пути");
+    if (r.stops <= 15) reasons.push("мало остановок по пути");
+    else if (r.stops <= 20) reasons.push("умеренное число остановок");
 
-    if (r.traffic === "low") {
-      reasons.push("менее плотный трафик");
-    } else if (r.traffic === "medium") {
-      reasons.push("умеренная дорожная нагрузка");
-    }
+    if (r.traffic === "low") reasons.push("менее плотный трафик");
+    else if (r.traffic === "medium") reasons.push("умеренная дорожная нагрузка");
 
-    if (r.accidents > 0) {
-      reasons.push(`есть аварии: ${r.accidents}`);
-    }
-
-    if (r.puddles > 0) {
-      reasons.push(`есть участки с водой: ${r.puddles}`);
-    }
+    if (r.accidents > 0) reasons.push(`есть аварии: ${r.accidents}`);
+    if (r.puddles > 0) reasons.push(`есть участки с водой: ${r.puddles}`);
   } else {
     if (diffVsBest > 0) reasons.push(`дольше лучшего маршрута на ${diffVsBest} мин`);
-    if (r.traffic === "low") reasons.push("но трафик может быть спокойнее");
+    if (r.index === fastestRoute.index && r.index !== bestRoute.index) {
+      reasons.push("самый быстрый, но не лучший по общей оценке");
+    }
+
+    if (r.traffic === "low") reasons.push("трафик может быть спокойнее");
     if (r.traffic === "high") reasons.push("ожидается плотный трафик");
     if (r.stops > bestRoute.stops) reasons.push("больше остановок по пути");
     if (!r.highway && bestRoute.highway) reasons.push("меньше участков по хайвею");
 
-    if (r.accidents > 0) {
-      reasons.push(`аварии по пути: ${r.accidents}`);
-    }
-
-    if (r.puddles > 0) {
-      reasons.push(`возможны лужи/вода: ${r.puddles}`);
-    }
+    if (r.accidents > 0) reasons.push(`аварии по пути: ${r.accidents}`);
+    if (r.puddles > 0) reasons.push(`возможны лужи/вода: ${r.puddles}`);
   }
 
   if (reasons.length === 0) {
@@ -282,7 +353,7 @@ function drawRoute(fullResult, routeIndex, isBest) {
   renderers.push(renderer);
 }
 
-function renderCard(r, bestRoute, fastestMinutes) {
+function renderCard(r, bestRoute, fastestRoute) {
   const div = document.createElement("div");
   div.className = "route";
   if (r.index === bestRoute.index) div.classList.add("best");
@@ -297,6 +368,7 @@ function renderCard(r, bestRoute, fastestMinutes) {
   const tags = [];
 
   if (r.index === bestRoute.index) tags.push("Рекомендуем");
+  if (r.index === fastestRoute.index) tags.push("Самый быстрый");
   if (r.highway) tags.push("Хайвей");
 
   if (r.stops <= 15) {
@@ -315,15 +387,10 @@ function renderCard(r, bestRoute, fastestMinutes) {
     tags.push("Плотный трафик");
   }
 
-  if (r.accidents > 0) {
-    tags.push(`Аварии: ${r.accidents}`);
-  }
+  if (r.accidents > 0) tags.push(`Аварии: ${r.accidents}`);
+  if (r.puddles > 0) tags.push(`Лужи: ${r.puddles}`);
 
-  if (r.puddles > 0) {
-    tags.push(`Лужи: ${r.puddles}`);
-  }
-
-  const reasons = buildReasons(r, bestRoute, fastestMinutes);
+  const reasons = buildReasons(r, bestRoute, fastestRoute);
 
   div.innerHTML = `
     <div class="route-title">${title}</div>
@@ -414,17 +481,8 @@ function calculateRoutes() {
         score: scoreRoute(r)
       }));
 
-      let bestRoute = analyzedRoutes[0];
-
-      analyzedRoutes.forEach(r => {
-        if (r.score < bestRoute.score) {
-          bestRoute = r;
-        }
-      });
-
-      const fastestMinutes = Math.min(
-        ...analyzedRoutes.map(r => Math.round(r.time / 60))
-      );
+      const fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+      const bestRoute = selectBestRoute(analyzedRoutes);
 
       analyzedRoutes.forEach(r => {
         drawRoute(result, r.index, r.index === bestRoute.index);
@@ -433,7 +491,7 @@ function calculateRoutes() {
       document.getElementById("routes").innerHTML = "";
 
       analyzedRoutes.forEach(r => {
-        renderCard(r, bestRoute, fastestMinutes);
+        renderCard(r, bestRoute, fastestRoute);
       });
 
       map.fitBounds(bestRoute.route.bounds);
