@@ -56,6 +56,7 @@
       border-radius: 6px;
       font-size: 12px;
       margin-top: 5px;
+      margin-right: 5px;
     }
 
     .error {
@@ -102,15 +103,15 @@ function calculateRoutes() {
     return;
   }
 
- directionsService.route({
-  origin: start,
-  destination: end,
-  travelMode: 'DRIVING',
-  provideRouteAlternatives: true,
-  drivingOptions: {
-    departureTime: new Date(),
-    trafficModel: 'bestguess'
-  }
+  directionsService.route({
+    origin: start,
+    destination: end,
+    travelMode: 'DRIVING',
+    provideRouteAlternatives: true,
+    drivingOptions: {
+      departureTime: new Date(),
+      trafficModel: 'bestguess'
+    }
   }, (result, status) => {
     if (status !== 'OK') {
       document.getElementById("routes").innerHTML =
@@ -126,9 +127,12 @@ function calculateRoutes() {
 
     let analyzed = routes.map((route, i) => {
       let leg = route.legs[0];
-      let time = leg.duration.value;
+      let time = leg.duration_in_traffic
+        ? leg.duration_in_traffic.value
+        : leg.duration.value;
       let distance = leg.distance.value;
       let stops = leg.steps.length;
+      let trafficLevel = time / distance;
 
       let score = time + (stops * 30);
 
@@ -137,7 +141,7 @@ function calculateRoutes() {
         bestIndex = i;
       }
 
-      return { route, time, distance, stops, score, index: i };
+      return { route, time, distance, stops, trafficLevel, score, index: i };
     });
 
     analyzed.forEach((r, i) => {
@@ -163,22 +167,43 @@ function drawRoute(fullResult, routeIndex, isBest) {
   renderers.push(renderer);
 }
 
-function renderCard(r, displayIndex, isBest) {
+function renderCard(r, index, isBest) {
   let div = document.createElement("div");
   div.className = "route";
   if (isBest) div.classList.add("best");
 
   let minutes = Math.round(r.time / 60);
-  let explanation = isBest
-    ? "Best route: less stops & smoother traffic"
-    : "Alternative route";
+  let km = (r.distance / 1000).toFixed(1);
+
+  let badges = [];
+
+  if (isBest) badges.push("Лучший маршрут");
+  if (r.stops <= 16) badges.push("Меньше светофоров");
+  if (r.stops >= 20) badges.push("Больше остановок");
+  if (minutes <= 27) badges.push("Быстрее сейчас");
+  if (minutes >= 30) badges.push("Дольше по времени");
+
+  if (r.trafficLevel < 0.0011) {
+    badges.push("Меньше пробок");
+  } else if (r.trafficLevel > 0.0013) {
+    badges.push("Плотный трафик");
+  } else {
+    badges.push("Средний трафик");
+  }
+
+  let mainReason = isBest
+    ? "Рекомендуем: более плавный и удобный маршрут"
+    : "Альтернативный вариант";
 
   div.innerHTML = `
-    <b>Route ${displayIndex + 1}</b><br>
+    <b>Route ${index + 1}</b><br>
     ⏱ ${minutes} min<br>
-    📏 ${(r.distance / 1000).toFixed(1)} km<br>
+    📏 ${km} km<br>
     🚦 Stops: ${r.stops}<br>
-    <div class="tag">${explanation}</div>
+    <div style="margin-top:8px; font-weight:600;">${mainReason}</div>
+    <div style="margin-top:8px;">
+      ${badges.map(b => `<span class="tag">${b}</span>`).join(" ")}
+    </div>
   `;
 
   div.onclick = () => {
