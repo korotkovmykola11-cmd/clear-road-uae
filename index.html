@@ -1,83 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Clear Road UAE</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <style>
-    body { margin: 0; font-family: Arial, sans-serif; }
-    #map { height: 60vh; width: 100%; }
-
-    .panel {
-      padding: 12px;
-      background: white;
-      border-bottom: 1px solid #ddd;
-    }
-
-    input {
-      width: 44%;
-      padding: 10px;
-      margin: 3px;
-      font-size: 14px;
-    }
-
-    button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      font-size: 16px;
-      background: #007AFF;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    .routes {
-      padding: 10px;
-    }
-
-    .route {
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      padding: 10px;
-      margin-bottom: 8px;
-      cursor: pointer;
-    }
-
-    .best {
-      border: 2px solid green;
-    }
-
-    .tag {
-      display: inline-block;
-      background: #eee;
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 12px;
-      margin-top: 5px;
-      margin-right: 5px;
-    }
-
-    .error {
-      color: red;
-      padding: 10px;
-      font-size: 14px;
-    }
-  </style>
-</head>
-
-<body>
-
-<div class="panel">
-  <input id="start" placeholder="Start (e.g. Dubai Marina)">
-  <input id="end" placeholder="Destination">
-  <button onclick="calculateRoutes()">Compare Routes</button>
-</div>
-
-<div id="map"></div>
-<div class="routes" id="routes"></div>
-
 <script>
 let map, directionsService, renderers = [];
 let lastResult = null;
@@ -113,6 +33,7 @@ function calculateRoutes() {
       trafficModel: 'bestguess'
     }
   }, (result, status) => {
+
     if (status !== 'OK') {
       document.getElementById("routes").innerHTML =
         `<div class="error">Route request failed: ${status}</div>`;
@@ -126,22 +47,49 @@ function calculateRoutes() {
     let bestScore = Infinity;
 
     let analyzed = routes.map((route, i) => {
+
       let leg = route.legs[0];
+
       let time = leg.duration_in_traffic
         ? leg.duration_in_traffic.value
         : leg.duration.value;
+
       let distance = leg.distance.value;
       let stops = leg.steps.length;
       let trafficLevel = time / distance;
 
-      let score = time + (stops * 30);
+      // 🔥 НОВОЕ — анализ маршрута
+      let highwayBonus = 0;
+      let penalty = 0;
+
+      let summary = route.summary || "";
+
+      if (summary.includes("E11") || summary.includes("E311")) {
+        highwayBonus -= 300; // лучше (быстрее, меньше светофоров)
+      }
+
+      if (stops > 20) {
+        penalty += 200; // много остановок = плохо
+      }
+
+      // 🔥 НОВЫЙ SCORE
+      let score = time + (stops * 30) + penalty + highwayBonus;
 
       if (score < bestScore) {
         bestScore = score;
         bestIndex = i;
       }
 
-      return { route, time, distance, stops, trafficLevel, score, index: i };
+      return {
+        route,
+        time,
+        distance,
+        stops,
+        trafficLevel,
+        score,
+        index: i,
+        highway: highwayBonus < 0
+      };
     });
 
     analyzed.forEach((r, i) => {
@@ -179,9 +127,12 @@ function renderCard(r, index, isBest) {
 
   if (isBest) badges.push("Лучший маршрут");
   if (r.stops <= 16) badges.push("Меньше светофоров");
-  if (r.stops >= 20) badges.push("Больше остановок");
+  if (r.stops >= 20) badges.push("Много остановок");
+
   if (minutes <= 27) badges.push("Быстрее сейчас");
   if (minutes >= 30) badges.push("Дольше по времени");
+
+  if (r.highway) badges.push("Хайвей");
 
   if (r.trafficLevel < 0.0011) {
     badges.push("Меньше пробок");
@@ -192,7 +143,7 @@ function renderCard(r, index, isBest) {
   }
 
   let mainReason = isBest
-    ? "Рекомендуем: более плавный и удобный маршрут"
+    ? "Рекомендуем: самый быстрый и плавный маршрут"
     : "Альтернативный вариант";
 
   div.innerHTML = `
