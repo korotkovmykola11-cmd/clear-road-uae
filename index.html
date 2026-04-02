@@ -149,14 +149,14 @@ function calculateRoutes() {
       const trafficLevel = time / distance;
       const highway = isHighwayRoute(route);
 
-      let score = time + (stops * 30);
+      let score = time + (stops * 50);
 
       if (highway) {
-        score -= 180;
+        score -= 150;
       }
 
       if (stops >= 20) {
-        score += 120;
+        score += 300;
       }
 
       if (score < bestScore) {
@@ -226,10 +226,10 @@ function renderCard(r, index, isBest) {
 
   let mainReason = "Альтернативный вариант";
 
-  if (isBest && r.highway) {
+  if (isBest && r.highway && r.stops < 20) {
     mainReason = "Рекомендуем: быстрый и плавный маршрут по хайвею";
   } else if (isBest) {
-    mainReason = "Рекомендуем: более плавный и удобный маршрут";
+    mainReason = "Рекомендуем: более удобный маршрут";
   } else if (r.highway) {
     mainReason = "Альтернатива: маршрут с участком по хайвею";
   }
