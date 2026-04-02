@@ -91,6 +91,20 @@ function initMap() {
   directionsService = new google.maps.DirectionsService();
 }
 
+function isHighwayRoute(route) {
+  const text = `${route.summary || ""} ${
+    route.legs?.[0]?.steps?.map(step => step.instructions || "").join(" ") || ""
+  }`.toUpperCase();
+
+  return (
+    text.includes("E11") ||
+    text.includes("E311") ||
+    text.includes("E611") ||
+    text.includes("SHEIKH ZAYED") ||
+    text.includes("EMIRATES ROAD")
+  );
+}
+
 function calculateRoutes() {
   clearRoutes();
 
@@ -133,8 +147,17 @@ function calculateRoutes() {
       const distance = leg.distance.value;
       const stops = leg.steps.length;
       const trafficLevel = time / distance;
+      const highway = isHighwayRoute(route);
 
-      const score = time + (stops * 30);
+      let score = time + (stops * 30);
+
+      if (highway) {
+        score -= 180;
+      }
+
+      if (stops >= 20) {
+        score += 120;
+      }
 
       if (score < bestScore) {
         bestScore = score;
@@ -148,7 +171,8 @@ function calculateRoutes() {
         stops,
         trafficLevel,
         score,
-        index: i
+        index: i,
+        highway
       };
     });
 
@@ -186,6 +210,7 @@ function renderCard(r, index, isBest) {
   const badges = [];
 
   if (isBest) badges.push("Лучший маршрут");
+  if (r.highway) badges.push("Хайвей");
   if (r.stops <= 16) badges.push("Меньше светофоров");
   if (r.stops >= 20) badges.push("Больше остановок");
   if (minutes <= 27) badges.push("Быстрее сейчас");
@@ -199,9 +224,15 @@ function renderCard(r, index, isBest) {
     badges.push("Средний трафик");
   }
 
-  const mainReason = isBest
-    ? "Рекомендуем: более плавный и удобный маршрут"
-    : "Альтернативный вариант";
+  let mainReason = "Альтернативный вариант";
+
+  if (isBest && r.highway) {
+    mainReason = "Рекомендуем: быстрый и плавный маршрут по хайвею";
+  } else if (isBest) {
+    mainReason = "Рекомендуем: более плавный и удобный маршрут";
+  } else if (r.highway) {
+    mainReason = "Альтернатива: маршрут с участком по хайвею";
+  }
 
   div.innerHTML = `
     <b>Route ${index + 1}</b><br>
