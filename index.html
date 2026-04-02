@@ -355,100 +355,145 @@ function buildHumanContrast(plus, minus) {
   return "маршрут без выраженных отличий";
 }
 
-function buildReasons(r, bestRoute, fastestRoute) {
+function formatMin(v) {
+  return `${Math.abs(v)} мин`;
+}
+
+function formatKm(v) {
+  return `${Math.abs(v).toFixed(1)} км`;
+}
+
+function getAlternativeAdvantage(r, bestRoute) {
   const diffMin = Math.round((r.time - bestRoute.time) / 60);
   const stopDelta = r.stops - bestRoute.stops;
   const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
   const distanceDeltaKm = (r.distance - bestRoute.distance) / 1000;
 
-  if (r.index === bestRoute.index) {
-    let plus = "";
-    let minus = "";
+  const candidates = [];
 
-    if (r.index === fastestRoute.index) {
-      plus = "самый быстрый вариант";
-    } else if (r.stops <= 15) {
-      plus = "меньше остановок по пути";
-    } else if (trafficRank(r.traffic) < 3) {
-      plus = "маршрут стабильнее";
-    } else if (r.highway) {
-      plus = "больше движения по хайвею";
-    } else {
-      plus = "лучший по общей оценке";
-    }
-
-    if (r.stops > 20) {
-      minus = "остановок много";
-    } else if (r.traffic === "high") {
-      minus = "трафик плотный";
-    }
-
-    return [buildHumanContrast(plus, minus)];
+  if (diffMin < 0) {
+    candidates.push({ type: "time", text: `быстрее на ${formatMin(diffMin)}`, weight: 1 });
+  }
+  if (stopDelta < 0) {
+    candidates.push({ type: "stops", text: `на ${Math.abs(stopDelta)} остановок меньше`, weight: 2 });
+  }
+  if (trafficDelta < 0) {
+    candidates.push({ type: "traffic", text: "трафик спокойнее", weight: 3 });
+  }
+  if (distanceDeltaKm < -2.5) {
+    candidates.push({ type: "distance", text: `короче на ${formatKm(distanceDeltaKm)}`, weight: 4 });
+  }
+  if (r.highway && !bestRoute.highway) {
+    candidates.push({ type: "road", text: "больше движения по хайвею", weight: 5 });
   }
 
+  candidates.sort((a, b) => a.weight - b.weight);
+  return candidates[0] || null;
+}
+
+function getAlternativeTradeoff(r, bestRoute, advantageType) {
+  const diffMin = Math.round((r.time - bestRoute.time) / 60);
+  const stopDelta = r.stops - bestRoute.stops;
+  const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
+  const distanceDeltaKm = (r.distance - bestRoute.distance) / 1000;
+
+  const candidates = [];
+
+  if (advantageType !== "time" && diffMin > 0) {
+    candidates.push({ type: "time", text: `дольше на ${diffMin} мин`, weight: 1 });
+  }
+  if (advantageType !== "stops" && stopDelta > 0) {
+    candidates.push({ type: "stops", text: `на ${stopDelta} остановок больше`, weight: 2 });
+  }
+  if (advantageType !== "traffic" && trafficDelta > 0) {
+    candidates.push({ type: "traffic", text: "трафик плотнее", weight: 3 });
+  }
+  if (advantageType !== "distance" && distanceDeltaKm > 2.5) {
+    candidates.push({ type: "distance", text: `длиннее на ${distanceDeltaKm.toFixed(1)} км`, weight: 4 });
+  }
+  if (advantageType !== "road" && !r.highway && bestRoute.highway) {
+    candidates.push({ type: "road", text: "меньше участков по хайвею", weight: 5 });
+  }
+
+  candidates.sort((a, b) => a.weight - b.weight);
+  return candidates[0] || null;
+}
+
+function buildBestReason(r, fastestRoute) {
   let plus = "";
   let minus = "";
 
-  // Сначала ищем плюс
-  if (diffMin < 0) {
-    plus = `быстрее на ${Math.abs(diffMin)} мин`;
-  } else if (stopDelta < 0) {
-    plus = `на ${Math.abs(stopDelta)} остановок меньше`;
-  } else if (trafficDelta < 0) {
-    plus = "трафик спокойнее";
-  } else if (distanceDeltaKm <= -3) {
-    plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
-  } else if (r.highway && !bestRoute.highway) {
-    plus = "больше движения по хайвею";
-  } else if (r.index === fastestRoute.index && r.index !== bestRoute.index) {
-    plus = "самый быстрый вариант";
+  if (r.index === fastestRoute.index) {
+    if (r.stops <= 15) {
+      plus = "самый быстрый и с меньшим числом остановок";
+    } else if (r.highway) {
+      plus = "самый быстрый и с хорошим движением по хайвею";
+    } else {
+      plus = "самый быстрый и самый сбалансированный";
+    }
+  } else if (r.stops <= 15 && r.highway) {
+    plus = "лучший баланс по хайвею и остановкам";
+  } else if (r.stops <= 15) {
+    plus = "лучший баланс по времени и остановкам";
+  } else if (r.highway) {
+    plus = "лучший баланс по времени и дороге";
+  } else {
+    plus = "лучший по общей оценке";
   }
 
-  // Потом ищем минус
-  if (diffMin > 0) {
-    minus = `дольше на ${diffMin} мин`;
-  } else if (stopDelta > 0) {
-    minus = `на ${stopDelta} остановок больше`;
-  } else if (trafficDelta > 0) {
-    minus = "трафик плотнее";
-  } else if (distanceDeltaKm >= 3) {
-    minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
-  } else if (!r.highway && bestRoute.highway) {
-    minus = "меньше участков по хайвею";
+  if (r.stops > 20) {
+    minus = "остановок много";
   } else if (r.traffic === "high") {
     minus = "трафик плотный";
   }
 
-  // Fallback 1: если плюса нет — добираем его любым отличием
-  if (!plus) {
-    if (distanceDeltaKm < 0) {
-      plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
-    } else if (stopDelta <= 0) {
-      plus = stopDelta === 0 ? "столько же остановок" : `на ${Math.abs(stopDelta)} остановок меньше`;
-    } else if (trafficDelta <= 0) {
-      plus = trafficDelta === 0 ? "сопоставимый трафик" : "трафик спокойнее";
-    } else if (r.highway) {
-      plus = "больше движения по хайвею";
-    } else {
-      plus = "есть альтернативный вариант";
+  return buildHumanContrast(plus, minus);
+}
+
+function buildReasons(r, bestRoute, fastestRoute, role) {
+  if (role === "best") {
+    return [buildBestReason(r, fastestRoute)];
+  }
+
+  const advantage = getAlternativeAdvantage(r, bestRoute);
+  const tradeoff = getAlternativeTradeoff(r, bestRoute, advantage ? advantage.type : "");
+
+  let plus = advantage ? advantage.text : "";
+  let minus = tradeoff ? tradeoff.text : "";
+
+  if (role === "fastest") {
+    if (!plus || advantage.type !== "time") {
+      plus = "самый быстрый вариант";
+    }
+    if (!minus) {
+      const stopDelta = r.stops - bestRoute.stops;
+      const distanceDeltaKm = (r.distance - bestRoute.distance) / 1000;
+      if (stopDelta > 0) minus = `на ${stopDelta} остановок больше`;
+      else if (distanceDeltaKm > 2.5) minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
+      else minus = "маршрут менее сбалансирован";
     }
   }
 
-  // Fallback 2: если минуса нет — добираем его любым отличием
-  if (!minus) {
-    if (distanceDeltaKm > 0) {
-      minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
-    } else if (stopDelta >= 0) {
-      minus = stopDelta === 0 ? "остановок не меньше" : `на ${stopDelta} остановок больше`;
-    } else if (trafficDelta >= 0) {
-      minus = trafficDelta === 0 ? "трафик не лучше" : "трафик плотнее";
-    } else if (!r.highway && bestRoute.highway) {
-      minus = "меньше участков по хайвею";
-    } else if (diffMin >= 0) {
-      minus = diffMin === 0 ? "не быстрее лучшего маршрута" : `дольше на ${diffMin} мин`;
+  if (role === "alt") {
+    if (!plus) {
+      const stopDelta = r.stops - bestRoute.stops;
+      const distanceDeltaKm = (r.distance - bestRoute.distance) / 1000;
+      const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
+
+      if (stopDelta <= 0) plus = stopDelta === 0 ? "столько же остановок" : `на ${Math.abs(stopDelta)} остановок меньше`;
+      else if (distanceDeltaKm < 0) plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
+      else if (trafficDelta <= 0) plus = trafficDelta === 0 ? "трафик не хуже" : "трафик спокойнее";
+      else plus = "альтернативный вариант";
+    }
+
+    if (!minus) {
+      const diffMin = Math.round((r.time - bestRoute.time) / 60);
+      if (diffMin > 0) minus = `дольше на ${diffMin} мин`;
+      else minus = "выгода ограничена";
     }
   }
 
+  if (!plus) plus = "альтернативный вариант";
   return [buildHumanContrast(plus, minus)];
 }
 
@@ -495,7 +540,7 @@ function renderCard(r, bestRoute, fastestRoute, allRoutes) {
   if (r.accidents > 0) tags.push(`<span class="tag">Аварии: ${r.accidents}</span>`);
   if (r.puddles > 0) tags.push(`<span class="tag">Лужи: ${r.puddles}</span>`);
 
-  const reasons = buildReasons(r, bestRoute, fastestRoute);
+  const reasons = buildReasons(r, bestRoute, fastestRoute, role);
 
   div.innerHTML = `
     <div class="route-title">${title}</div>
