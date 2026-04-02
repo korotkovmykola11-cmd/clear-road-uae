@@ -369,6 +369,8 @@ function buildReasons(r, bestRoute, fastestRoute) {
       plus = "самый быстрый вариант";
     } else if (r.stops <= 15) {
       plus = "меньше остановок по пути";
+    } else if (trafficRank(r.traffic) < 3) {
+      plus = "маршрут стабильнее";
     } else if (r.highway) {
       plus = "больше движения по хайвею";
     } else {
@@ -387,6 +389,7 @@ function buildReasons(r, bestRoute, fastestRoute) {
   let plus = "";
   let minus = "";
 
+  // Сначала ищем плюс
   if (diffMin < 0) {
     plus = `быстрее на ${Math.abs(diffMin)} мин`;
   } else if (stopDelta < 0) {
@@ -395,20 +398,55 @@ function buildReasons(r, bestRoute, fastestRoute) {
     plus = "трафик спокойнее";
   } else if (distanceDeltaKm <= -3) {
     plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
+  } else if (r.highway && !bestRoute.highway) {
+    plus = "больше движения по хайвею";
+  } else if (r.index === fastestRoute.index && r.index !== bestRoute.index) {
+    plus = "самый быстрый вариант";
   }
 
+  // Потом ищем минус
   if (diffMin > 0) {
     minus = `дольше на ${diffMin} мин`;
   } else if (stopDelta > 0) {
     minus = `на ${stopDelta} остановок больше`;
-  } else if (trafficDelta > 0 || r.traffic === "high") {
+  } else if (trafficDelta > 0) {
     minus = "трафик плотнее";
   } else if (distanceDeltaKm >= 3) {
     minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
+  } else if (!r.highway && bestRoute.highway) {
+    minus = "меньше участков по хайвею";
+  } else if (r.traffic === "high") {
+    minus = "трафик плотный";
   }
 
-  if (!plus && r.index === fastestRoute.index && r.index !== bestRoute.index) {
-    plus = "самый быстрый вариант";
+  // Fallback 1: если плюса нет — добираем его любым отличием
+  if (!plus) {
+    if (distanceDeltaKm < 0) {
+      plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
+    } else if (stopDelta <= 0) {
+      plus = stopDelta === 0 ? "столько же остановок" : `на ${Math.abs(stopDelta)} остановок меньше`;
+    } else if (trafficDelta <= 0) {
+      plus = trafficDelta === 0 ? "сопоставимый трафик" : "трафик спокойнее";
+    } else if (r.highway) {
+      plus = "больше движения по хайвею";
+    } else {
+      plus = "есть альтернативный вариант";
+    }
+  }
+
+  // Fallback 2: если минуса нет — добираем его любым отличием
+  if (!minus) {
+    if (distanceDeltaKm > 0) {
+      minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
+    } else if (stopDelta >= 0) {
+      minus = stopDelta === 0 ? "остановок не меньше" : `на ${stopDelta} остановок больше`;
+    } else if (trafficDelta >= 0) {
+      minus = trafficDelta === 0 ? "трафик не лучше" : "трафик плотнее";
+    } else if (!r.highway && bestRoute.highway) {
+      minus = "меньше участков по хайвею";
+    } else if (diffMin >= 0) {
+      minus = diffMin === 0 ? "не быстрее лучшего маршрута" : `дольше на ${diffMin} мин`;
+    }
   }
 
   return [buildHumanContrast(plus, minus)];
