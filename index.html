@@ -100,7 +100,7 @@
       border-left: 4px solid #007AFF;
       border-radius: 8px;
       font-size: 14px;
-      line-height: 1.4;
+      line-height: 1.5;
     }
 
     .error {
@@ -203,11 +203,6 @@ function scoreRoute(routeData) {
   return score;
 }
 
-/*
-  ТЗ2:
-  Выбор лучшего маршрута не только по score,
-  а с дополнительной защитой от логических конфликтов.
-*/
 function selectBestRoute(routes) {
   if (!routes || !routes.length) return null;
   if (routes.length === 1) return routes[0];
@@ -220,9 +215,6 @@ function selectBestRoute(routes) {
 
   let best = scoreBest;
 
-  // Правило 1:
-  // если scoreBest заметно медленнее самого быстрого,
-  // а по остановкам не лучше, то берём fastest
   const scoreBestSlowerByMin = Math.round((scoreBest.time - fastest.time) / 60);
   if (
     scoreBest.index !== fastest.index &&
@@ -233,9 +225,6 @@ function selectBestRoute(routes) {
     best = fastest;
   }
 
-  // Правило 2:
-  // если есть highway-маршрут почти с тем же временем,
-  // но с не худшими остановками — даём приоритет ему
   routes.forEach(route => {
     const diffMin = Math.round((route.time - best.time) / 60);
 
@@ -251,9 +240,6 @@ function selectBestRoute(routes) {
     }
   });
 
-  // Правило 3:
-  // если текущий best имеет слишком много остановок,
-  // а есть почти такой же по времени маршрут с меньшим числом остановок
   routes.forEach(route => {
     const diffMin = Math.round((route.time - best.time) / 60);
 
@@ -267,8 +253,6 @@ function selectBestRoute(routes) {
     }
   });
 
-  // Правило 4:
-  // если есть маршрут чуть дольше, но он лучше по highway + traffic + stops
   routes.forEach(route => {
     const diffMin = Math.round((route.time - best.time) / 60);
 
@@ -287,8 +271,44 @@ function selectBestRoute(routes) {
   return best;
 }
 
-function buildReasons(r, bestRoute, fastestRoute) {
-  const reasons = [];
+function getStopsLabel(stops) {
+  if (stops <= 15) return "Мало остановок";
+  if (stops <= 20) return "Средне остановок";
+  return "Много остановок";
+}
+
+function getTrafficLabel(traffic) {
+  if (traffic === "low") return "Меньше пробок";
+  if (traffic === "medium") return "Средний трафик";
+  return "Плотный трафик";
+}
+
+function pushReason(bucket, text, priority) {
+  bucket.push({ text, priority });
+}
+
+function uniqueReasons(items, limit = 3) {
+  const seen = new Set();
+  return items
+    .sort((a, b) => a.priority - b.priority)
+    .filter(item => {
+      if (seen.has(item.text)) return false;
+      seen.add(item.text);
+      return true;
+    })
+    .slice(0, limit)
+    .map(item => item.text);
+}
+
+/*
+  ТЗ3:
+  WHY ENGINE v2
+  - приоритет причин
+  - предупреждения не скрываются
+  - альтернативы объясняются понятнее
+*/
+function buildReasons(r, bestRoute, fastestRoute, allRoutes) {
+  const bucket = [];
 
   const currentMinutes = Math.round(r.time / 60);
   const bestMinutes = Math.round(bestRoute.time / 60);
@@ -297,44 +317,105 @@ function buildReasons(r, bestRoute, fastestRoute) {
   const diffVsBest = currentMinutes - bestMinutes;
   const diffVsFastest = currentMinutes - fastestMinutes;
 
+  const lowerStopsExists = allRoutes.some(route =>
+    route.index !== r.index && route.stops < r.stops
+  );
+
+  const calmerTrafficExists = allRoutes.some(route =>
+    route.index !== r.index && trafficRank(route.traffic) < trafficRank(r.traffic)
+  );
+
   if (r.index === bestRoute.index) {
     if (r.index === fastestRoute.index) {
-      reasons.push("самый быстрый вариант");
+      pushReason(bucket, "самый быстрый вариант", 1);
     } else if (diffVsFastest <= 2) {
-      reasons.push("почти такой же быстрый, но надёжнее");
+      pushReason(bucket, "почти такой же быстрый, но лучше по общей оценке", 1);
     } else {
-      reasons.push("лучший общий вариант");
+      pushReason(bucket, "лучший общий вариант по времени, дороге и остановкам", 1);
     }
 
-    if (r.highway) reasons.push("больше движения по хайвею");
-    if (r.stops <= 15) reasons.push("мало остановок по пути");
-    else if (r.stops <= 20) reasons.push("умеренное число остановок");
+    if (r.highway) {
+      pushReason(bucket, "больше движения по хайвею", 2);
+    }
 
-    if (r.traffic === "low") reasons.push("менее плотный трафик");
-    else if (r.traffic === "medium") reasons.push("умеренная дорожная нагрузка");
+    if (r.stops <= 15) {
+      pushReason(bucket, "мало остановок по пути", 2);
+    } else if (r.stops <= 20) {
+      pushReason(bucket, "умеренное число остановок", 3);
+    } else {
+      pushReason(bucket, "предупреждение: остановок много", 2);
+    }
 
-    if (r.accidents > 0) reasons.push(`есть аварии: ${r.accidents}`);
-    if (r.puddles > 0) reasons.push(`есть участки с водой: ${r.puddles}`);
+    if (r.traffic === "low") {
+      pushReason(bucket, "трафик выглядит спокойнее", 2);
+    } else if (r.traffic === "medium") {
+      pushReason(bucket, "дорожная нагрузка умеренная", 3);
+    } else {
+      pushReason(bucket, "предупреждение: трафик плотный", 2);
+    }
+
+    if (lowerStopsExists && r.stops > 20) {
+      pushReason(bucket, "есть альтернативы с меньшим числом остановок", 3);
+    }
+
+    if (calmerTrafficExists && r.traffic === "high") {
+      pushReason(bucket, "но другие варианты могут быть спокойнее по трафику", 3);
+    }
+
+    if (r.accidents > 0) {
+      pushReason(bucket, `аварии по пути: ${r.accidents}`, 1);
+    }
+
+    if (r.puddles > 0) {
+      pushReason(bucket, `участки с водой: ${r.puddles}`, 1);
+    }
   } else {
-    if (diffVsBest > 0) reasons.push(`дольше лучшего маршрута на ${diffVsBest} мин`);
-    if (r.index === fastestRoute.index && r.index !== bestRoute.index) {
-      reasons.push("самый быстрый, но не лучший по общей оценке");
+    if (diffVsBest > 0) {
+      pushReason(bucket, `дольше лучшего маршрута на ${diffVsBest} мин`, 1);
     }
 
-    if (r.traffic === "low") reasons.push("трафик может быть спокойнее");
-    if (r.traffic === "high") reasons.push("ожидается плотный трафик");
-    if (r.stops > bestRoute.stops) reasons.push("больше остановок по пути");
-    if (!r.highway && bestRoute.highway) reasons.push("меньше участков по хайвею");
+    if (r.index === fastestRoute.index && r.index !== bestRoute.index) {
+      pushReason(bucket, "самый быстрый, но проигрывает по общей оценке", 1);
+    }
 
-    if (r.accidents > 0) reasons.push(`аварии по пути: ${r.accidents}`);
-    if (r.puddles > 0) reasons.push(`возможны лужи/вода: ${r.puddles}`);
+    if (r.highway && !bestRoute.highway) {
+      pushReason(bucket, "больше движения по хайвею", 2);
+    } else if (!r.highway && bestRoute.highway) {
+      pushReason(bucket, "меньше участков по хайвею", 2);
+    }
+
+    if (r.stops < bestRoute.stops) {
+      pushReason(bucket, "меньше остановок по пути", 2);
+    } else if (r.stops > bestRoute.stops) {
+      pushReason(bucket, "больше остановок по пути", 2);
+    } else if (r.stops > 20) {
+      pushReason(bucket, "остановок много", 3);
+    }
+
+    if (r.traffic === "low") {
+      pushReason(bucket, "трафик может быть спокойнее", 2);
+    } else if (r.traffic === "medium") {
+      pushReason(bucket, "трафик средний", 3);
+    } else {
+      pushReason(bucket, "ожидается плотный трафик", 2);
+    }
+
+    if (r.accidents > 0) {
+      pushReason(bucket, `аварии по пути: ${r.accidents}`, 1);
+    }
+
+    if (r.puddles > 0) {
+      pushReason(bucket, `возможны лужи/вода: ${r.puddles}`, 1);
+    }
   }
 
-  if (reasons.length === 0) {
-    reasons.push("маршрут без выраженных преимуществ");
+  const reasons = uniqueReasons(bucket, 3);
+
+  if (!reasons.length) {
+    return ["маршрут без выраженных преимуществ"];
   }
 
-  return reasons.slice(0, 3);
+  return reasons;
 }
 
 function drawRoute(fullResult, routeIndex, isBest) {
@@ -353,7 +434,7 @@ function drawRoute(fullResult, routeIndex, isBest) {
   renderers.push(renderer);
 }
 
-function renderCard(r, bestRoute, fastestRoute) {
+function renderCard(r, bestRoute, fastestRoute, allRoutes) {
   const div = document.createElement("div");
   div.className = "route";
   if (r.index === bestRoute.index) div.classList.add("best");
@@ -370,34 +451,20 @@ function renderCard(r, bestRoute, fastestRoute) {
   if (r.index === bestRoute.index) tags.push("Рекомендуем");
   if (r.index === fastestRoute.index) tags.push("Самый быстрый");
   if (r.highway) tags.push("Хайвей");
-
-  if (r.stops <= 15) {
-    tags.push("Мало остановок");
-  } else if (r.stops <= 20) {
-    tags.push("Средне остановок");
-  } else {
-    tags.push("Много остановок");
-  }
-
-  if (r.traffic === "low") {
-    tags.push("Меньше пробок");
-  } else if (r.traffic === "medium") {
-    tags.push("Средний трафик");
-  } else {
-    tags.push("Плотный трафик");
-  }
+  tags.push(getStopsLabel(r.stops));
+  tags.push(getTrafficLabel(r.traffic));
 
   if (r.accidents > 0) tags.push(`Аварии: ${r.accidents}`);
   if (r.puddles > 0) tags.push(`Лужи: ${r.puddles}`);
 
-  const reasons = buildReasons(r, bestRoute, fastestRoute);
+  const reasons = buildReasons(r, bestRoute, fastestRoute, allRoutes);
 
   div.innerHTML = `
     <div class="route-title">${title}</div>
     <div class="metric">⏱ ${minutes} min</div>
     <div class="metric">📏 ${km} km</div>
     <div class="metric">🚦 Stops: ${r.stops}</div>
-    <div>${tags.slice(0, 4).map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
+    <div>${tags.slice(0, 5).map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
     <div class="explanation">
       <b>Почему:</b> ${reasons.join(", ")}
     </div>
@@ -491,7 +558,7 @@ function calculateRoutes() {
       document.getElementById("routes").innerHTML = "";
 
       analyzedRoutes.forEach(r => {
-        renderCard(r, bestRoute, fastestRoute);
+        renderCard(r, bestRoute, fastestRoute, analyzedRoutes);
       });
 
       map.fitBounds(bestRoute.route.bounds);
