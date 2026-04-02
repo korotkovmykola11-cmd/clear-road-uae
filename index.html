@@ -2,26 +2,25 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
+  <title>Clear Road UAE</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Clear Road UAE — No API Key</title>
-
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
 
   <style>
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
       background: #f5f5f5;
     }
 
+    #map {
+      height: 60vh;
+      width: 100%;
+    }
+
     .panel {
-      padding: 14px;
+      padding: 12px;
       background: white;
       border-bottom: 1px solid #ddd;
       display: flex;
@@ -31,8 +30,8 @@
 
     input {
       flex: 1 1 300px;
-      padding: 12px;
-      font-size: 15px;
+      padding: 10px;
+      font-size: 14px;
       border: 1px solid #ccc;
       border-radius: 8px;
     }
@@ -41,7 +40,7 @@
       width: 100%;
       padding: 12px;
       font-size: 16px;
-      background: #007aff;
+      background: #007AFF;
       color: white;
       border: none;
       border-radius: 8px;
@@ -49,12 +48,7 @@
     }
 
     button:hover {
-      background: #0067d6;
-    }
-
-    #map {
-      height: 60vh;
-      width: 100%;
+      background: #0066d6;
     }
 
     .routes {
@@ -90,16 +84,6 @@
       font-size: 16px;
     }
 
-    .explanation {
-      margin-top: 10px;
-      padding: 10px;
-      background: #f7faff;
-      border-left: 4px solid #007aff;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.4;
-    }
-
     .tag {
       display: inline-block;
       background: #eee;
@@ -109,344 +93,285 @@
       margin: 5px 5px 0 0;
     }
 
+    .explanation {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f7faff;
+      border-left: 4px solid #007AFF;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
     .error {
       color: #b00020;
+      padding: 10px;
+      font-size: 14px;
       background: #fff1f1;
       border: 1px solid #f0b3b3;
       border-radius: 8px;
-      padding: 10px;
-      margin: 10px;
-      font-size: 14px;
-    }
-
-    .loading {
-      padding: 10px;
-      font-size: 14px;
-      color: #333;
-    }
-
-    .leaflet-container {
-      font-family: Arial, sans-serif;
     }
   </style>
 </head>
 <body>
 
-  <div class="panel">
-    <input id="start" placeholder="Откуда (например: Sharjah)" value="Sharjah" />
-    <input id="end" placeholder="Куда (например: Abu Dhabi)" value="Abu Dhabi" />
-    <button onclick="calculateRoutes()">Compare Routes</button>
-  </div>
+<div class="panel">
+  <input id="start" placeholder="Start (e.g. Dubai Marina)" value="Sharjah">
+  <input id="end" placeholder="Destination" value="Abu Dhabi">
+  <button onclick="calculateRoutes()">Compare Routes</button>
+</div>
 
-  <div id="map"></div>
-  <div class="routes" id="routes"></div>
+<div id="map"></div>
+<div class="routes" id="routes"></div>
 
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+<script>
+let map;
+let directionsService;
+let renderers = [];
+let analyzedRoutes = [];
 
-  <script>
-    let map;
-    let routeLayers = [];
-    let markers = [];
-    let currentRoutes = [];
+function initMap() {
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: { lat: 24.4539, lng: 54.3773 },
+    zoom: 8,
+    mapTypeControl: true,
+    streetViewControl: true,
+    fullscreenControl: true
+  });
 
-    function initMap() {
-      map = L.map("map").setView([24.4539, 54.3773], 8);
+  directionsService = new google.maps.DirectionsService();
+}
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
-      }).addTo(map);
+function clearRoutes() {
+  renderers.forEach(r => r.setMap(null));
+  renderers = [];
+  analyzedRoutes = [];
+  document.getElementById("routes").innerHTML = "";
+}
+
+function isHighway(route) {
+  const summary = (route.summary || "").toUpperCase();
+  return (
+    summary.includes("E11") ||
+    summary.includes("E311") ||
+    summary.includes("E611") ||
+    summary.includes("SHEIKH") ||
+    summary.includes("HIGHWAY")
+  );
+}
+
+function getTrafficLevel(timeSeconds, distanceMeters) {
+  const ratio = timeSeconds / distanceMeters;
+
+  if (ratio < 0.00105) return "low";
+  if (ratio < 0.00125) return "medium";
+  return "high";
+}
+
+function scoreRoute(routeData) {
+  let score = routeData.time;
+
+  score += routeData.stops * 80;
+
+  if (routeData.traffic === "high") score += 700;
+  if (routeData.traffic === "medium") score += 250;
+  if (routeData.traffic === "low") score -= 120;
+
+  if (routeData.highway) score -= 180;
+
+  score += (routeData.distance / 1000) * 5;
+
+  return score;
+}
+
+function buildReasons(r, bestRoute, fastestMinutes) {
+  const reasons = [];
+
+  const currentMinutes = Math.round(r.time / 60);
+  const bestMinutes = Math.round(bestRoute.time / 60);
+  const diffVsBest = currentMinutes - bestMinutes;
+  const diffVsFastest = currentMinutes - fastestMinutes;
+
+  if (r.index === bestRoute.index) {
+    if (diffVsFastest <= 0) {
+      reasons.push("самый быстрый вариант");
+    } else {
+      reasons.push("самый сбалансированный вариант");
     }
 
-    async function geocodePlace(query) {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    if (r.highway) reasons.push("больше движения по хайвею");
+    if (r.stops <= 18) reasons.push("меньше остановок по пути");
 
-      const response = await fetch(url, {
-        headers: {
-          "Accept": "application/json"
-        }
-      });
+    if (r.traffic === "low") {
+      reasons.push("ожидается менее плотный трафик");
+    } else if (r.traffic === "medium") {
+      reasons.push("умеренная дорожная нагрузка");
+    }
+  } else {
+    if (diffVsBest > 0) reasons.push(`дольше лучшего маршрута на ${diffVsBest} мин`);
+    if (r.traffic === "low") reasons.push("но трафик может быть спокойнее");
+    if (r.traffic === "high") reasons.push("ожидается плотный трафик");
+    if (r.stops > bestRoute.stops) reasons.push("больше остановок по пути");
+    if (!r.highway && bestRoute.highway) reasons.push("меньше участков по хайвею");
+  }
 
-      if (!response.ok) {
-        throw new Error("Geocoding request failed");
+  return reasons.slice(0, 3);
+}
+
+function drawRoute(fullResult, routeIndex, isBest) {
+  const renderer = new google.maps.DirectionsRenderer({
+    map: map,
+    directions: fullResult,
+    routeIndex: routeIndex,
+    suppressMarkers: false,
+    polylineOptions: {
+      strokeColor: isBest ? "green" : "gray",
+      strokeOpacity: 0.9,
+      strokeWeight: isBest ? 6 : 4
+    }
+  });
+
+  renderers.push(renderer);
+}
+
+function renderCard(r, bestRoute, fastestMinutes) {
+  const div = document.createElement("div");
+  div.className = "route";
+  if (r.index === bestRoute.index) div.classList.add("best");
+
+  const minutes = Math.round(r.time / 60);
+  const km = (r.distance / 1000).toFixed(1);
+
+  const title = r.index === bestRoute.index ? "Лучший маршрут" : `Route ${r.displayIndex}`;
+
+  const tags = [];
+
+  if (r.index === bestRoute.index) tags.push("Рекомендуем");
+  if (r.highway) tags.push("Хайвей");
+
+  if (r.stops <= 15) {
+    tags.push("Меньше остановок");
+  } else if (r.stops >= 21) {
+    tags.push("Много остановок");
+  }
+
+  if (r.traffic === "low") {
+    tags.push("Меньше пробок");
+  } else if (r.traffic === "medium") {
+    tags.push("Средний трафик");
+  } else {
+    tags.push("Плотный трафик");
+  }
+
+  const reasons = buildReasons(r, bestRoute, fastestMinutes);
+
+  div.innerHTML = `
+    <div class="route-title">${title}</div>
+    <div class="metric">⏱ ${minutes} min</div>
+    <div class="metric">📏 ${km} km</div>
+    <div class="metric">🚦 Stops: ${r.stops}</div>
+    <div>${tags.map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
+    <div class="explanation">
+      <b>Почему:</b> ${reasons.join(", ")}
+    </div>
+  `;
+
+  div.onclick = () => {
+    map.fitBounds(r.route.bounds);
+  };
+
+  document.getElementById("routes").appendChild(div);
+}
+
+function calculateRoutes() {
+  clearRoutes();
+
+  const start = document.getElementById("start").value.trim();
+  const end = document.getElementById("end").value.trim();
+
+  if (!start || !end) {
+    document.getElementById("routes").innerHTML =
+      '<div class="error">Please enter both start and destination.</div>';
+    return;
+  }
+
+  directionsService.route(
+    {
+      origin: start,
+      destination: end,
+      travelMode: google.maps.TravelMode.DRIVING,
+      provideRouteAlternatives: true,
+      drivingOptions: {
+        departureTime: new Date(),
+        trafficModel: "bestguess"
       }
-
-      const data = await response.json();
-
-      if (!data.length) {
-        throw new Error(`Не удалось найти адрес: ${query}`);
-      }
-
-      return {
-        lat: parseFloat(data[0].lat),
-        lon: parseFloat(data[0].lon),
-        displayName: data[0].display_name
-      };
-    }
-
-    function decodePolyline(str, precision = 5) {
-      let index = 0;
-      let lat = 0;
-      let lng = 0;
-      const coordinates = [];
-      const factor = Math.pow(10, precision);
-
-      while (index < str.length) {
-        let result = 0;
-        let shift = 0;
-        let byte = null;
-
-        do {
-          byte = str.charCodeAt(index++) - 63;
-          result |= (byte & 0x1f) << shift;
-          shift += 5;
-        } while (byte >= 0x20);
-
-        const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
-        lat += deltaLat;
-
-        result = 0;
-        shift = 0;
-
-        do {
-          byte = str.charCodeAt(index++) - 63;
-          result |= (byte & 0x1f) << shift;
-          shift += 5;
-        } while (byte >= 0x20);
-
-        const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
-        lng += deltaLng;
-
-        coordinates.push([lat / factor, lng / factor]);
-      }
-
-      return coordinates;
-    }
-
-    function clearRoutes() {
-      routeLayers.forEach(layer => map.removeLayer(layer));
-      markers.forEach(marker => map.removeLayer(marker));
-
-      routeLayers = [];
-      markers = [];
-      currentRoutes = [];
-      document.getElementById("routes").innerHTML = "";
-    }
-
-    function getBoundsFromCoords(coords) {
-      return L.latLngBounds(coords.map(c => [c[0], c[1]]));
-    }
-
-    function isLikelyHighway(distanceKm, durationMin) {
-      const avgSpeed = distanceKm / (durationMin / 60);
-      return avgSpeed > 75;
-    }
-
-    function estimateStops(distanceKm, durationMin, isHighway) {
-      let stops = Math.round(distanceKm / 7);
-
-      if (isHighway) stops -= 6;
-      if (durationMin > 90) stops += 3;
-      if (durationMin > 120) stops += 2;
-
-      return Math.max(3, stops);
-    }
-
-    function trafficLevel(durationMin, distanceKm) {
-      const ratio = durationMin / distanceKm;
-
-      if (ratio < 0.58) return "low";
-      if (ratio < 0.72) return "medium";
-      return "high";
-    }
-
-    function buildExplanation(route, bestRoute) {
-      const reasons = [];
-
-      if (route.index === bestRoute.index) {
-        if (route.durationMin === bestRoute.durationMin) {
-          reasons.push("рекомендуется как наиболее сбалансированный вариант");
-        } else {
-          reasons.push(`быстрее альтернативы примерно на ${Math.round(route.diffFromFastest)} мин`);
-        }
-
-        if (route.highway) reasons.push("больше движения по хайвею");
-        if (route.stops < 18) reasons.push("меньше вероятных остановок");
-        if (route.traffic === "low") reasons.push("ожидается менее плотный трафик");
-        if (route.traffic === "medium") reasons.push("умеренная загрузка дороги");
-      } else {
-        if (route.durationMin > bestRoute.durationMin) {
-          reasons.push(`дольше лучшего варианта на ${Math.round(route.durationMin - bestRoute.durationMin)} мин`);
-        }
-
-        if (route.traffic === "low") reasons.push("но трафик может быть спокойнее");
-        if (route.traffic === "high") reasons.push("ожидается плотный трафик");
-        if (route.stops > bestRoute.stops) reasons.push("больше остановок по пути");
-      }
-
-      return reasons.slice(0, 3).join(", ");
-    }
-
-    function scoreRoute(route) {
-      let score = route.durationMin * 60;
-
-      score += route.stops * 75;
-
-      if (route.traffic === "high") score += 700;
-      if (route.traffic === "medium") score += 250;
-      if (route.traffic === "low") score -= 150;
-
-      if (route.highway) score -= 250;
-
-      return score;
-    }
-
-    function renderCard(route, bestRoute) {
-      const div = document.createElement("div");
-      div.className = "route";
-      if (route.index === bestRoute.index) div.classList.add("best");
-
-      const title = route.index === bestRoute.index
-        ? "Лучший маршрут"
-        : `Route ${route.index + 1}`;
-
-      const tags = [];
-
-      if (route.highway) tags.push("Хайвей");
-      if (route.stops < 15) tags.push("Меньше остановок");
-      if (route.stops >= 20) tags.push("Много остановок");
-
-      if (route.traffic === "low") tags.push("Меньше пробок");
-      if (route.traffic === "medium") tags.push("Средний трафик");
-      if (route.traffic === "high") tags.push("Плотный трафик");
-
-      if (route.index === bestRoute.index) tags.unshift("Рекомендуем");
-
-      div.innerHTML = `
-        <div class="route-title">${title}</div>
-        <div class="metric">⏱ ${Math.round(route.durationMin)} min</div>
-        <div class="metric">📏 ${route.distanceKm.toFixed(1)} km</div>
-        <div class="metric">🚦 Stops: ${route.stops}</div>
-        <div>${tags.map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
-        <div class="explanation"><b>Почему:</b> ${buildExplanation(route, bestRoute)}</div>
-      `;
-
-      div.onclick = () => {
-        const bounds = getBoundsFromCoords(route.coords);
-        map.fitBounds(bounds, { padding: [30, 30] });
-      };
-
-      document.getElementById("routes").appendChild(div);
-    }
-
-    function drawRoutes(routes, bestRoute) {
-      routes.forEach(route => {
-        const color = route.index === bestRoute.index ? "green" : "gray";
-        const weight = route.index === bestRoute.index ? 6 : 4;
-
-        const layer = L.polyline(route.coords, {
-          color,
-          weight,
-          opacity: 0.9
-        }).addTo(map);
-
-        routeLayers.push(layer);
-      });
-
-      const startMarker = L.marker(routes[0].coords[0]).addTo(map).bindPopup("A: Start");
-      const endMarker = L.marker(routes[0].coords[routes[0].coords.length - 1]).addTo(map).bindPopup("B: Destination");
-
-      markers.push(startMarker, endMarker);
-
-      const bounds = getBoundsFromCoords(bestRoute.coords);
-      map.fitBounds(bounds, { padding: [30, 30] });
-    }
-
-    async function calculateRoutes() {
-      clearRoutes();
-
-      const routesEl = document.getElementById("routes");
-      const start = document.getElementById("start").value.trim();
-      const end = document.getElementById("end").value.trim();
-
-      if (!start || !end) {
-        routesEl.innerHTML = `<div class="error">Введите и точку старта, и точку назначения.</div>`;
+    },
+    (result, status) => {
+      if (status !== "OK") {
+        document.getElementById("routes").innerHTML =
+          `<div class="error">Route request failed: ${status}</div>`;
         return;
       }
 
-      routesEl.innerHTML = `<div class="loading">Поиск маршрутов...</div>`;
+      const routes = result.routes;
 
-      try {
-        const [startGeo, endGeo] = await Promise.all([
-          geocodePlace(start),
-          geocodePlace(end)
-        ]);
-
-        const osrmUrl =
-          `https://router.project-osrm.org/route/v1/driving/` +
-          `${startGeo.lon},${startGeo.lat};${endGeo.lon},${endGeo.lat}` +
-          `?alternatives=true&overview=full&geometries=polyline&steps=false`;
-
-        const response = await fetch(osrmUrl);
-        if (!response.ok) {
-          throw new Error("Не удалось получить маршруты");
-        }
-
-        const data = await response.json();
-
-        if (!data.routes || !data.routes.length) {
-          throw new Error("Маршруты не найдены");
-        }
-
-        let analyzed = data.routes.slice(0, 3).map((route, index) => {
-          const distanceKm = route.distance / 1000;
-          const durationMin = route.duration / 60;
-          const highway = isLikelyHighway(distanceKm, durationMin);
-          const stops = estimateStops(distanceKm, durationMin, highway);
-          const traffic = trafficLevel(durationMin, distanceKm);
-          const coords = decodePolyline(route.geometry);
-
-          return {
-            index,
-            distanceKm,
-            durationMin,
-            highway,
-            stops,
-            traffic,
-            coords
-          };
-        });
-
-        const fastest = Math.min(...analyzed.map(r => r.durationMin));
-        analyzed = analyzed.map(r => ({
-          ...r,
-          diffFromFastest: r.durationMin - fastest,
-          score: scoreRoute(r)
-        }));
-
-        analyzed.sort((a, b) => a.score - b.score);
-
-        analyzed = analyzed.map((r, i) => ({ ...r, rank: i + 1 }));
-
-        const bestRoute = analyzed[0];
-
-        currentRoutes = analyzed;
-        routesEl.innerHTML = "";
-
-        drawRoutes(analyzed, bestRoute);
-        analyzed.forEach(route => renderCard(route, bestRoute));
-
-      } catch (error) {
-        routesEl.innerHTML = `<div class="error">${error.message}</div>`;
+      if (!routes || !routes.length) {
+        document.getElementById("routes").innerHTML =
+          '<div class="error">No routes found.</div>';
+        return;
       }
-    }
 
-    initMap();
-  </script>
+      analyzedRoutes = routes.map((route, i) => {
+        const leg = route.legs[0];
+
+        const time = leg.duration_in_traffic
+          ? leg.duration_in_traffic.value
+          : leg.duration.value;
+
+        const distance = leg.distance.value;
+        const stops = leg.steps.length;
+        const highway = isHighway(route);
+        const traffic = getTrafficLevel(time, distance);
+
+        return {
+          route,
+          index: i,
+          displayIndex: i + 1,
+          time,
+          distance,
+          stops,
+          highway,
+          traffic
+        };
+      });
+
+      analyzedRoutes = analyzedRoutes.map(r => ({
+        ...r,
+        score: scoreRoute(r)
+      }));
+
+      let bestRoute = analyzedRoutes[0];
+      analyzedRoutes.forEach(r => {
+        if (r.score < bestRoute.score) bestRoute = r;
+      });
+
+      const fastestMinutes = Math.min(...analyzedRoutes.map(r => Math.round(r.time / 60)));
+
+      analyzedRoutes.forEach(r => {
+        drawRoute(result, r.index, r.index === bestRoute.index);
+      });
+
+      document.getElementById("routes").innerHTML = "";
+
+      analyzedRoutes.forEach(r => {
+        renderCard(r, bestRoute, fastestMinutes);
+      });
+
+      map.fitBounds(bestRoute.route.bounds);
+    }
+  );
+}
+</script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 
 </body>
