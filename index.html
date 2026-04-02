@@ -8,6 +8,18 @@
   <style>
     * { box-sizing: border-box; }
 
+    :root {
+      --best-color: #1f9d55;
+      --fastest-color: #1d4ed8;
+      --alt-color: #d97706;
+      --neutral-color: #6b7280;
+
+      --best-bg: #ecfdf3;
+      --fastest-bg: #eff6ff;
+      --alt-bg: #fff7ed;
+      --neutral-bg: #f8fafc;
+    }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -58,6 +70,7 @@
     .route {
       background: white;
       border: 1px solid #ddd;
+      border-left: 6px solid var(--neutral-color);
       border-radius: 12px;
       padding: 12px;
       margin-bottom: 10px;
@@ -69,8 +82,25 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.08);
     }
 
-    .best {
-      border: 2px solid green;
+    .route.best {
+      border: 2px solid var(--best-color);
+      border-left: 8px solid var(--best-color);
+      background: var(--best-bg);
+    }
+
+    .route.fastest {
+      border-left: 8px solid var(--fastest-color);
+      background: var(--fastest-bg);
+    }
+
+    .route.alt {
+      border-left: 8px solid var(--alt-color);
+      background: var(--alt-bg);
+    }
+
+    .route.neutral {
+      border-left: 8px solid var(--neutral-color);
+      background: var(--neutral-bg);
     }
 
     .route-title {
@@ -91,6 +121,21 @@
       border-radius: 7px;
       font-size: 12px;
       margin: 5px 5px 0 0;
+    }
+
+    .tag.best-tag {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .tag.fastest-tag {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .tag.alt-tag {
+      background: #ffedd5;
+      color: #c2410c;
     }
 
     .explanation {
@@ -283,6 +328,29 @@ function getTrafficLabel(traffic) {
   return "Плотный трафик";
 }
 
+function getRouteVisualRole(route, bestRoute, fastestRoute, routes) {
+  if (route.index === bestRoute.index) return "best";
+  if (route.index === fastestRoute.index) return "fastest";
+
+  const sortedByTime = [...routes].sort((a, b) => a.time - b.time);
+  const thirdCandidate = sortedByTime.find(r =>
+    r.index !== bestRoute.index && r.index !== fastestRoute.index
+  );
+
+  if (thirdCandidate && route.index === thirdCandidate.index) {
+    return "alt";
+  }
+
+  return "neutral";
+}
+
+function getRouteColor(role) {
+  if (role === "best") return "#1f9d55";
+  if (role === "fastest") return "#1d4ed8";
+  if (role === "alt") return "#d97706";
+  return "#6b7280";
+}
+
 function pushReason(bucket, text, priority) {
   bucket.push({ text, priority });
 }
@@ -300,82 +368,52 @@ function uniqueReasons(items, limit = 3) {
     .map(item => item.text);
 }
 
-/*
-  ТЗ3:
-  WHY ENGINE v2
-  - приоритет причин
-  - предупреждения не скрываются
-  - альтернативы объясняются понятнее
-*/
+/* ТЗ4: DIFFERENCE ENGINE */
 function buildReasons(r, bestRoute, fastestRoute, allRoutes) {
   const bucket = [];
 
   const currentMinutes = Math.round(r.time / 60);
   const bestMinutes = Math.round(bestRoute.time / 60);
-  const fastestMinutes = Math.round(fastestRoute.time / 60);
-
   const diffVsBest = currentMinutes - bestMinutes;
-  const diffVsFastest = currentMinutes - fastestMinutes;
-
-  const lowerStopsExists = allRoutes.some(route =>
-    route.index !== r.index && route.stops < r.stops
-  );
-
-  const calmerTrafficExists = allRoutes.some(route =>
-    route.index !== r.index && trafficRank(route.traffic) < trafficRank(r.traffic)
-  );
 
   if (r.index === bestRoute.index) {
     if (r.index === fastestRoute.index) {
       pushReason(bucket, "самый быстрый вариант", 1);
-    } else if (diffVsFastest <= 2) {
-      pushReason(bucket, "почти такой же быстрый, но лучше по общей оценке", 1);
     } else {
-      pushReason(bucket, "лучший общий вариант по времени, дороге и остановкам", 1);
+      pushReason(bucket, "лучший по общей оценке", 1);
     }
 
-    if (r.highway) {
-      pushReason(bucket, "больше движения по хайвею", 2);
-    }
+    if (r.highway) pushReason(bucket, "больше движения по хайвею", 2);
 
-    if (r.stops <= 15) {
-      pushReason(bucket, "мало остановок по пути", 2);
-    } else if (r.stops <= 20) {
-      pushReason(bucket, "умеренное число остановок", 3);
-    } else {
-      pushReason(bucket, "предупреждение: остановок много", 2);
-    }
+    if (r.stops <= 15) pushReason(bucket, "мало остановок по пути", 2);
+    else if (r.stops > 20) pushReason(bucket, "предупреждение: остановок много", 2);
 
-    if (r.traffic === "low") {
-      pushReason(bucket, "трафик выглядит спокойнее", 2);
-    } else if (r.traffic === "medium") {
-      pushReason(bucket, "дорожная нагрузка умеренная", 3);
-    } else {
-      pushReason(bucket, "предупреждение: трафик плотный", 2);
-    }
+    if (r.traffic === "low") pushReason(bucket, "трафик спокойнее", 2);
+    else if (r.traffic === "high") pushReason(bucket, "предупреждение: трафик плотный", 2);
 
-    if (lowerStopsExists && r.stops > 20) {
-      pushReason(bucket, "есть альтернативы с меньшим числом остановок", 3);
-    }
-
-    if (calmerTrafficExists && r.traffic === "high") {
-      pushReason(bucket, "но другие варианты могут быть спокойнее по трафику", 3);
-    }
-
-    if (r.accidents > 0) {
-      pushReason(bucket, `аварии по пути: ${r.accidents}`, 1);
-    }
-
-    if (r.puddles > 0) {
-      pushReason(bucket, `участки с водой: ${r.puddles}`, 1);
-    }
+    if (r.accidents > 0) pushReason(bucket, `аварии по пути: ${r.accidents}`, 1);
+    if (r.puddles > 0) pushReason(bucket, `участки с водой: ${r.puddles}`, 1);
   } else {
     if (diffVsBest > 0) {
       pushReason(bucket, `дольше лучшего маршрута на ${diffVsBest} мин`, 1);
     }
 
-    if (r.index === fastestRoute.index && r.index !== bestRoute.index) {
-      pushReason(bucket, "самый быстрый, но проигрывает по общей оценке", 1);
+    if (r.time < bestRoute.time) {
+      pushReason(bucket, "быстрее лучшего, но проигрывает по общей оценке", 1);
+    }
+
+    if (r.stops < bestRoute.stops) {
+      pushReason(bucket, `на ${bestRoute.stops - r.stops} остановок меньше`, 2);
+    } else if (r.stops > bestRoute.stops) {
+      pushReason(bucket, `на ${r.stops - bestRoute.stops} остановок больше`, 2);
+    }
+
+    if (trafficRank(r.traffic) < trafficRank(bestRoute.traffic)) {
+      pushReason(bucket, "трафик спокойнее, чем у лучшего маршрута", 2);
+    } else if (trafficRank(r.traffic) > trafficRank(bestRoute.traffic)) {
+      pushReason(bucket, "трафик плотнее, чем у лучшего маршрута", 2);
+    } else if (r.traffic === "high") {
+      pushReason(bucket, "ожидается плотный трафик", 3);
     }
 
     if (r.highway && !bestRoute.highway) {
@@ -384,50 +422,33 @@ function buildReasons(r, bestRoute, fastestRoute, allRoutes) {
       pushReason(bucket, "меньше участков по хайвею", 2);
     }
 
-    if (r.stops < bestRoute.stops) {
-      pushReason(bucket, "меньше остановок по пути", 2);
-    } else if (r.stops > bestRoute.stops) {
-      pushReason(bucket, "больше остановок по пути", 2);
-    } else if (r.stops > 20) {
-      pushReason(bucket, "остановок много", 3);
+    const distanceDelta = ((r.distance - bestRoute.distance) / 1000).toFixed(1);
+    if (Math.abs(Number(distanceDelta)) >= 3) {
+      if (Number(distanceDelta) > 0) {
+        pushReason(bucket, `длиннее лучшего маршрута на ${distanceDelta} км`, 3);
+      } else {
+        pushReason(bucket, `короче лучшего маршрута на ${Math.abs(Number(distanceDelta)).toFixed(1)} км`, 3);
+      }
     }
 
-    if (r.traffic === "low") {
-      pushReason(bucket, "трафик может быть спокойнее", 2);
-    } else if (r.traffic === "medium") {
-      pushReason(bucket, "трафик средний", 3);
-    } else {
-      pushReason(bucket, "ожидается плотный трафик", 2);
-    }
-
-    if (r.accidents > 0) {
-      pushReason(bucket, `аварии по пути: ${r.accidents}`, 1);
-    }
-
-    if (r.puddles > 0) {
-      pushReason(bucket, `возможны лужи/вода: ${r.puddles}`, 1);
-    }
+    if (r.accidents > 0) pushReason(bucket, `аварии по пути: ${r.accidents}`, 1);
+    if (r.puddles > 0) pushReason(bucket, `возможны лужи/вода: ${r.puddles}`, 1);
   }
 
   const reasons = uniqueReasons(bucket, 3);
-
-  if (!reasons.length) {
-    return ["маршрут без выраженных преимуществ"];
-  }
-
-  return reasons;
+  return reasons.length ? reasons : ["маршрут без выраженных отличий"];
 }
 
-function drawRoute(fullResult, routeIndex, isBest) {
+function drawRoute(fullResult, routeIndex, role) {
   const renderer = new google.maps.DirectionsRenderer({
     map: map,
     directions: fullResult,
     routeIndex: routeIndex,
     suppressMarkers: false,
     polylineOptions: {
-      strokeColor: isBest ? "green" : "gray",
-      strokeOpacity: 0.9,
-      strokeWeight: isBest ? 6 : 4
+      strokeColor: getRouteColor(role),
+      strokeOpacity: role === "best" ? 0.95 : 0.8,
+      strokeWeight: role === "best" ? 6 : 5
     }
   });
 
@@ -436,26 +457,30 @@ function drawRoute(fullResult, routeIndex, isBest) {
 
 function renderCard(r, bestRoute, fastestRoute, allRoutes) {
   const div = document.createElement("div");
-  div.className = "route";
-  if (r.index === bestRoute.index) div.classList.add("best");
+  const role = getRouteVisualRole(r, bestRoute, fastestRoute, allRoutes);
+
+  div.className = `route ${role}`;
 
   const minutes = Math.round(r.time / 60);
   const km = (r.distance / 1000).toFixed(1);
 
-  const title = r.index === bestRoute.index
-    ? "Лучший маршрут"
-    : `Route ${r.displayIndex}`;
+  let title = `Route ${r.displayIndex}`;
+  if (role === "best") title = "Лучший маршрут";
+  else if (role === "fastest") title = "Самый быстрый маршрут";
+  else if (role === "alt") title = "Альтернативный маршрут";
 
   const tags = [];
 
-  if (r.index === bestRoute.index) tags.push("Рекомендуем");
-  if (r.index === fastestRoute.index) tags.push("Самый быстрый");
-  if (r.highway) tags.push("Хайвей");
-  tags.push(getStopsLabel(r.stops));
-  tags.push(getTrafficLabel(r.traffic));
+  if (role === "best") tags.push('<span class="tag best-tag">Рекомендуем</span>');
+  if (role === "fastest") tags.push('<span class="tag fastest-tag">Самый быстрый</span>');
+  if (role === "alt") tags.push('<span class="tag alt-tag">Альтернатива</span>');
 
-  if (r.accidents > 0) tags.push(`Аварии: ${r.accidents}`);
-  if (r.puddles > 0) tags.push(`Лужи: ${r.puddles}`);
+  if (r.highway) tags.push('<span class="tag">Хайвей</span>');
+  tags.push(`<span class="tag">${getStopsLabel(r.stops)}</span>`);
+  tags.push(`<span class="tag">${getTrafficLabel(r.traffic)}</span>`);
+
+  if (r.accidents > 0) tags.push(`<span class="tag">Аварии: ${r.accidents}</span>`);
+  if (r.puddles > 0) tags.push(`<span class="tag">Лужи: ${r.puddles}</span>`);
 
   const reasons = buildReasons(r, bestRoute, fastestRoute, allRoutes);
 
@@ -464,7 +489,7 @@ function renderCard(r, bestRoute, fastestRoute, allRoutes) {
     <div class="metric">⏱ ${minutes} min</div>
     <div class="metric">📏 ${km} km</div>
     <div class="metric">🚦 Stops: ${r.stops}</div>
-    <div>${tags.slice(0, 5).map(tag => `<span class="tag">${tag}</span>`).join("")}</div>
+    <div>${tags.slice(0, 5).join("")}</div>
     <div class="explanation">
       <b>Почему:</b> ${reasons.join(", ")}
     </div>
@@ -552,7 +577,8 @@ function calculateRoutes() {
       const bestRoute = selectBestRoute(analyzedRoutes);
 
       analyzedRoutes.forEach(r => {
-        drawRoute(result, r.index, r.index === bestRoute.index);
+        const role = getRouteVisualRole(r, bestRoute, fastestRoute, analyzedRoutes);
+        drawRoute(result, r.index, role);
       });
 
       document.getElementById("routes").innerHTML = "";
@@ -566,6 +592,9 @@ function calculateRoutes() {
   );
 }
 </script>
+
+</body>
+</html>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 
 </body>
