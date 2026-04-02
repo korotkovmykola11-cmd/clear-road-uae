@@ -53,6 +53,12 @@
       font-size: 12px;
       margin: 4px 4px 0 0;
     }
+
+    .error {
+      color: red;
+      padding: 10px;
+      font-size: 14px;
+    }
   </style>
 </head>
 
@@ -90,7 +96,11 @@ function calculateRoutes() {
   const start = document.getElementById("start").value.trim();
   const end = document.getElementById("end").value.trim();
 
-  if (!start || !end) return;
+  if (!start || !end) {
+    document.getElementById("routes").innerHTML =
+      '<div class="error">Please enter both start and destination.</div>';
+    return;
+  }
 
   directionsService.route({
     origin: start,
@@ -103,7 +113,11 @@ function calculateRoutes() {
     }
   }, (result, status) => {
 
-    if (status !== 'OK') return;
+    if (status !== 'OK') {
+      document.getElementById("routes").innerHTML =
+        `<div class="error">Route request failed: ${status}</div>`;
+      return;
+    }
 
     const routes = result.routes;
     let bestIndex = 0;
@@ -119,18 +133,28 @@ function calculateRoutes() {
       const stops = leg.steps.length;
       const distance = leg.distance.value;
       const highway = isHighway(route);
+      const trafficLevel = time / distance;
 
       let score = time;
 
-      score += stops * 70;      // сильнее штраф за светофоры
-      if (highway) score -= 300; // бонус за хайвей
+      // сильный штраф за светофоры / остановки
+      score += stops * 90;
+
+      // очень плохой маршрут, если остановок слишком много
+      if (stops > 25) score += 1000;
+
+      // штраф за длинный путь
+      score += (distance / 1000) * 5;
+
+      // бонус за хайвей, но умеренный
+      if (highway) score -= 150;
 
       if (score < bestScore) {
         bestScore = score;
         bestIndex = i;
       }
 
-      return { route, time, stops, distance, highway, index: i };
+      return { route, time, stops, distance, highway, trafficLevel, score, index: i };
     });
 
     analyzed.forEach((r, i) => {
@@ -138,7 +162,6 @@ function calculateRoutes() {
       renderCard(r, i, i === bestIndex);
     });
 
-    // zoom на лучший маршрут
     map.fitBounds(routes[bestIndex].bounds);
   });
 }
@@ -170,6 +193,14 @@ function renderCard(r, i, isBest) {
   if (r.highway) badges.push("Хайвей");
   if (r.stops < 15) badges.push("Меньше светофоров");
   if (r.stops > 20) badges.push("Много остановок");
+
+  if (r.trafficLevel < 0.0011) {
+    badges.push("Меньше пробок");
+  } else if (r.trafficLevel > 0.0013) {
+    badges.push("Плотный трафик");
+  } else {
+    badges.push("Средний трафик");
+  }
 
   div.innerHTML = `
     <b>Route ${i + 1}</b><br>
