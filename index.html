@@ -102,11 +102,15 @@ function calculateRoutes() {
     return;
   }
 
-  directionsService.route({
-    origin: start,
-    destination: end,
-    travelMode: google.maps.TravelMode.DRIVING,
-    provideRouteAlternatives: true
+ directionsService.route({
+  origin: start,
+  destination: end,
+  travelMode: 'DRIVING',
+  provideRouteAlternatives: true,
+  drivingOptions: {
+    departureTime: new Date(),
+    trafficModel: 'bestguess'
+  }
   }, (result, status) => {
     if (status !== 'OK') {
       document.getElementById("routes").innerHTML =
