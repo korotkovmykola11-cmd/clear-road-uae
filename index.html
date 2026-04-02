@@ -33,9 +33,7 @@
       cursor: pointer;
     }
 
-    .routes {
-      padding: 10px;
-    }
+    .routes { padding: 10px; }
 
     .route {
       border: 1px solid #ddd;
@@ -45,9 +43,7 @@
       cursor: pointer;
     }
 
-    .best {
-      border: 2px solid green;
-    }
+    .best { border: 2px solid green; }
 
     .tag {
       display: inline-block;
@@ -55,14 +51,7 @@
       padding: 4px 8px;
       border-radius: 6px;
       font-size: 12px;
-      margin-top: 5px;
-      margin-right: 5px;
-    }
-
-    .error {
-      color: red;
-      padding: 10px;
-      font-size: 14px;
+      margin: 4px 4px 0 0;
     }
   </style>
 </head>
@@ -80,29 +69,19 @@
 
 <script>
 let map, directionsService, renderers = [];
-let lastResult = null;
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
     center: { lat: 25.2048, lng: 55.2708 },
-    zoom: 11,
+    zoom: 10,
   });
 
   directionsService = new google.maps.DirectionsService();
 }
 
-function isHighwayRoute(route) {
-  const text = `${route.summary || ""} ${
-    route.legs?.[0]?.steps?.map(step => step.instructions || "").join(" ") || ""
-  }`.toUpperCase();
-
-  return (
-    text.includes("E11") ||
-    text.includes("E311") ||
-    text.includes("E611") ||
-    text.includes("SHEIKH ZAYED") ||
-    text.includes("EMIRATES ROAD")
-  );
+function isHighway(route) {
+  const text = (route.summary || "").toUpperCase();
+  return text.includes("E11") || text.includes("E311") || text.includes("E611");
 }
 
 function calculateRoutes() {
@@ -111,11 +90,7 @@ function calculateRoutes() {
   const start = document.getElementById("start").value.trim();
   const end = document.getElementById("end").value.trim();
 
-  if (!start || !end) {
-    document.getElementById("routes").innerHTML =
-      '<div class="error">Please enter both start and destination.</div>';
-    return;
-  }
+  if (!start || !end) return;
 
   directionsService.route({
     origin: start,
@@ -127,13 +102,8 @@ function calculateRoutes() {
       trafficModel: 'bestguess'
     }
   }, (result, status) => {
-    if (status !== 'OK') {
-      document.getElementById("routes").innerHTML =
-        `<div class="error">Route request failed: ${status}</div>`;
-      return;
-    }
 
-    lastResult = result;
+    if (status !== 'OK') return;
 
     const routes = result.routes;
     let bestIndex = 0;
@@ -141,115 +111,75 @@ function calculateRoutes() {
 
     const analyzed = routes.map((route, i) => {
       const leg = route.legs[0];
+
       const time = leg.duration_in_traffic
         ? leg.duration_in_traffic.value
         : leg.duration.value;
-      const distance = leg.distance.value;
+
       const stops = leg.steps.length;
-      const trafficLevel = time / distance;
-      const highway = isHighwayRoute(route);
+      const distance = leg.distance.value;
+      const highway = isHighway(route);
 
-      let score = time + (stops * 50);
+      let score = time;
 
-      if (highway) {
-        score -= 150;
-      }
-
-      if (stops >= 20) {
-        score += 300;
-      }
+      score += stops * 70;      // сильнее штраф за светофоры
+      if (highway) score -= 300; // бонус за хайвей
 
       if (score < bestScore) {
         bestScore = score;
         bestIndex = i;
       }
 
-      return {
-        route,
-        time,
-        distance,
-        stops,
-        trafficLevel,
-        score,
-        index: i,
-        highway
-      };
+      return { route, time, stops, distance, highway, index: i };
     });
 
     analyzed.forEach((r, i) => {
       drawRoute(result, r.index, i === bestIndex);
       renderCard(r, i, i === bestIndex);
     });
+
+    // zoom на лучший маршрут
+    map.fitBounds(routes[bestIndex].bounds);
   });
 }
 
-function drawRoute(fullResult, routeIndex, isBest) {
+function drawRoute(fullResult, index, isBest) {
   const renderer = new google.maps.DirectionsRenderer({
     map: map,
     directions: fullResult,
-    routeIndex: routeIndex,
+    routeIndex: index,
     polylineOptions: {
       strokeColor: isBest ? "green" : "gray",
       strokeWeight: isBest ? 6 : 4
-    },
-    suppressMarkers: false,
-    preserveViewport: routeIndex !== 0
+    }
   });
 
   renderers.push(renderer);
 }
 
-function renderCard(r, index, isBest) {
+function renderCard(r, i, isBest) {
   const div = document.createElement("div");
   div.className = "route";
   if (isBest) div.classList.add("best");
 
   const minutes = Math.round(r.time / 60);
-  const km = (r.distance / 1000).toFixed(1);
 
-  const badges = [];
+  let badges = [];
 
   if (isBest) badges.push("Лучший маршрут");
   if (r.highway) badges.push("Хайвей");
-  if (r.stops <= 16) badges.push("Меньше светофоров");
-  if (r.stops >= 20) badges.push("Больше остановок");
-  if (minutes <= 27) badges.push("Быстрее сейчас");
-  if (minutes >= 30) badges.push("Дольше по времени");
-
-  if (r.trafficLevel < 0.0011) {
-    badges.push("Меньше пробок");
-  } else if (r.trafficLevel > 0.0013) {
-    badges.push("Плотный трафик");
-  } else {
-    badges.push("Средний трафик");
-  }
-
-  let mainReason = "Альтернативный вариант";
-
-  if (isBest && r.highway && r.stops < 20) {
-    mainReason = "Рекомендуем: быстрый и плавный маршрут по хайвею";
-  } else if (isBest) {
-    mainReason = "Рекомендуем: более удобный маршрут";
-  } else if (r.highway) {
-    mainReason = "Альтернатива: маршрут с участком по хайвею";
-  }
+  if (r.stops < 15) badges.push("Меньше светофоров");
+  if (r.stops > 20) badges.push("Много остановок");
 
   div.innerHTML = `
-    <b>Route ${index + 1}</b><br>
+    <b>Route ${i + 1}</b><br>
     ⏱ ${minutes} min<br>
-    📏 ${km} km<br>
+    📏 ${(r.distance / 1000).toFixed(1)} km<br>
     🚦 Stops: ${r.stops}<br>
-    <div style="margin-top:8px; font-weight:600;">${mainReason}</div>
-    <div style="margin-top:8px;">
-      ${badges.map(b => `<span class="tag">${b}</span>`).join(" ")}
-    </div>
+    <div>${badges.map(b => `<span class="tag">${b}</span>`).join("")}</div>
   `;
 
-  div.onclick = () => {
-    if (r.route.bounds) {
-      map.fitBounds(r.route.bounds);
-    }
-  };
+  div.onclick = () => map.fitBounds(r.route.bounds);
 
   document.getElementById("routes").appendChild(div);
 }
@@ -257,7 +187,6 @@ function renderCard(r, index, isBest) {
 function clearRoutes() {
   renderers.forEach(r => r.setMap(null));
   renderers = [];
-  lastResult = null;
   document.getElementById("routes").innerHTML = "";
 }
 </script>
