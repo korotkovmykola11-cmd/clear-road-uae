@@ -389,24 +389,20 @@ function calculateConfidence(bestRoute, routes) {
   if (!routes || routes.length <= 1) return "high";
 
   const competitors = routes.filter(r => r.index !== bestRoute.index);
-
   if (!competitors.length) return "high";
 
-  let score = 0;
+  let strongGap = 0;
 
   competitors.forEach(r => {
     const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
 
-    if (diffMin >= 4) score += 2;
-    else if (diffMin >= 2) score += 1;
-
-    if (complexityDelta >= 3) score += 1;
-
-    if (trafficDelta > 0) score += 1;
+    if (diffMin >= 4) strongGap++;
+    if (complexityDelta >= 3) strongGap++;
+    if (trafficDelta > 0) strongGap++;
   });
 
-  if (score >= 4) return "high";
-  if (score >= 2) return "medium";
+  if (strongGap >= 2) return "high";
+  if (strongGap === 1) return "medium";
   return "low";
 }
 
@@ -680,6 +676,18 @@ function renderCard(r, bestRoute, fastestRoute, allRoutes, confidence) {
   return div;
 }
 
+function renderNoAlternativeCard() {
+  const div = document.createElement("div");
+  div.className = "route neutral";
+  div.innerHTML = `
+    <div class="route-title">Альтернатив нет</div>
+    <div class="explanation">
+      <b>Почему:</b> другие маршруты заметно хуже по времени, сложности или общему качеству
+    </div>
+  `;
+  return div;
+}
+
 function getRoutesForDisplay(routes, bestRoute, fastestRoute) {
   const best = routes.find(r => r.index === bestRoute.index);
   const fastest = routes.find(r => r.index === fastestRoute.index && r.index !== bestRoute.index);
@@ -787,6 +795,10 @@ function calculateRoutes() {
           renderCard(r, bestRoute, fastestRoute, filteredRoutes, confidence)
         );
       });
+
+      if (filteredRoutes.length === 1) {
+        document.getElementById("routes").appendChild(renderNoAlternativeCard());
+      }
 
       map.fitBounds(bestRoute.route.bounds);
     }
