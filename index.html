@@ -526,14 +526,24 @@ function getUsefulRoutes(routes, bestRoute) {
     useful.unshift(bestRoute);
   }
 
-  // если после фильтра остался только 1 маршрут —
-  // попробуем добавить ближайший по времени
+  // если только 1 маршрут → пробуем fallback
   if (useful.length === 1 && routes.length > 1) {
     const fallback = routes
       .filter(r => r.index !== bestRoute.index)
       .sort((a, b) => a.time - b.time)[0];
 
-    if (fallback) useful.push(fallback);
+    if (fallback) {
+      const { diffMin, complexityDelta, trafficDelta } = getDiffs(fallback, bestRoute);
+
+      const acceptableFallback =
+        diffMin <= 3 &&
+        complexityDelta <= 2 &&
+        trafficDelta <= 1;
+
+      if (acceptableFallback) {
+        useful.push(fallback);
+      }
+    }
   }
 
   return useful.slice(0, 3);
@@ -571,7 +581,7 @@ function buildReasons(r, bestRoute, fastestRoute, role) {
     const advantage = getAlternativeAdvantage(r, bestRoute);
 
     if (!advantage) {
-      return ["альтернатива без явных преимуществ (можно игнорировать)"];
+      return ["похожий маршрут, может быть полезен в зависимости от ситуации"];
     }
 
     const tradeoff = getAlternativeTradeoff(r, bestRoute, advantage.type);
