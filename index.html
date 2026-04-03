@@ -385,6 +385,43 @@ function getRouteColor(role) {
   return "#6b7280";
 }
 
+function calculateConfidence(bestRoute, routes) {
+  if (!routes || routes.length <= 1) return "high";
+
+  const competitors = routes.filter(r => r.index !== bestRoute.index);
+
+  if (!competitors.length) return "high";
+
+  let score = 0;
+
+  competitors.forEach(r => {
+    const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+
+    if (diffMin >= 4) score += 2;
+    else if (diffMin >= 2) score += 1;
+
+    if (complexityDelta >= 3) score += 1;
+
+    if (trafficDelta > 0) score += 1;
+  });
+
+  if (score >= 4) return "high";
+  if (score >= 2) return "medium";
+  return "low";
+}
+
+function getConfidenceLabel(level) {
+  if (level === "high") return "Высокая уверенность";
+  if (level === "medium") return "Средняя уверенность";
+  return "Низкая уверенность";
+}
+
+function getConfidenceColor(level) {
+  if (level === "high") return "#16a34a";
+  if (level === "medium") return "#d97706";
+  return "#dc2626";
+}
+
 function buildHumanContrast(plus, minus) {
   if (plus && minus) return `${plus}, но ${minus}`;
   if (plus) return plus;
@@ -589,7 +626,7 @@ function drawRoute(fullResult, routeIndex, role) {
   renderers.push(renderer);
 }
 
-function renderCard(r, bestRoute, fastestRoute, allRoutes) {
+function renderCard(r, bestRoute, fastestRoute, allRoutes, confidence) {
   const div = document.createElement("div");
   const role = getRouteVisualRole(r, bestRoute, fastestRoute, allRoutes);
 
@@ -606,6 +643,13 @@ function renderCard(r, bestRoute, fastestRoute, allRoutes) {
   const tags = [];
 
   if (role === "best") tags.push('<span class="tag best-tag">Рекомендуем</span>');
+  if (role === "best") {
+    tags.push(
+      `<span class="tag" style="background:${getConfidenceColor(confidence)}; color:white;">
+        ${getConfidenceLabel(confidence)}
+      </span>`
+    );
+  }
   if (role === "fastest") tags.push('<span class="tag fastest-tag">Самый быстрый</span>');
   if (role === "alt") tags.push('<span class="tag alt-tag">Альтернатива</span>');
 
@@ -726,6 +770,7 @@ function calculateRoutes() {
       }));
 
       const bestRoute = selectBestRoute(analyzedRoutes);
+      const confidence = calculateConfidence(bestRoute, analyzedRoutes);
       const filteredRoutes = getUsefulRoutes(analyzedRoutes, bestRoute);
       const fastestRoute = [...filteredRoutes].sort((a, b) => a.time - b.time)[0];
 
@@ -739,7 +784,7 @@ function calculateRoutes() {
       const orderedRoutes = getRoutesForDisplay(filteredRoutes, bestRoute, fastestRoute);
       orderedRoutes.forEach(r => {
         document.getElementById("routes").appendChild(
-          renderCard(r, bestRoute, fastestRoute, filteredRoutes)
+          renderCard(r, bestRoute, fastestRoute, filteredRoutes, confidence)
         );
       });
 
