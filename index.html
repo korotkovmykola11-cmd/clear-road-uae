@@ -391,30 +391,40 @@ function calculateConfidence(bestRoute, routes) {
   const competitors = routes.filter(r => r.index !== bestRoute.index);
   if (!competitors.length) return "high";
 
-  let allEqual = true;
+  const allVeryClose = competitors.every(r => {
+    const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
 
-  for (let r of competitors) {
-    const { diffMin, complexityDelta } = getDiffs(r, bestRoute);
+    return (
+      Math.abs(diffMin) <= 1 &&
+      Math.abs(complexityDelta) <= 1 &&
+      trafficDelta <= 0
+    );
+  });
 
-    if (!(diffMin === 0 && Math.abs(complexityDelta) <= 1)) {
-      allEqual = false;
-      break;
+  if (allVeryClose) return "low";
+
+  let uncertainty = 0;
+
+  competitors.forEach(r => {
+    const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+
+    const almostSameTime = Math.abs(diffMin) <= 1;
+    const veryCloseTime = diffMin <= 2;
+    const almostSameComplexity = Math.abs(complexityDelta) <= 1;
+    const notWorseTraffic = trafficDelta <= 0;
+
+    if (almostSameTime && almostSameComplexity && notWorseTraffic) {
+      uncertainty += 3;
+      return;
     }
-  }
 
-  // только полностью одинаковые → LOW
-  if (allEqual) return "low";
-
-  // почти одинаковые → MEDIUM
-  for (let r of competitors) {
-    const { diffMin } = getDiffs(r, bestRoute);
-
-    if (Math.abs(diffMin) <= 2) {
-      return "medium";
+    if (veryCloseTime) {
+      uncertainty += 1;
     }
-  }
+  });
 
-  // всё остальное → HIGH
+  if (uncertainty >= 2) return "low";
+  if (uncertainty === 1) return "medium";
   return "high";
 }
 
@@ -783,7 +793,7 @@ function calculateRoutes() {
       const bestRoute = selectBestRoute(analyzedRoutes);
       const filteredRoutes = getUsefulRoutes(analyzedRoutes, bestRoute);
       const fastestRoute = [...filteredRoutes].sort((a, b) => a.time - b.time)[0];
-      const confidence = calculateConfidence(bestRoute, filteredRoutes);
+      const confidence = calculateConfidence(bestRoute, analyzedRoutes);
 
       filteredRoutes.forEach(r => {
         const role = getRouteVisualRole(r, bestRoute, fastestRoute, filteredRoutes);
