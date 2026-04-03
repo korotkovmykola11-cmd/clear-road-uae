@@ -391,19 +391,29 @@ function calculateConfidence(bestRoute, routes) {
   const competitors = routes.filter(r => r.index !== bestRoute.index);
   if (!competitors.length) return "high";
 
-  let strongGap = 0;
+  let uncertainty = 0;
 
   competitors.forEach(r => {
     const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
 
-    if (diffMin >= 4) strongGap++;
-    if (complexityDelta >= 3) strongGap++;
-    if (trafficDelta > 0) strongGap++;
+    const almostSameTime = Math.abs(diffMin) <= 1;
+    const veryCloseTime = diffMin <= 2;
+    const almostSameComplexity = Math.abs(complexityDelta) <= 1;
+    const notWorseTraffic = trafficDelta <= 0;
+
+    if (almostSameTime && almostSameComplexity && notWorseTraffic) {
+      uncertainty += 2;
+      return;
+    }
+
+    if (veryCloseTime) {
+      uncertainty += 1;
+    }
   });
 
-  if (strongGap >= 2) return "high";
-  if (strongGap === 1) return "medium";
-  return "low";
+  if (uncertainty >= 2) return "low";
+  if (uncertainty === 1) return "medium";
+  return "high";
 }
 
 function getConfidenceLabel(level) {
@@ -581,7 +591,7 @@ function buildReasons(r, bestRoute, fastestRoute, role) {
     const advantage = getAlternativeAdvantage(r, bestRoute);
 
     if (!advantage) {
-      return ["похожий маршрут, может быть полезен в зависимости от ситуации"];
+      return ["почти то же время, без явных преимуществ"];
     }
 
     const tradeoff = getAlternativeTradeoff(r, bestRoute, advantage.type);
@@ -769,9 +779,9 @@ function calculateRoutes() {
       }));
 
       const bestRoute = selectBestRoute(analyzedRoutes);
-      const confidence = calculateConfidence(bestRoute, analyzedRoutes);
       const filteredRoutes = getUsefulRoutes(analyzedRoutes, bestRoute);
       const fastestRoute = [...filteredRoutes].sort((a, b) => a.time - b.time)[0];
+      const confidence = calculateConfidence(bestRoute, filteredRoutes);
 
       filteredRoutes.forEach(r => {
         const role = getRouteVisualRole(r, bestRoute, fastestRoute, filteredRoutes);
