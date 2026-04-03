@@ -393,6 +393,10 @@ function calculateConfidence(bestRoute, routesForDecision) {
   const competitors = routesForDecision.filter(r => r.index !== bestRoute.index);
   if (!competitors.length) return "high";
 
+  const shortestTime = Math.min(...routesForDecision.map(r => r.time));
+  const bestSlowerByMin = Math.round((bestRoute.time - shortestTime) / 60);
+  const isShortTrip = bestRoute.time <= 12 * 60;
+
   let hasAlmostEqual = false;
   let hasClose = false;
 
@@ -407,6 +411,11 @@ function calculateConfidence(bestRoute, routesForDecision) {
       hasClose = true;
     }
   });
+
+  // Короткие поездки: если рядом есть почти равный вариант, HIGH не даём
+  if (isShortTrip && (hasAlmostEqual || hasClose || bestSlowerByMin >= 2)) {
+    return hasAlmostEqual ? "low" : "medium";
+  }
 
   if (hasAlmostEqual) return "low";
   if (hasClose) return "medium";
@@ -446,6 +455,7 @@ function isRouteUseful(r, bestRoute) {
   if (r.index === bestRoute.index) return true;
 
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
+  const isShortTrip = bestRoute.time <= 12 * 60;
 
   if (diffMin < 0) return true;
   if (complexityDelta <= -3 && diffMin <= 3) return true;
@@ -453,8 +463,11 @@ function isRouteUseful(r, bestRoute) {
   if (distanceDeltaKm <= -3 && diffMin <= 3) return true;
   if (r.highway && !bestRoute.highway && diffMin <= 3) return true;
 
-  // Почти равный маршрут тоже полезен, если он не хуже по трафику и не намного сложнее
-  if (Math.abs(diffMin) <= 1 && complexityDelta <= 1 && trafficDelta <= 0) return true;
+  // Короткая поездка: почти равный вариант надо показывать
+  if (isShortTrip && Math.abs(diffMin) <= 2 && complexityDelta <= 1 && trafficDelta <= 1) return true;
+
+  // Более длинные поездки: только почти такой же по времени и не хуже по качеству
+  if (!isShortTrip && Math.abs(diffMin) <= 1 && complexityDelta <= 1 && trafficDelta <= 0) return true;
 
   return false;
 }
@@ -479,12 +492,25 @@ function getUsefulRoutes(routes, bestRoute) {
 
 function getRouteVisualRole(route, bestRoute, fastestRoute, routes) {
   if (route.index === bestRoute.index) return "best";
-  if (route.index === fastestRoute.index && fastestRoute.index !== bestRoute.index) return "fastest";
+
+  const diffFromBestMin = Math.abs(Math.round((route.time - bestRoute.time) / 60));
+  const isShortTrip = bestRoute.time <= 12 * 60;
+
+  if (
+    route.index === fastestRoute.index &&
+    fastestRoute.index !== bestRoute.index &&
+    !(isShortTrip && diffFromBestMin <= 1)
+  ) {
+    return "fastest";
+  }
+
   return "alt";
 }
 
 function buildBestReason(r, fastestRoute, allRoutes) {
   const isFastest = r.index === fastestRoute.index;
+  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  const isShortTrip = r.time <= 12 * 60;
 
   if (isFastest) {
     if (r.complexity <= 4) return "Самый быстрый и простой маршрут";
@@ -493,7 +519,9 @@ function buildBestReason(r, fastestRoute, allRoutes) {
     return "Самый быстрый маршрут";
   }
 
-  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  if (isShortTrip && diffFromFastest <= 2) {
+    return `Более спокойный вариант (+${diffFromFastest} мин к быстрому)`;
+  }
 
   if (r.traffic === "low" && fastestRoute.traffic !== "low") {
     return `Меньше трафика (+${diffFromFastest} мин к быстрому)`;
@@ -512,18 +540,17 @@ function buildBestReason(r, fastestRoute, allRoutes) {
 
 function buildAlternativeReason(r, bestRoute) {
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
+  const isShortTrip = bestRoute.time <= 12 * 60;
 
   const advantages = [];
   const disadvantages = [];
 
-  // Преимущества
-  if (diffMin < 0) advantages.push(`быстрее на ${formatMin(diffMin)}`);
+  if (diffMin < 0 && !(isShortTrip && Math.abs(diffMin) <= 1)) advantages.push(`быстрее на ${formatMin(diffMin)}`);
   if (complexityDelta < -2) advantages.push(`проще на ${Math.abs(complexityDelta)} манёвров`);
   if (trafficDelta < 0) advantages.push("меньше трафика");
   if (distanceDeltaKm < -2) advantages.push(`короче на ${formatKm(distanceDeltaKm)}`);
   if (r.highway && !bestRoute.highway) advantages.push("больше по хайвею");
 
-  // Недостатки
   if (diffMin > 0) disadvantages.push(`дольше на ${diffMin} мин`);
   if (complexityDelta > 2) disadvantages.push(`сложнее на ${complexityDelta} манёвров`);
   if (trafficDelta > 0) disadvantages.push("плотнее трафик");
@@ -541,7 +568,7 @@ function buildAlternativeReason(r, bestRoute) {
     return disadvantages[0];
   }
 
-  return "Альтернативный вариант";
+  return isShortTrip ? "Почти такой же вариант" : "Альтернативный вариант";
 }
 
 function buildFastestReason(r, bestRoute) {
