@@ -471,13 +471,21 @@ function isRouteUseful(r, bestRoute) {
   const calmerWithAcceptableTimeLoss = trafficDelta < 0 && diffMin <= 3;
   const shorterWithAcceptableTimeLoss = distanceDeltaKm <= -2 && diffMin <= 2;
   const highwayAlternative = r.highway && !bestRoute.highway && diffMin <= 3 && trafficDelta <= 0;
-  const nearlySameButDifferentCharacter =
+
+  const slightlyDifferentButValid =
     diffMin <= 2 &&
     (
       complexityDelta <= -1 ||
-      trafficDelta < 0 ||
+      trafficDelta <= 0 ||
       distanceDeltaKm <= -1.5 ||
       (r.highway && !bestRoute.highway)
+    );
+
+  const sameTimeDifferentStyle =
+    diffMin <= 2 &&
+    (
+      (r.highway && !bestRoute.highway) ||
+      (!r.highway && bestRoute.highway)
     );
 
   return (
@@ -486,7 +494,8 @@ function isRouteUseful(r, bestRoute) {
     calmerWithAcceptableTimeLoss ||
     shorterWithAcceptableTimeLoss ||
     highwayAlternative ||
-    nearlySameButDifferentCharacter
+    slightlyDifferentButValid ||
+    sameTimeDifferentStyle
   );
 }
 
