@@ -223,16 +223,13 @@ function stepLooksLikeHighway(step, route) {
 
 function getHighwayShare(route) {
   const leg = route.legs[0];
-  const totalDistance = leg.distance && leg.distance.value ? leg.distance.value : 0;
-
+  const totalDistance = leg.distance?.value || 0;
   if (!totalDistance) return 0;
 
   let highwayDistance = 0;
-
   leg.steps.forEach(step => {
-    const stepDistance = step.distance && step.distance.value ? step.distance.value : 0;
     if (stepLooksLikeHighway(step, route)) {
-      highwayDistance += stepDistance;
+      highwayDistance += step.distance?.value || 0;
     }
   });
 
@@ -240,15 +237,13 @@ function getHighwayShare(route) {
 }
 
 function isHighway(route) {
-  const highwayShare = getHighwayShare(route);
-  return highwayShare >= 0.35;
+  return getHighwayShare(route) >= 0.35;
 }
 
 function getTrafficLevel(baseTimeSeconds, trafficTimeSeconds) {
   if (!trafficTimeSeconds || !baseTimeSeconds || trafficTimeSeconds <= baseTimeSeconds) return "low";
 
   const delayRatio = (trafficTimeSeconds - baseTimeSeconds) / baseTimeSeconds;
-
   if (delayRatio <= 0.05) return "low";
   if (delayRatio <= 0.15) return "medium";
   return "high";
@@ -260,7 +255,7 @@ function trafficRank(level) {
   return 3;
 }
 
-function getRoadEvents(route, leg) {
+function getRoadEvents() {
   return {
     accidents: 0,
     puddles: 0,
@@ -268,56 +263,66 @@ function getRoadEvents(route, leg) {
   };
 }
 
-function isMeaningfulManeuver(step) {
+function isMeaningfulManeuver(step, route) {
+  if (!step) return false;
+
   const html = stripHtml(step.html_instructions || "").toLowerCase();
   const maneuver = (step.maneuver || "").toLowerCase();
+  const stepDistance = step.distance?.value || 0;
+  const onHighway = stepLooksLikeHighway(step, route);
 
-  // Явный манёвр от Google
-  if (maneuver) return true;
+  // На длинных highway-участках игнорируем мелкую навигацию
+  if (onHighway && stepDistance < 1500) {
+    return false;
+  }
 
-  // Значимые изменения маршрута
+  // Совсем короткие шаги почти всегда шум
+  if (stepDistance < 350) {
+    return false;
+  }
+
+  const strongManeuvers = new Set([
+    "turn-left",
+    "turn-right",
+    "uturn-left",
+    "uturn-right",
+    "roundabout-left",
+    "roundabout-right",
+    "roundabout",
+    "ferry"
+  ]);
+
+  if (strongManeuvers.has(maneuver)) return true;
+
+  // merge / ramp / keep / slight сами по себе не считаем полноценным манёвром
+  const weakWords = ["continue", "merge", "keep", "slight", "ramp"];
+  if (weakWords.some(w => html.includes(w))) return false;
+
   return (
     html.includes("turn ") ||
-    html.includes("merge") ||
-    html.includes("exit") ||
-    html.includes("roundabout") ||
-    html.includes("keep left") ||
-    html.includes("keep right") ||
     html.includes("u-turn") ||
-    html.includes("take the ramp") ||
-    html.includes("slight left") ||
-    html.includes("slight right") ||
-    html.includes("sharp left") ||
-    html.includes("sharp right") ||
-    html.includes("continue onto") ||
-    html.includes("continue straight")
+    html.includes("roundabout") ||
+    html.includes("take the exit") ||
+    html.includes("take exit")
   );
 }
 
-function countRouteComplexity(leg) {
-  return leg.steps.filter(isMeaningfulManeuver).length;
+function countRouteComplexity(leg, route) {
+  return leg.steps.filter(step => isMeaningfulManeuver(step, route)).length;
 }
 
 function scoreRoute(routeData) {
   let score = 0;
 
-  // Основа — время в секундах
   score += routeData.time;
+  score += routeData.complexity * 45;
 
-  // Сложность маршрута
-  score += routeData.complexity * 40;
-
-  // Трафик
   if (routeData.traffic === "high") score += 900;
   if (routeData.traffic === "medium") score += 300;
 
-  // Хайвей — бонус
   if (routeData.highway) score -= 180;
 
-  // Дистанция (небольшой штраф за длину)
   score += (routeData.distance / 1000) * 1.2;
-
-  // Инциденты
   score += routeData.accidents * 800;
   score += routeData.puddles * 300;
 
@@ -325,22 +330,19 @@ function scoreRoute(routeData) {
 }
 
 function selectBestRoute(routes) {
-  if (!routes || !routes.length) return null;
+  if (!routes?.length) return null;
   if (routes.length === 1) return routes[0];
 
   const sortedByScore = [...routes].sort((a, b) => a.score - b.score);
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
 
   let best = sortedByScore[0];
-
-  // Если лучший по score сильно медленнее fastest — берём fastest
   const timeGapMin = Math.round((best.time - fastest.time) / 60);
 
   if (best.index !== fastest.index && timeGapMin >= 5) {
     best = fastest;
   }
 
-  // Дополнительная проверка: если есть маршрут с лучшим трафиком и небольшой разницей по времени
   routes.forEach(route => {
     if (route.index === best.index) return;
 
@@ -348,17 +350,14 @@ function selectBestRoute(routes) {
     const routeTrafficRank = trafficRank(route.traffic);
     const bestTrafficRank = trafficRank(best.traffic);
 
-    // Маршрут с меньшим трафиком и небольшой разницей по времени
     if (diffMin <= 2 && routeTrafficRank < bestTrafficRank && route.complexity <= best.complexity + 2) {
       best = route;
     }
 
-    // Маршрут значительно проще
     if (diffMin <= 1 && route.complexity + 3 <= best.complexity && routeTrafficRank <= bestTrafficRank) {
       best = route;
     }
 
-    // Highway upgrade
     if (diffMin <= 2 && route.highway && !best.highway && routeTrafficRank <= bestTrafficRank) {
       best = route;
     }
@@ -386,12 +385,15 @@ function getRouteColor(role) {
   return "#6b7280";
 }
 
-// ИСПРАВЛЕНО: confidence считается по ВСЕМ маршрутам (analyzedRoutes), не по filtered
 function calculateConfidence(bestRoute, routesForDecision) {
   if (!routesForDecision || routesForDecision.length <= 1) return "high";
 
   const competitors = routesForDecision.filter(r => r.index !== bestRoute.index);
   if (!competitors.length) return "high";
+
+  const shortestTime = Math.min(...routesForDecision.map(r => r.time));
+  const bestSlowerByMin = Math.round((bestRoute.time - shortestTime) / 60);
+  const isShortTrip = bestRoute.time <= 12 * 60;
 
   let hasAlmostEqual = false;
   let hasClose = false;
@@ -407,6 +409,10 @@ function calculateConfidence(bestRoute, routesForDecision) {
       hasClose = true;
     }
   });
+
+  if (isShortTrip && (hasAlmostEqual || hasClose || bestSlowerByMin >= 2)) {
+    return hasAlmostEqual ? "low" : "medium";
+  }
 
   if (hasAlmostEqual) return "low";
   if (hasClose) return "medium";
@@ -446,6 +452,7 @@ function isRouteUseful(r, bestRoute) {
   if (r.index === bestRoute.index) return true;
 
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
+  const isShortTrip = bestRoute.time <= 12 * 60;
 
   if (diffMin < 0) return true;
   if (complexityDelta <= -3 && diffMin <= 3) return true;
@@ -453,8 +460,8 @@ function isRouteUseful(r, bestRoute) {
   if (distanceDeltaKm <= -3 && diffMin <= 3) return true;
   if (r.highway && !bestRoute.highway && diffMin <= 3) return true;
 
-  // Почти равный маршрут тоже полезен, если он не хуже по трафику и не намного сложнее
-  if (Math.abs(diffMin) <= 1 && complexityDelta <= 1 && trafficDelta <= 0) return true;
+  if (isShortTrip && Math.abs(diffMin) <= 2 && complexityDelta <= 1 && trafficDelta <= 1) return true;
+  if (!isShortTrip && Math.abs(diffMin) <= 1 && complexityDelta <= 1 && trafficDelta <= 0) return true;
 
   return false;
 }
@@ -462,7 +469,7 @@ function isRouteUseful(r, bestRoute) {
 function getUsefulRoutes(routes, bestRoute) {
   let useful = routes.filter(r => isRouteUseful(r, bestRoute));
 
-  // remove near-duplicates (same time ±1 min and distance ±1 km)
+  // удаляем почти одинаковые дубликаты
   const unique = [];
   useful.forEach(r => {
     const exists = unique.some(u =>
@@ -472,7 +479,6 @@ function getUsefulRoutes(routes, bestRoute) {
     if (!exists) unique.push(r);
   });
 
-  // best always first
   if (!unique.some(r => r.index === bestRoute.index)) {
     unique.unshift(bestRoute);
   }
@@ -486,14 +492,27 @@ function getUsefulRoutes(routes, bestRoute) {
   return unique.slice(0, 3);
 }
 
-function getRouteVisualRole(route, bestRoute, fastestRoute, routes) {
+function getRouteVisualRole(route, bestRoute, fastestRoute) {
   if (route.index === bestRoute.index) return "best";
-  if (route.index === fastestRoute.index && fastestRoute.index !== bestRoute.index) return "fastest";
+
+  const diffFromBestMin = Math.abs(Math.round((route.time - bestRoute.time) / 60));
+  const isShortTrip = bestRoute.time <= 12 * 60;
+
+  if (
+    route.index === fastestRoute.index &&
+    fastestRoute.index !== bestRoute.index &&
+    !(isShortTrip && diffFromBestMin <= 1)
+  ) {
+    return "fastest";
+  }
+
   return "alt";
 }
 
-function buildBestReason(r, fastestRoute, allRoutes) {
+function buildBestReason(r, fastestRoute) {
   const isFastest = r.index === fastestRoute.index;
+  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  const isShortTrip = r.time <= 12 * 60;
 
   if (isFastest) {
     if (r.complexity <= 4) return "Самый быстрый и простой маршрут";
@@ -502,7 +521,9 @@ function buildBestReason(r, fastestRoute, allRoutes) {
     return "Самый быстрый маршрут";
   }
 
-  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  if (isShortTrip && diffFromFastest <= 2) {
+    return `Более спокойный вариант (+${diffFromFastest} мин к быстрому)`;
+  }
 
   if (r.traffic === "low" && fastestRoute.traffic !== "low") {
     return `Меньше трафика (+${diffFromFastest} мин к быстрому)`;
@@ -521,18 +542,17 @@ function buildBestReason(r, fastestRoute, allRoutes) {
 
 function buildAlternativeReason(r, bestRoute) {
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
+  const isShortTrip = bestRoute.time <= 12 * 60;
 
   const advantages = [];
   const disadvantages = [];
 
-  // Преимущества
-  if (diffMin < 0) advantages.push(`быстрее на ${formatMin(diffMin)}`);
+  if (diffMin < 0 && !(isShortTrip && Math.abs(diffMin) <= 1)) advantages.push(`быстрее на ${formatMin(diffMin)}`);
   if (complexityDelta < -2) advantages.push(`проще на ${Math.abs(complexityDelta)} манёвров`);
   if (trafficDelta < 0) advantages.push("меньше трафика");
   if (distanceDeltaKm < -2) advantages.push(`короче на ${formatKm(distanceDeltaKm)}`);
   if (r.highway && !bestRoute.highway) advantages.push("больше по хайвею");
 
-  // Недостатки
   if (diffMin > 0) disadvantages.push(`дольше на ${diffMin} мин`);
   if (complexityDelta > 2) disadvantages.push(`сложнее на ${complexityDelta} манёвров`);
   if (trafficDelta > 0) disadvantages.push("плотнее трафик");
@@ -542,20 +562,14 @@ function buildAlternativeReason(r, bestRoute) {
     return `${advantages[0]}, но ${disadvantages[0]}`;
   }
 
-  if (advantages.length) {
-    return advantages[0];
-  }
+  if (advantages.length) return advantages[0];
+  if (disadvantages.length) return disadvantages[0];
 
-  if (disadvantages.length) {
-    return disadvantages[0];
-  }
-
-  return "Альтернативный вариант";
+  return isShortTrip ? "Почти такой же вариант" : "Альтернативный вариант";
 }
 
 function buildFastestReason(r, bestRoute) {
-  const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
-
+  const { complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
   let reason = "Самый быстрый вариант";
 
   if (complexityDelta > 2) {
@@ -567,15 +581,9 @@ function buildFastestReason(r, bestRoute) {
   return reason;
 }
 
-function buildReasons(r, bestRoute, fastestRoute, role, allRoutes) {
-  if (role === "best") {
-    return [buildBestReason(r, fastestRoute, allRoutes)];
-  }
-
-  if (role === "fastest") {
-    return [buildFastestReason(r, bestRoute)];
-  }
-
+function buildReasons(r, bestRoute, fastestRoute, role) {
+  if (role === "best") return [buildBestReason(r, fastestRoute)];
+  if (role === "fastest") return [buildFastestReason(r, bestRoute)];
   return [buildAlternativeReason(r, bestRoute)];
 }
 
@@ -595,9 +603,9 @@ function drawRoute(fullResult, routeIndex, role) {
   renderers.push(renderer);
 }
 
-function renderCard(r, bestRoute, fastestRoute, allRoutes, filteredRoutes, confidence) {
+function renderCard(r, bestRoute, fastestRoute, filteredRoutes, confidence) {
   const div = document.createElement("div");
-  const role = getRouteVisualRole(r, bestRoute, fastestRoute, filteredRoutes);
+  const role = getRouteVisualRole(r, bestRoute, fastestRoute);
 
   div.className = `route ${role}`;
 
@@ -613,11 +621,7 @@ function renderCard(r, bestRoute, fastestRoute, allRoutes, filteredRoutes, confi
 
   if (role === "best") {
     tags.push('<span class="tag best-tag">Рекомендуем</span>');
-    tags.push(
-      `<span class="tag" style="background:${getConfidenceColor(confidence)}; color:white;">
-        ${getConfidenceLabel(confidence)}
-      </span>`
-    );
+    tags.push(`<span class="tag" style="background:${getConfidenceColor(confidence)}; color:white;">${getConfidenceLabel(confidence)}</span>`);
   }
   if (role === "fastest" && fastestRoute.index !== bestRoute.index) {
     tags.push('<span class="tag fastest-tag">Самый быстрый</span>');
@@ -630,7 +634,7 @@ function renderCard(r, bestRoute, fastestRoute, allRoutes, filteredRoutes, confi
   tags.push(`<span class="tag">${getComplexityLabel(r.complexity)}</span>`);
   tags.push(`<span class="tag">${getTrafficLabel(r.traffic)}</span>`);
 
-  const reasons = buildReasons(r, bestRoute, fastestRoute, role, allRoutes);
+  const reasons = buildReasons(r, bestRoute, fastestRoute, role);
 
   div.innerHTML = `
     <div class="route-title">${title}</div>
@@ -693,27 +697,21 @@ function calculateRoutes() {
       }
 
       const routes = result.routes;
-
-      if (!routes || !routes.length) {
+      if (!routes?.length) {
         document.getElementById("routes").innerHTML =
           '<div class="error">Маршруты не найдены.</div>';
         return;
       }
 
-      // Анализируем все маршруты
       analyzedRoutes = routes.map((route, i) => {
         const leg = route.legs[0];
-
         const baseTime = leg.duration.value;
-        const time = leg.duration_in_traffic
-          ? leg.duration_in_traffic.value
-          : baseTime;
-
+        const time = leg.duration_in_traffic ? leg.duration_in_traffic.value : baseTime;
         const distance = leg.distance.value;
-        const complexity = countRouteComplexity(leg);
+        const complexity = countRouteComplexity(leg, route);
         const highway = isHighway(route);
         const traffic = getTrafficLevel(baseTime, time);
-        const roadEvents = getRoadEvents(route, leg);
+        const roadEvents = getRoadEvents();
 
         return {
           route,
@@ -730,36 +728,20 @@ function calculateRoutes() {
           puddles: roadEvents.puddles,
           incidentsKnown: roadEvents.incidentsKnown
         };
-      });
+      }).map(r => ({ ...r, score: scoreRoute(r) }));
 
-      // Считаем score для каждого маршрута
-      analyzedRoutes = analyzedRoutes.map(r => ({
-        ...r,
-        score: scoreRoute(r)
-      }));
-
-      // Выбираем лучший маршрут
       const bestRoute = selectBestRoute(analyzedRoutes);
-
-      // Фильтруем полезные маршруты
       const filteredRoutes = getUsefulRoutes(analyzedRoutes, bestRoute);
-
-      // Fastest определяется строго по времени среди всех
       const fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-
-      // ИСПРАВЛЕНО: confidence считается по ВСЕМ маршрутам
       const confidence = calculateConfidence(bestRoute, filteredRoutes);
 
-      // Рисуем маршруты
       filteredRoutes.forEach(r => {
-        const role = getRouteVisualRole(r, bestRoute, fastestRoute, filteredRoutes);
+        const role = getRouteVisualRole(r, bestRoute, fastestRoute);
         drawRoute(result, r.index, role);
       });
 
-      // Очищаем и рендерим карточки
       document.getElementById("routes").innerHTML = "";
 
-      // Best всегда первый
       const orderedRoutes = [
         filteredRoutes.find(r => r.index === bestRoute.index),
         ...filteredRoutes.filter(r => r.index !== bestRoute.index)
@@ -767,11 +749,10 @@ function calculateRoutes() {
 
       orderedRoutes.forEach(r => {
         document.getElementById("routes").appendChild(
-          renderCard(r, bestRoute, fastestRoute, analyzedRoutes, filteredRoutes, confidence)
+          renderCard(r, bestRoute, fastestRoute, filteredRoutes, confidence)
         );
       });
 
-      // Если только один маршрут — показываем блок "Альтернатив нет"
       if (filteredRoutes.length === 1) {
         document.getElementById("routes").appendChild(renderNoAlternativeCard());
       }
@@ -781,6 +762,8 @@ function calculateRoutes() {
   );
 }
 </script>
+
+
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 
 </body>
