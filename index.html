@@ -312,62 +312,53 @@ function selectBestRoute(routes) {
   if (routes.length === 1) return routes[0];
 
   const sortedByScore = [...routes].sort((a, b) => a.score - b.score);
-  const sortedByTime = [...routes].sort((a, b) => a.time - b.time);
+  const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
 
-  const scoreBest = sortedByScore[0];
-  const fastest = sortedByTime[0];
+  let best = sortedByScore[0];
 
-  let best = scoreBest;
+  const timeGapFromFastest = Math.round((best.time - fastest.time) / 60);
+  const bestTrafficRank = trafficRank(best.traffic);
+  const fastestTrafficRank = trafficRank(fastest.traffic);
 
-  const scoreBestSlowerByMin = Math.round((scoreBest.time - fastest.time) / 60);
   if (
-    scoreBest.index !== fastest.index &&
-    scoreBestSlowerByMin >= 3 &&
-    scoreBest.complexity >= fastest.complexity &&
-    trafficRank(scoreBest.traffic) >= trafficRank(fastest.traffic)
+    best.index !== fastest.index &&
+    (
+      (timeGapFromFastest >= 4) ||
+      (
+        timeGapFromFastest >= 2 &&
+        bestTrafficRank >= fastestTrafficRank &&
+        best.complexity >= fastest.complexity
+      )
+    )
   ) {
     best = fastest;
   }
 
   routes.forEach(route => {
+    if (route.index === best.index) return;
+
     const diffMin = Math.round((route.time - best.time) / 60);
+    const routeTrafficRank = trafficRank(route.traffic);
+    const currentTrafficRank = trafficRank(best.traffic);
 
-    if (
-      route.index !== best.index &&
-      route.highway &&
-      !best.highway &&
-      diffMin <= 3 &&
-      route.complexity <= best.complexity &&
-      trafficRank(route.traffic) <= trafficRank(best.traffic)
-    ) {
-      best = route;
-    }
-  });
-
-  routes.forEach(route => {
-    const diffMin = Math.round((route.time - best.time) / 60);
-
-    if (
-      route.index !== best.index &&
+    const clearlySaferChoice =
       diffMin <= 2 &&
-      route.complexity + 3 <= best.complexity &&
-      trafficRank(route.traffic) <= trafficRank(best.traffic)
-    ) {
-      best = route;
-    }
-  });
+      routeTrafficRank < currentTrafficRank &&
+      route.complexity <= best.complexity + 1;
 
-  routes.forEach(route => {
-    const diffMin = Math.round((route.time - best.time) / 60);
+    const easierChoiceWithSameTime =
+      diffMin <= 1 &&
+      route.complexity + 2 <= best.complexity &&
+      routeTrafficRank <= currentTrafficRank;
 
-    if (
-      route.index !== best.index &&
+    const highwayUpgrade =
       diffMin <= 2 &&
       route.highway &&
       !best.highway &&
-      route.complexity <= best.complexity &&
-      trafficRank(route.traffic) < trafficRank(best.traffic)
-    ) {
+      routeTrafficRank <= currentTrafficRank &&
+      route.complexity <= best.complexity + 1;
+
+    if (clearlySaferChoice || easierChoiceWithSameTime || highwayUpgrade) {
       best = route;
     }
   });
@@ -475,18 +466,25 @@ function isRouteUseful(r, bestRoute) {
 
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
 
-  const hasStrongAdvantage =
-    diffMin < 0 ||
-    complexityDelta <= -2 ||
-    trafficDelta < 0 ||
-    distanceDeltaKm <= -3 ||
-    (r.highway && !bestRoute.highway);
+  const clearlyFaster = diffMin < 0;
+  const clearlySimpler = complexityDelta <= -2 && diffMin <= 3;
+  const clearlyCalmer = trafficDelta < 0 && diffMin <= 3;
+  const strongHighwayAlternative = r.highway && !bestRoute.highway && diffMin <= 2 && trafficDelta <= 0;
+  const slightlyDifferentButValid =
+    diffMin <= 1 &&
+    (
+      complexityDelta <= -1 ||
+      trafficDelta < 0 ||
+      distanceDeltaKm <= -2
+    );
 
-  const isCloseAlternative =
-    diffMin <= 2 &&
-    (complexityDelta <= 0 || trafficDelta <= 0 || distanceDeltaKm <= 2);
-
-  return hasStrongAdvantage || isCloseAlternative;
+  return (
+    clearlyFaster ||
+    clearlySimpler ||
+    clearlyCalmer ||
+    strongHighwayAlternative ||
+    slightlyDifferentButValid
+  );
 }
 
 function getUsefulRoutes(routes, bestRoute) {
@@ -495,7 +493,7 @@ function getUsefulRoutes(routes, bestRoute) {
   const hasBest = useful.some(r => r.index === bestRoute.index);
   if (!hasBest) useful.unshift(bestRoute);
 
-  return useful;
+  return useful.slice(0, 3);
 }
 
 function getRouteVisualRole(route, bestRoute, fastestRoute, routes) {
