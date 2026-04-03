@@ -391,6 +391,18 @@ function calculateConfidence(bestRoute, routes) {
   const competitors = routes.filter(r => r.index !== bestRoute.index);
   if (!competitors.length) return "high";
 
+  const allVeryClose = competitors.every(r => {
+    const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+
+    return (
+      Math.abs(diffMin) <= 1 &&
+      Math.abs(complexityDelta) <= 1 &&
+      trafficDelta <= 0
+    );
+  });
+
+  if (allVeryClose) return "low";
+
   let uncertainty = 0;
 
   competitors.forEach(r => {
@@ -402,7 +414,7 @@ function calculateConfidence(bestRoute, routes) {
     const notWorseTraffic = trafficDelta <= 0;
 
     if (almostSameTime && almostSameComplexity && notWorseTraffic) {
-      uncertainty += 1;
+      uncertainty += 3;
       return;
     }
 
