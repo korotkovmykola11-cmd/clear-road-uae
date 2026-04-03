@@ -245,10 +245,13 @@ function isHighway(route) {
   return highwayShare >= 0.35;
 }
 
-function getTrafficLevel(timeSeconds, distanceMeters) {
-  const ratio = timeSeconds / distanceMeters;
-  if (ratio < 0.00105) return "low";
-  if (ratio < 0.00125) return "medium";
+function getTrafficLevel(baseTimeSeconds, trafficTimeSeconds) {
+  if (!trafficTimeSeconds || !baseTimeSeconds) return "medium";
+
+  const delaySeconds = trafficTimeSeconds - baseTimeSeconds;
+
+  if (delaySeconds <= 120) return "low";
+  if (delaySeconds <= 360) return "medium";
   return "high";
 }
 
@@ -672,14 +675,15 @@ function calculateRoutes() {
       analyzedRoutes = routes.map((route, i) => {
         const leg = route.legs[0];
 
+        const baseTime = leg.duration.value;
         const time = leg.duration_in_traffic
           ? leg.duration_in_traffic.value
-          : leg.duration.value;
+          : baseTime;
 
         const distance = leg.distance.value;
         const complexity = countRouteComplexity(leg);
         const highway = isHighway(route);
-        const traffic = getTrafficLevel(time, distance);
+        const traffic = getTrafficLevel(baseTime, time);
         const roadEvents = getRoadEvents(route, leg);
 
         return {
@@ -687,6 +691,8 @@ function calculateRoutes() {
           index: i,
           displayIndex: i + 1,
           time,
+          baseTime,
+          delaySeconds: Math.max(0, time - baseTime),
           distance,
           complexity,
           highway,
