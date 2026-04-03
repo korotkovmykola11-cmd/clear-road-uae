@@ -290,15 +290,17 @@ function scoreRoute(routeData) {
   let score = 0;
 
   score += routeData.time;
-  score += routeData.complexity * 120;
 
-  if (routeData.traffic === "high") score += 1200;
-  if (routeData.traffic === "medium") score += 400;
-  if (routeData.traffic === "low") score -= 150;
+  score += routeData.complexity * 45;
 
-  if (routeData.highway) score -= 450;
+  if (routeData.traffic === "high") score += 1400;
+  if (routeData.traffic === "medium") score += 450;
+  if (routeData.traffic === "low") score -= 120;
 
-  score += (routeData.distance / 1000) * 2;
+  if (routeData.highway) score -= 220;
+
+  score += (routeData.distance / 1000) * 1.5;
+
   score += routeData.accidents * 900;
   score += routeData.puddles * 350;
 
