@@ -271,16 +271,6 @@ function isMeaningfulManeuver(step, route) {
   const stepDistance = step.distance?.value || 0;
   const onHighway = stepLooksLikeHighway(step, route);
 
-  // На длинных highway-участках игнорируем мелкую навигацию
-  if (onHighway && stepDistance < 1500) {
-    return false;
-  }
-
-  // Совсем короткие шаги почти всегда шум
-  if (stepDistance < 350) {
-    return false;
-  }
-
   const strongManeuvers = new Set([
     "turn-left",
     "turn-right",
@@ -288,23 +278,33 @@ function isMeaningfulManeuver(step, route) {
     "uturn-right",
     "roundabout-left",
     "roundabout-right",
-    "roundabout",
-    "ferry"
+    "roundabout"
   ]);
 
+  // Явные сильные манёвры считаем всегда
   if (strongManeuvers.has(maneuver)) return true;
 
-  // merge / ramp / keep / slight сами по себе не считаем полноценным манёвром
-  const weakWords = ["continue", "merge", "keep", "slight", "ramp"];
-  if (weakWords.some(w => html.includes(w))) return false;
+  // Exit на хайвее и в городе — это реальный манёвр
+  if (html.includes("exit")) return true;
 
-  return (
-    html.includes("turn ") ||
-    html.includes("u-turn") ||
-    html.includes("roundabout") ||
-    html.includes("take the exit") ||
-    html.includes("take exit")
-  );
+  // merge считаем только если это не мелкий highway-шаг
+  if (maneuver.includes("merge")) {
+    return !onHighway || stepDistance > 2000;
+  }
+
+  // слабые команды игнорируем
+  if (
+    html.includes("continue") ||
+    html.includes("keep") ||
+    html.includes("slight")
+  ) {
+    return false;
+  }
+
+  // слишком короткие шаги — шум
+  if (stepDistance < 150) return false;
+
+  return false;
 }
 
 function countRouteComplexity(leg, route) {
@@ -762,8 +762,6 @@ function calculateRoutes() {
   );
 }
 </script>
-
-
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 
 </body>
