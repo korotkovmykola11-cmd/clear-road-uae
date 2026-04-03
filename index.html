@@ -152,6 +152,19 @@
       border-radius: 8px;
       margin: 10px;
     }
+
+    .no-alt-card {
+      background: #f8fafc;
+      border: 1px dashed #94a3b8;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+
+    .no-alt-card .route-title {
+      color: #64748b;
+      font-size: 18px;
+    }
   </style>
 </head>
 <body>
@@ -204,7 +217,6 @@ function normalizeRoadText(step, route) {
 
 function stepLooksLikeHighway(step, route) {
   const text = normalizeRoadText(step, route);
-
   return (
     /\bE11\b/.test(text) ||
     /\bE311\b/.test(text) ||
@@ -255,14 +267,6 @@ function trafficRank(level) {
   return 3;
 }
 
-function getRoadEvents() {
-  return {
-    accidents: 0,
-    puddles: 0,
-    incidentsKnown: false
-  };
-}
-
 function isMeaningfulManeuver(step, route) {
   if (!step) return false;
 
@@ -281,18 +285,13 @@ function isMeaningfulManeuver(step, route) {
     "roundabout"
   ]);
 
-  // Явные сильные манёвры считаем всегда
   if (strongManeuvers.has(maneuver)) return true;
-
-  // Exit на хайвее и в городе — это реальный манёвр
   if (html.includes("exit")) return true;
 
-  // merge считаем только если это не мелкий highway-шаг
   if (maneuver.includes("merge")) {
     return !onHighway || stepDistance > 2000;
   }
 
-  // слабые команды игнорируем
   if (
     html.includes("continue") ||
     html.includes("keep") ||
@@ -301,7 +300,6 @@ function isMeaningfulManeuver(step, route) {
     return false;
   }
 
-  // слишком короткие шаги — шум
   if (stepDistance < 150) return false;
 
   return false;
@@ -312,12 +310,12 @@ function countRouteComplexity(leg, route) {
 }
 
 function scoreRoute(routeData) {
-  let score = routeData.time;
+  let score = 0;
+  score += routeData.time;
+  score += routeData.complexity * 45;
 
-  if (routeData.traffic === "high") score += 480;
-  else if (routeData.traffic === "medium") score += 180;
-
-  score += routeData.complexity * 60;
+  if (routeData.traffic === "high") score += 900;
+  if (routeData.traffic === "medium") score += 300;
 
   return score;
 }
@@ -327,14 +325,93 @@ function selectBestRoute(routes) {
   if (routes.length === 1) return routes[0];
 
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
-  const lowestScore = [...routes].sort((a, b) => a.score - b.score)[0];
-  const timeGapMin = Math.round((lowestScore.time - fastest.time) / 60);
+  let best = [...routes].sort((a, b) => a.score - b.score)[0];
 
-  if (lowestScore.index !== fastest.index && timeGapMin >= 4) {
+  const timeGapMin = Math.round((best.time - fastest.time) / 60);
+
+  if (best.index !== fastest.index && timeGapMin > 4) {
     return fastest;
   }
 
-  return lowestScore;
+  routes.forEach(route => {
+    if (route.index === best.index) return;
+
+    const diffMin = Math.round((route.time - best.time) / 60);
+    const routeTrafficRank = trafficRank(route.traffic);
+    const bestTrafficRank = trafficRank(best.traffic);
+
+    if (diffMin <= 2 && diffMin >= -2) {
+      if (routeTrafficRank < bestTrafficRank) {
+        best = route;
+      } else if (routeTrafficRank === bestTrafficRank && route.complexity < best.complexity) {
+        best = route;
+      }
+    }
+  });
+
+  return best;
+}
+
+function calculateConfidence(bestRoute, allRoutes) {
+  if (!allRoutes || allRoutes.length <= 1) return "high";
+
+  const competitors = allRoutes.filter(r => r.index !== bestRoute.index);
+  if (!competitors.length) return "high";
+
+  const shortestTime = Math.min(...allRoutes.map(r => r.time));
+  const bestSlowerByMin = Math.round((bestRoute.time - shortestTime) / 60);
+  const isShortTrip = bestRoute.time <= 12 * 60;
+
+  let hasAlmostEqual = false;
+  let hasClose = false;
+  let hasBetterInSomeMetric = false;
+
+  competitors.forEach(r => {
+    const diffMin = Math.abs(Math.round((r.time - bestRoute.time) / 60));
+    const complexityDelta = r.complexity - bestRoute.complexity;
+    const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
+
+    if (r.time < bestRoute.time) hasBetterInSomeMetric = true;
+    if (complexityDelta < -2) hasBetterInSomeMetric = true;
+    if (trafficDelta < 0) hasBetterInSomeMetric = true;
+
+    if (diffMin <= 1 && Math.abs(complexityDelta) <= 1 && Math.abs(trafficDelta) <= 1) {
+      hasAlmostEqual = true;
+    } else if (diffMin <= 3 && Math.abs(complexityDelta) <= 2 && Math.abs(trafficDelta) <= 1) {
+      hasClose = true;
+    }
+  });
+
+  if (isShortTrip) {
+    if (hasAlmostEqual) return "low";
+    if (hasClose || bestSlowerByMin >= 2) return "medium";
+    return "high";
+  }
+
+  if (hasAlmostEqual) return "low";
+  if (hasClose && hasBetterInSomeMetric) return "medium";
+  if (hasClose) return "medium";
+  return "high";
+}
+
+function getConfidenceLabel(level) {
+  if (level === "high") return "Высокая уверенность";
+  if (level === "medium") return "Средняя уверенность";
+  return "Низкая уверенность";
+}
+
+function getConfidenceColor(level) {
+  if (level === "high") return "#16a34a";
+  if (level === "medium") return "#d97706";
+  return "#dc2626";
+}
+
+function getDiffs(r, bestRoute) {
+  return {
+    diffMin: Math.round((r.time - bestRoute.time) / 60),
+    complexityDelta: r.complexity - bestRoute.complexity,
+    trafficDelta: trafficRank(r.traffic) - trafficRank(bestRoute.traffic)
+  };
 }
 
 function getComplexityLabel(complexity) {
@@ -354,112 +431,6 @@ function getRouteColor(role) {
   if (role === "fastest") return "#1d4ed8";
   if (role === "alt") return "#d97706";
   return "#6b7280";
-}
-
-function calculateConfidence(bestRoute, routesForDecision) {
-  if (!routesForDecision || routesForDecision.length <= 1) return "high";
-
-  const competitors = routesForDecision.filter(r => r.index !== bestRoute.index);
-  if (!competitors.length) return "high";
-
-  const shortestTime = Math.min(...routesForDecision.map(r => r.time));
-  const bestSlowerByMin = Math.round((bestRoute.time - shortestTime) / 60);
-  const isShortTrip = bestRoute.time <= 12 * 60;
-
-  let hasAlmostEqual = false;
-  let hasClose = false;
-
-  competitors.forEach(r => {
-    const diffMin = Math.abs(Math.round((r.time - bestRoute.time) / 60));
-    const complexityDelta = Math.abs(r.complexity - bestRoute.complexity);
-    const trafficDelta = Math.abs(trafficRank(r.traffic) - trafficRank(bestRoute.traffic));
-
-    if (diffMin <= 1 && complexityDelta <= 1 && trafficDelta <= 1) {
-      hasAlmostEqual = true;
-    } else if (diffMin <= 3 && complexityDelta <= 2 && trafficDelta <= 1) {
-      hasClose = true;
-    }
-  });
-
-  if (isShortTrip && (hasAlmostEqual || hasClose || bestSlowerByMin >= 2)) {
-    return hasAlmostEqual ? "low" : "medium";
-  }
-
-  if (hasAlmostEqual) return "low";
-  if (hasClose) return "medium";
-  return "high";
-}
-
-function getConfidenceLabel(level) {
-  if (level === "high") return "Высокая уверенность";
-  if (level === "medium") return "Средняя уверенность";
-  return "Низкая уверенность";
-}
-
-function getConfidenceColor(level) {
-  if (level === "high") return "#16a34a";
-  if (level === "medium") return "#d97706";
-  return "#dc2626";
-}
-
-function formatMin(v) {
-  return `${Math.abs(v)} мин`;
-}
-
-function formatKm(v) {
-  return `${Math.abs(v).toFixed(1)} км`;
-}
-
-function getDiffs(r, bestRoute) {
-  return {
-    diffMin: Math.round((r.time - bestRoute.time) / 60),
-    complexityDelta: r.complexity - bestRoute.complexity,
-    trafficDelta: trafficRank(r.traffic) - trafficRank(bestRoute.traffic)
-  };
-}
-
-function isRouteUseful(r, bestRoute) {
-  if (r.index === bestRoute.index) return true;
-
-  const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
-  const isShortTrip = bestRoute.time <= 12 * 60;
-
-  if (diffMin < 0) return true;
-  if (complexityDelta <= -3 && diffMin <= 3) return true;
-  if (trafficDelta < 0 && diffMin <= 3) return true;
-  if (distanceDeltaKm <= -3 && diffMin <= 3) return true;
-  if (r.highway && !bestRoute.highway && diffMin <= 3) return true;
-
-  if (isShortTrip && Math.abs(diffMin) <= 2 && complexityDelta <= 1 && trafficDelta <= 1) return true;
-  if (!isShortTrip && Math.abs(diffMin) <= 1 && complexityDelta <= 1 && trafficDelta <= 0) return true;
-
-  return false;
-}
-
-function getUsefulRoutes(routes, bestRoute) {
-  let useful = routes.filter(r => isRouteUseful(r, bestRoute));
-
-  // удаляем почти одинаковые дубликаты
-  const unique = [];
-  useful.forEach(r => {
-    const exists = unique.some(u =>
-      Math.abs(u.time - r.time) <= 60 &&
-      Math.abs(u.distance - r.distance) <= 1000
-    );
-    if (!exists) unique.push(r);
-  });
-
-  if (!unique.some(r => r.index === bestRoute.index)) {
-    unique.unshift(bestRoute);
-  }
-
-  unique.sort((a, b) => {
-    if (a.index === bestRoute.index) return -1;
-    if (b.index === bestRoute.index) return 1;
-    return a.time - b.time;
-  });
-
-  return unique.slice(0, 3);
 }
 
 function getRouteVisualRole(route, bestRoute, fastestRoute) {
@@ -484,34 +455,57 @@ function buildBestReason(r, fastestRoute) {
   const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
 
   if (isFastest) {
-    if (r.traffic === "low" && r.complexity <= 4) return "Самый быстрый и простой маршрут";
-    if (r.traffic === "low") return "Самый быстрый маршрут";
-    if (r.traffic === "medium") return "Самый быстрый, но трафик средний";
-    return "Самый быстрый, но трафик плотнее";
+    return "Самый быстрый";
   }
+
+  const reasons = [];
 
   if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-    return `Меньше пробок (+${diffFromFastest} мин к быстрому)`;
+    reasons.push("меньше пробок");
   }
 
-  if (r.complexity <= fastestRoute.complexity - 2) {
-    return `Проще маршрут (+${diffFromFastest} мин к быстрому)`;
+  if (r.complexity < fastestRoute.complexity) {
+    const diff = fastestRoute.complexity - r.complexity;
+    if (diff >= 1) {
+      reasons.push(`меньше манёвров (−${diff})`);
+    }
   }
 
-  return `Лучший баланс времени и простоты (+${diffFromFastest} мин к быстрому)`;
+  if (reasons.length === 0) {
+    if (diffFromFastest <= 2) {
+      return "Почти такой же по времени, но спокойнее";
+    }
+    return `Медленнее на ${diffFromFastest} мин, но выбран по score`;
+  }
+
+  if (diffFromFastest > 0) {
+    return `${reasons.join(", ")} (+${diffFromFastest} мин)`;
+  }
+
+  return reasons.join(", ");
 }
 
 function buildAlternativeReason(r, bestRoute) {
   const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+  const advantages = [];
+  const disadvantages = [];
 
-  if (diffMin < 0) return `Быстрее на ${formatMin(diffMin)}`;
-  if (trafficDelta < 0) return "Меньше пробок";
-  if (complexityDelta < 0) return `Проще на ${Math.abs(complexityDelta)} манёвров`;
-  if (diffMin > 0 && trafficDelta > 0) return `Дольше на ${diffMin} мин и трафик плотнее`;
-  if (diffMin > 0) return `Дольше на ${diffMin} мин`;
-  if (complexityDelta > 0) return `Сложнее на ${complexityDelta} манёвров`;
+  if (diffMin < 0) advantages.push(`быстрее на ${Math.abs(diffMin)} мин`);
+  if (complexityDelta < 0) advantages.push(`меньше манёвров (${Math.abs(complexityDelta)})`);
+  if (trafficDelta < 0) advantages.push("меньше пробок");
 
-  return "Сопоставимый вариант";
+  if (diffMin > 0) disadvantages.push(`дольше на ${diffMin} мин`);
+  if (complexityDelta > 0) disadvantages.push(`больше манёвров (${complexityDelta})`);
+  if (trafficDelta > 0) disadvantages.push("трафик плотнее");
+
+  if (advantages.length && disadvantages.length) {
+    return `${advantages[0]}, но ${disadvantages[0]}`;
+  }
+
+  if (advantages.length) return advantages[0];
+  if (disadvantages.length) return disadvantages[0];
+
+  return "Почти такой же вариант";
 }
 
 function buildFastestReason(r, bestRoute) {
@@ -521,7 +515,7 @@ function buildFastestReason(r, bestRoute) {
   if (trafficDelta > 0) {
     reason += ", но трафик плотнее";
   } else if (complexityDelta > 0) {
-    reason += `, но сложнее на ${complexityDelta} манёвров`;
+    reason += `, но больше манёвров (${complexityDelta})`;
   }
 
   return reason;
@@ -549,7 +543,7 @@ function drawRoute(fullResult, routeIndex, role) {
   renderers.push(renderer);
 }
 
-function renderCard(r, bestRoute, fastestRoute, filteredRoutes, confidence) {
+function renderCard(r, bestRoute, fastestRoute, confidence) {
   const div = document.createElement("div");
   const role = getRouteVisualRole(r, bestRoute, fastestRoute);
 
@@ -602,11 +596,11 @@ function renderCard(r, bestRoute, fastestRoute, filteredRoutes, confidence) {
 
 function renderNoAlternativeCard() {
   const div = document.createElement("div");
-  div.className = "route neutral";
+  div.className = "no-alt-card";
   div.innerHTML = `
     <div class="route-title">Альтернатив нет</div>
     <div class="explanation">
-      <b>Почему:</b> среди найденных вариантов нет альтернативы, которая была бы полезнее или сопоставима по качеству
+      <b>Почему:</b> Google Maps вернул только один вариант для этого маршрута.
     </div>
   `;
   return div;
@@ -657,7 +651,6 @@ function calculateRoutes() {
         const complexity = countRouteComplexity(leg, route);
         const highway = isHighway(route);
         const traffic = getTrafficLevel(baseTime, time);
-        const roadEvents = getRoadEvents();
 
         return {
           route,
@@ -669,19 +662,16 @@ function calculateRoutes() {
           distance,
           complexity,
           highway,
-          traffic,
-          accidents: roadEvents.accidents,
-          puddles: roadEvents.puddles,
-          incidentsKnown: roadEvents.incidentsKnown
+          traffic
         };
       }).map(r => ({ ...r, score: scoreRoute(r) }));
 
       const bestRoute = selectBestRoute(analyzedRoutes);
       const fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-      const visibleRoutes = [...analyzedRoutes].sort((a, b) => a.time - b.time).slice(0, 3);
       const confidence = calculateConfidence(bestRoute, analyzedRoutes);
+      const routesToShow = analyzedRoutes;
 
-      visibleRoutes.forEach(r => {
+      routesToShow.forEach(r => {
         const role = getRouteVisualRole(r, bestRoute, fastestRoute);
         drawRoute(result, r.index, role);
       });
@@ -689,17 +679,17 @@ function calculateRoutes() {
       document.getElementById("routes").innerHTML = "";
 
       const orderedRoutes = [
-        visibleRoutes.find(r => r.index === bestRoute.index),
-        ...visibleRoutes.filter(r => r.index !== bestRoute.index).sort((a, b) => a.time - b.time)
+        routesToShow.find(r => r.index === bestRoute.index),
+        ...routesToShow.filter(r => r.index !== bestRoute.index).sort((a, b) => a.time - b.time)
       ].filter(Boolean);
 
       orderedRoutes.forEach(r => {
         document.getElementById("routes").appendChild(
-          renderCard(r, bestRoute, fastestRoute, visibleRoutes, confidence)
+          renderCard(r, bestRoute, fastestRoute, confidence)
         );
       });
 
-      if (visibleRoutes.length === 1) {
+      if (analyzedRoutes.length === 1) {
         document.getElementById("routes").appendChild(renderNoAlternativeCard());
       }
 
