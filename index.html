@@ -190,15 +190,59 @@ function clearRoutes() {
   document.getElementById("routes").innerHTML = "";
 }
 
-function isHighway(route) {
-  const summary = (route.summary || "").toUpperCase();
+function stripHtml(text) {
+  return (text || "").replace(/<[^>]*>/g, " ");
+}
+
+function normalizeRoadText(step, route) {
+  const summary = (route.summary || "");
+  const htmlInstructions = stripHtml(step.html_instructions || "");
+  const instructions = step.instructions || "";
+  const maneuver = step.maneuver || "";
+  return `${summary} ${htmlInstructions} ${instructions} ${maneuver}`.toUpperCase();
+}
+
+function stepLooksLikeHighway(step, route) {
+  const text = normalizeRoadText(step, route);
+
   return (
-    summary.includes("E11") ||
-    summary.includes("E311") ||
-    summary.includes("E611") ||
-    summary.includes("SHEIKH") ||
-    summary.includes("HIGHWAY")
+    text.includes(" E11") ||
+    text.includes("E11 ") ||
+    text.includes(" E311") ||
+    text.includes("E311 ") ||
+    text.includes(" E611") ||
+    text.includes("E611 ") ||
+    text.includes(" SHEIKH MOHAMMED BIN ZAYED") ||
+    text.includes(" SHEIKH ZAYED") ||
+    text.includes(" EMIRATES ROAD") ||
+    text.includes(" HIGHWAY") ||
+    text.includes(" EXPRESSWAY") ||
+    text.includes(" MOTORWAY") ||
+    text.includes(" FREEWAY")
   );
+}
+
+function getHighwayShare(route) {
+  const leg = route.legs[0];
+  const totalDistance = leg.distance && leg.distance.value ? leg.distance.value : 0;
+
+  if (!totalDistance) return 0;
+
+  let highwayDistance = 0;
+
+  leg.steps.forEach(step => {
+    const stepDistance = step.distance && step.distance.value ? step.distance.value : 0;
+    if (stepLooksLikeHighway(step, route)) {
+      highwayDistance += stepDistance;
+    }
+  });
+
+  return highwayDistance / totalDistance;
+}
+
+function isHighway(route) {
+  const highwayShare = getHighwayShare(route);
+  return highwayShare >= 0.35;
 }
 
 function getTrafficLevel(timeSeconds, distanceMeters) {
