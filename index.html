@@ -467,23 +467,26 @@ function isRouteUseful(r, bestRoute) {
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
 
   const clearlyFaster = diffMin < 0;
-  const clearlySimpler = complexityDelta <= -2 && diffMin <= 3;
-  const clearlyCalmer = trafficDelta < 0 && diffMin <= 3;
-  const strongHighwayAlternative = r.highway && !bestRoute.highway && diffMin <= 2 && trafficDelta <= 0;
-  const slightlyDifferentButValid =
-    diffMin <= 1 &&
+  const simplerWithAcceptableTimeLoss = complexityDelta <= -1 && diffMin <= 2;
+  const calmerWithAcceptableTimeLoss = trafficDelta < 0 && diffMin <= 3;
+  const shorterWithAcceptableTimeLoss = distanceDeltaKm <= -2 && diffMin <= 2;
+  const highwayAlternative = r.highway && !bestRoute.highway && diffMin <= 3 && trafficDelta <= 0;
+  const nearlySameButDifferentCharacter =
+    diffMin <= 2 &&
     (
       complexityDelta <= -1 ||
       trafficDelta < 0 ||
-      distanceDeltaKm <= -2
+      distanceDeltaKm <= -1.5 ||
+      (r.highway && !bestRoute.highway)
     );
 
   return (
     clearlyFaster ||
-    clearlySimpler ||
-    clearlyCalmer ||
-    strongHighwayAlternative ||
-    slightlyDifferentButValid
+    simplerWithAcceptableTimeLoss ||
+    calmerWithAcceptableTimeLoss ||
+    shorterWithAcceptableTimeLoss ||
+    highwayAlternative ||
+    nearlySameButDifferentCharacter
   );
 }
 
@@ -493,7 +496,19 @@ function getUsefulRoutes(routes, bestRoute) {
   const hasBest = useful.some(r => r.index === bestRoute.index);
   if (!hasBest) useful.unshift(bestRoute);
 
-  return useful.slice(0, 3);
+  const deduped = [];
+  useful.forEach(route => {
+    if (!deduped.some(existing => existing.index === route.index)) {
+      deduped.push(route);
+    }
+  });
+
+  const best = deduped.find(r => r.index === bestRoute.index);
+  const others = deduped
+    .filter(r => r.index !== bestRoute.index)
+    .sort((a, b) => a.time - b.time);
+
+  return [best, ...others].filter(Boolean).slice(0, 3);
 }
 
 function getRouteVisualRole(route, bestRoute, fastestRoute, routes) {
@@ -513,47 +528,40 @@ function buildReasons(r, bestRoute, fastestRoute, role) {
     return [buildBestReason(r, fastestRoute)];
   }
 
-  const advantage = getAlternativeAdvantage(r, bestRoute);
-  const tradeoff = getAlternativeTradeoff(r, bestRoute, advantage ? advantage.type : "");
-
-  let plus = advantage ? advantage.text : "";
-  let minus = tradeoff ? tradeoff.text : "";
+  const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
 
   if (role === "fastest") {
-    if (!plus || !plus.startsWith("быстрее")) {
-      plus = "самый быстрый вариант";
-    }
-    if (!minus) {
-      const { complexityDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
-      if (complexityDelta > 0) minus = `на ${complexityDelta} манёвров больше`;
-      else if (distanceDeltaKm > 2.5) minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
-      else minus = "маршрут менее сбалансирован";
-    }
+    let minus = "";
+    if (complexityDelta > 0) minus = `на ${complexityDelta} манёвров больше`;
+    else if (trafficDelta > 0) minus = "трафик плотнее";
+    else if (distanceDeltaKm > 1.5) minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
+
+    return [buildHumanContrast("самый быстрый вариант", minus)];
   }
 
   if (role === "alt") {
+    let plus = "";
+    let minus = "";
+
+    if (complexityDelta < 0) plus = `на ${Math.abs(complexityDelta)} манёвров меньше`;
+    else if (trafficDelta < 0) plus = "трафик спокойнее";
+    else if (distanceDeltaKm < -1.5) plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
+    else if (r.highway && !bestRoute.highway) plus = "больше движения по хайвею";
+    else if (diffMin === 0) plus = "почти то же время";
+
+    if (diffMin > 0) minus = `дольше на ${diffMin} мин`;
+    else if (complexityDelta > 0) minus = `на ${complexityDelta} манёвров больше`;
+    else if (trafficDelta > 0) minus = "трафик плотнее";
+    else if (distanceDeltaKm > 1.5) minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
+
     if (!plus) {
-      const { complexityDelta, distanceDeltaKm, trafficDelta } = getDiffs(r, bestRoute);
-      if (complexityDelta <= -2) plus = `на ${Math.abs(complexityDelta)} манёвров меньше`;
-      else if (distanceDeltaKm < -3) plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
-      else if (trafficDelta < 0) plus = "трафик спокойнее";
-      else if (r.highway && !bestRoute.highway) plus = "больше движения по хайвею";
+      plus = "альтернатива с похожим временем";
     }
 
-    if (!minus) {
-      const { diffMin, complexityDelta, distanceDeltaKm, trafficDelta } = getDiffs(r, bestRoute);
-      if (diffMin > 0) minus = `дольше на ${diffMin} мин`;
-      else if (complexityDelta > 0) minus = `на ${complexityDelta} манёвров больше`;
-      else if (distanceDeltaKm > 2.5) minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
-      else if (trafficDelta > 0) minus = "трафик плотнее";
-    }
+    return [buildHumanContrast(plus, minus)];
   }
 
-  if (!plus || plus === "альтернативный вариант" || plus === "сопоставимая сложность" || plus === "сопоставимый трафик" || plus === "трафик не хуже") {
-    return ["маршрут хуже по ключевым параметрам"];
-  }
-
-  return [buildHumanContrast(plus, minus)];
+  return ["маршрут без выраженных отличий"];
 }
 
 function drawRoute(fullResult, routeIndex, role) {
