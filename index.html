@@ -402,7 +402,7 @@ function calculateConfidence(bestRoute, routes) {
     const notWorseTraffic = trafficDelta <= 0;
 
     if (almostSameTime && almostSameComplexity && notWorseTraffic) {
-      uncertainty += 2;
+      uncertainty += 1;
       return;
     }
 
