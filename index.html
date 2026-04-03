@@ -499,58 +499,44 @@ function isRouteUseful(r, bestRoute) {
 
   const { diffMin, complexityDelta, trafficDelta, distanceDeltaKm } = getDiffs(r, bestRoute);
 
-  const clearlyFaster = diffMin < 0;
-  const simplerWithAcceptableTimeLoss = complexityDelta <= -1 && diffMin <= 2;
-  const calmerWithAcceptableTimeLoss = trafficDelta < 0 && diffMin <= 3;
-  const shorterWithAcceptableTimeLoss = distanceDeltaKm <= -2 && diffMin <= 2;
-  const highwayAlternative = r.highway && !bestRoute.highway && diffMin <= 3 && trafficDelta <= 0;
+  // 1. Реально быстрее
+  if (diffMin < 0) return true;
 
-  const slightlyDifferentButValid =
-    diffMin <= 2 &&
-    (
-      complexityDelta <= -1 ||
-      trafficDelta <= 0 ||
-      distanceDeltaKm <= -1.5 ||
-      (r.highway && !bestRoute.highway)
-    );
+  // 2. Значительно проще
+  if (complexityDelta <= -2 && diffMin <= 2) return true;
 
-  const sameTimeDifferentStyle =
-    diffMin <= 2 &&
-    (
-      (r.highway && !bestRoute.highway) ||
-      (!r.highway && bestRoute.highway)
-    );
+  // 3. Значительно меньше трафика
+  if (trafficDelta < 0 && diffMin <= 3) return true;
 
-  return (
-    clearlyFaster ||
-    simplerWithAcceptableTimeLoss ||
-    calmerWithAcceptableTimeLoss ||
-    shorterWithAcceptableTimeLoss ||
-    highwayAlternative ||
-    slightlyDifferentButValid ||
-    sameTimeDifferentStyle
-  );
+  // 4. Реально короче
+  if (distanceDeltaKm <= -2 && diffMin <= 2) return true;
+
+  // 5. Highway преимущество
+  if (r.highway && !bestRoute.highway && diffMin <= 2) return true;
+
+  // Всё остальное — мусор
+  return false;
 }
 
 function getUsefulRoutes(routes, bestRoute) {
-  const useful = routes.filter(r => isRouteUseful(r, bestRoute));
+  let useful = routes.filter(r => isRouteUseful(r, bestRoute));
 
-  const hasBest = useful.some(r => r.index === bestRoute.index);
-  if (!hasBest) useful.unshift(bestRoute);
+  // всегда должен быть best
+  if (!useful.some(r => r.index === bestRoute.index)) {
+    useful.unshift(bestRoute);
+  }
 
-  const deduped = [];
-  useful.forEach(route => {
-    if (!deduped.some(existing => existing.index === route.index)) {
-      deduped.push(route);
-    }
-  });
+  // если после фильтра остался только 1 маршрут —
+  // попробуем добавить ближайший по времени
+  if (useful.length === 1 && routes.length > 1) {
+    const fallback = routes
+      .filter(r => r.index !== bestRoute.index)
+      .sort((a, b) => a.time - b.time)[0];
 
-  const best = deduped.find(r => r.index === bestRoute.index);
-  const others = deduped
-    .filter(r => r.index !== bestRoute.index)
-    .sort((a, b) => a.time - b.time);
+    if (fallback) useful.push(fallback);
+  }
 
-  return [best, ...others].filter(Boolean).slice(0, 3);
+  return useful.slice(0, 3);
 }
 
 function getRouteVisualRole(route, bestRoute, fastestRoute, routes) {
@@ -582,25 +568,20 @@ function buildReasons(r, bestRoute, fastestRoute, role) {
   }
 
   if (role === "alt") {
-    let plus = "";
-    let minus = "";
+    const advantage = getAlternativeAdvantage(r, bestRoute);
 
-    if (complexityDelta < 0) plus = `на ${Math.abs(complexityDelta)} манёвров меньше`;
-    else if (trafficDelta < 0) plus = "трафик спокойнее";
-    else if (distanceDeltaKm < -1.5) plus = `короче на ${Math.abs(distanceDeltaKm).toFixed(1)} км`;
-    else if (r.highway && !bestRoute.highway) plus = "больше движения по хайвею";
-    else if (diffMin === 0) plus = "почти то же время";
-
-    if (diffMin > 0) minus = `дольше на ${diffMin} мин`;
-    else if (complexityDelta > 0) minus = `на ${complexityDelta} манёвров больше`;
-    else if (trafficDelta > 0) minus = "трафик плотнее";
-    else if (distanceDeltaKm > 1.5) minus = `длиннее на ${distanceDeltaKm.toFixed(1)} км`;
-
-    if (!plus) {
-      plus = "альтернатива с похожим временем";
+    if (!advantage) {
+      return ["альтернатива без явных преимуществ (можно игнорировать)"];
     }
 
-    return [buildHumanContrast(plus, minus)];
+    const tradeoff = getAlternativeTradeoff(r, bestRoute, advantage.type);
+
+    return [
+      buildHumanContrast(
+        advantage.text,
+        tradeoff ? tradeoff.text : ""
+      )
+    ];
   }
 
   return ["маршрут без выраженных отличий"];
