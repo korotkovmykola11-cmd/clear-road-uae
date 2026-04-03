@@ -272,21 +272,23 @@ function isMeaningfulManeuver(step) {
   const html = stripHtml(step.html_instructions || "").toLowerCase();
   const maneuver = (step.maneuver || "").toLowerCase();
 
-  if (maneuver) return true;
+  const weakManeuvers = new Set([
+    "straight",
+    "continue",
+    "merge",
+    "ramp"
+  ]);
+
+  if (maneuver && !weakManeuvers.has(maneuver)) {
+    return true;
+  }
 
   return (
     html.includes("turn ") ||
-    html.includes("merge") ||
-    html.includes("exit") ||
-    html.includes("roundabout") ||
-    html.includes("keep left") ||
-    html.includes("keep right") ||
     html.includes("u-turn") ||
-    html.includes("take the ramp") ||
-    html.includes("slight left") ||
-    html.includes("slight right") ||
-    html.includes("sharp left") ||
-    html.includes("sharp right")
+    html.includes("roundabout") ||
+    html.includes("sharp") ||
+    html.includes("exit")
   );
 }
 
