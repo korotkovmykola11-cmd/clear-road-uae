@@ -671,7 +671,7 @@ function calculateConfidence(bestRoute, allRoutes) {
   let hasBetterInSomeMetric = false;
 
   competitors.forEach(r => {
-    const diffMin = Math.abs(Math.round((r.time - bestRoute.time) / 60));
+    const diffMin = Math.abs(((r.time - bestRoute.time) / 60));
     const complexityDelta = r.complexity - bestRoute.complexity;
     const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
 
