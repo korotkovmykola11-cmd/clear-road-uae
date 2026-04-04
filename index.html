@@ -469,6 +469,26 @@ let directionsService;
 let renderers = [];
 let analyzedRoutes = [];
 
+function getDisplayMinutes(seconds) {
+  return Math.round(seconds / 60);
+}
+
+function getRouteDisplayMinutes(route) {
+  return getDisplayMinutes(route.time);
+}
+
+function getDisplayedMinuteDiff(routeA, routeB) {
+  return Math.abs(getRouteDisplayMinutes(routeA) - getRouteDisplayMinutes(routeB));
+}
+
+function formatDisplayedMinuteDiff(routeA, routeB, prefix = "") {
+  const diff = getDisplayedMinuteDiff(routeA, routeB);
+  if (diff === 0) {
+    return `${prefix}меньше 1 мин`;
+  }
+  return `${prefix}${diff} мин`;
+}
+
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
     center: { lat: 24.4539, lng: 54.3773 },
@@ -609,51 +629,7 @@ function scoreRoute(routeData) {
 
 function selectBestRoute(routes) {
   if (!routes?.length) return null;
-  if (routes.length === 1) return routes[0];
-
-  const sortedByTime = [...routes].sort((a, b) => a.time - b.time);
-  const fastest = sortedByTime[0];
-  const secondFastest = sortedByTime[1] || fastest;
-  const fastestLeadMin = (secondFastest.time - fastest.time) / 60;
-
-  // Главное правило доверия:
-  // если самый быстрый маршрут выигрывает с небольшим отрывом или больше,
-  // его и нужно рекомендовать. Иначе продукт выглядит нелогично.
-  if (fastestLeadMin >= 0.5) {
-    return fastest;
-  }
-
-  let best = [...routes].sort((a, b) => a.score - b.score)[0];
-
-  const bestVsFastestMin = (best.time - fastest.time) / 60;
-  if (best.index !== fastest.index && bestVsFastestMin >= 1) {
-    return fastest;
-  }
-
-  routes.forEach(route => {
-    if (route.index === best.index) return;
-
-    const diffMin = (route.time - best.time) / 60;
-    const routeTrafficRank = trafficRank(route.traffic);
-    const bestTrafficRank = trafficRank(best.traffic);
-
-    if (Math.abs(diffMin) <= 2) {
-      if (route.time < best.time - 30) {
-        best = route;
-        return;
-      }
-
-      if (Math.abs(diffMin) < 1) {
-        if (routeTrafficRank < bestTrafficRank) {
-          best = route;
-        } else if (routeTrafficRank === bestTrafficRank && route.complexity < best.complexity) {
-          best = route;
-        }
-      }
-    }
-  });
-
-  return best;
+  return [...routes].sort((a, b) => a.time - b.time)[0];
 }
 
 function calculateConfidence(bestRoute, allRoutes) {
@@ -663,7 +639,7 @@ function calculateConfidence(bestRoute, allRoutes) {
   if (!competitors.length) return "high";
 
   const shortestTime = Math.min(...allRoutes.map(r => r.time));
-  const bestSlowerByMin = Math.round((bestRoute.time - shortestTime) / 60);
+  const bestSlowerByMin = (bestRoute.time - shortestTime) / 60;
   const isShortTrip = bestRoute.time <= 12 * 60;
 
   let hasAlmostEqual = false;
@@ -700,7 +676,7 @@ function calculateConfidence(bestRoute, allRoutes) {
 
 function formatMinuteDiff(minutesFloat, prefix = "") {
   const absValue = Math.abs(minutesFloat);
-  if (absValue < 0.5) {
+  if (absValue < 1) {
     return `${prefix}меньше 1 мин`;
   }
   return `${prefix}${Math.round(absValue)} мин`;
@@ -722,8 +698,8 @@ function getConfidenceLabel(level, bestRoute, allRoutes) {
   if (allRoutes && allRoutes.length > 1 && bestRoute) {
     const competitors = allRoutes.filter(r => r.index !== bestRoute.index);
     if (competitors.length > 0) {
-      const minDiff = Math.min(...competitors.map(r => Math.abs((r.time - bestRoute.time) / 60)));
-      return minDiff < 1 ? 'Разница меньше 1 мин' : `Разница ${Math.round(minDiff)} мин`; 
+      const minDiff = Math.min(...competitors.map(r => getDisplayedMinuteDiff(r, bestRoute)));
+      return minDiff === 0 ? 'Разница меньше 1 мин' : `Разница ${minDiff} мин`;
     }
   }
   return "Почти одинаковые";
@@ -803,55 +779,51 @@ function getRouteVisualRole(route, bestRoute, fastestRoute) {
 
 function buildHighlight(r, bestRoute, fastestRoute, role) {
   const isFastest = r.index === fastestRoute.index;
-  const diffFromFastest = (r.time - fastestRoute.time) / 60;
   const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
-  const fasterText = formatMinuteDiff(Math.abs(diffMin));
-  const plusFromFastest = `(+${formatMinuteDiff(diffFromFastest)})`;
 
   if (role === "best") {
     if (isFastest) {
       return "Самый быстрый";
     }
     if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-      return `Меньше пробок ${plusFromFastest}`;
+      return `Меньше пробок (+${formatDisplayedMinuteDiff(r, fastestRoute)})`;
     }
     if (r.complexity < fastestRoute.complexity) {
-      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров ${plusFromFastest}`;
+      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров (+${formatDisplayedMinuteDiff(r, fastestRoute)})`;
     }
-    if (Math.abs(diffFromFastest) < 1) {
+    if (getDisplayedMinuteDiff(r, fastestRoute) === 0) {
       return "Почти такой же";
     }
-    return `Дольше на ${formatMinuteDiff(diffFromFastest)}, но спокойнее`;
+    return `Дольше на ${formatDisplayedMinuteDiff(r, fastestRoute)}, но спокойнее`;
   }
 
   if (role === "fastest") {
     if (trafficDelta > 0) {
-      return `Быстрее на ${fasterText}, но пробки`;
+      return `Быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}, но пробки`;
     }
     if (complexityDelta > 2) {
-      return `Быстрее на ${fasterText}, но сложнее (+${complexityDelta} манёвров)`;
+      return `Быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}, но сложнее (+${complexityDelta} манёвров)`;
     }
-    return `Быстрее на ${fasterText}`;
+    return `Быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
 
   if (diffMin <= 0) {
-    return `Быстрее на ${formatMinuteDiff(Math.abs(diffMin))}`;
+    return `Быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
   if (complexityDelta < -1 && diffMin > 0) {
-    return `Проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatMinuteDiff(diffMin)}`;
+    return `Проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
   if (trafficDelta < 0 && diffMin > 0) {
-    return `Меньше пробок, но дольше на ${formatMinuteDiff(diffMin)}`;
+    return `Меньше пробок, но дольше на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
 
-  return `+${formatMinuteDiff(diffMin)}`;
+  return `+${formatDisplayedMinuteDiff(r, bestRoute)}`;
 }
 
 // ===== WHY — короткое объяснение =====
 
 function buildWhy(r, bestRoute, fastestRoute, role) {
   const isFastest = r.index === fastestRoute.index;
-  const diffFromFastest = (r.time - fastestRoute.time) / 60;
   const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
 
   if (role === "best") {
@@ -859,38 +831,38 @@ function buildWhy(r, bestRoute, fastestRoute, role) {
       return "самый быстрый";
     }
     if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-      return `меньше пробок (+${formatMinuteDiff(diffFromFastest)})`;
+      return `меньше пробок (+${formatDisplayedMinuteDiff(r, fastestRoute)})`;
     }
     if (r.complexity < fastestRoute.complexity) {
-      return `проще на ${fastestRoute.complexity - r.complexity} манёвров (+${formatMinuteDiff(diffFromFastest)})`;
+      return `проще на ${fastestRoute.complexity - r.complexity} манёвров (+${formatDisplayedMinuteDiff(r, fastestRoute)})`;
     }
-    if (Math.abs(diffFromFastest) < 1) {
+    if (getDisplayedMinuteDiff(r, fastestRoute) === 0) {
       return "почти такой же, но спокойнее";
     }
-    return `дольше на ${formatMinuteDiff(diffFromFastest)}, но спокойнее`;
+    return `дольше на ${formatDisplayedMinuteDiff(r, fastestRoute)}, но спокойнее`;
   }
 
   if (role === "fastest") {
     if (trafficDelta > 0) {
-      return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}, но пробки`;
+      return `быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}, но пробки`;
     }
     if (complexityDelta > 2) {
-      return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}, но сложнее (+${complexityDelta} манёвров)`;
+      return `быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}, но сложнее (+${complexityDelta} манёвров)`;
     }
-    return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}`;
+    return `быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
 
   if (diffMin < 0) {
-    return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}`;
+    return `быстрее на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
   if (complexityDelta < -1 && diffMin > 0) {
-    return `проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatMinuteDiff(diffMin)}`;
+    return `проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
   if (trafficDelta < 0 && diffMin > 0) {
-    return `меньше пробок, но дольше на ${formatMinuteDiff(diffMin)}`;
+    return `меньше пробок, но дольше на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
   if (diffMin > 0) {
-    return `дольше на ${formatMinuteDiff(diffMin)}`;
+    return `дольше на ${formatDisplayedMinuteDiff(r, bestRoute)}`;
   }
 
   return "почти одинаково";
