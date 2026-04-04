@@ -552,100 +552,102 @@ function getRouteVisualRole(route, bestRoute, fastestRoute) {
   return "alt";
 }
 
-// ===== DAY 3: HIGHLIGHT — главная строка разницы =====
+// ===== HIGHLIGHT — главная строка разницы =====
 
 function buildHighlight(r, bestRoute, fastestRoute, role) {
+  const isFastest = r.index === fastestRoute.index;
+  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+
   if (role === "best") {
-    const isFastest = r.index === fastestRoute.index;
+    // Если best = fastest
     if (isFastest) {
-      if (r.traffic === "low") return "Быстрый и без пробок";
       return "Самый быстрый";
     }
-    
-    const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
-    if (r.traffic === "low" && fastestRoute.traffic !== "low") {
+    // Если best НЕ fastest — объясняем почему выбран
+    if (trafficDelta < 0 || (r.traffic === "low" && fastestRoute.traffic !== "low")) {
       return `Меньше пробок (+${diffFromFastest} мин)`;
     }
-    if (r.complexity < fastestRoute.complexity - 1) {
-      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров`;
+    if (r.complexity < fastestRoute.complexity) {
+      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров (+${diffFromFastest} мин)`;
     }
-    return "Оптимальный баланс";
+    return `Быстрее на ${Math.abs(diffFromFastest)} мин`;
   }
 
   if (role === "fastest") {
-    const { diffMin, trafficDelta, complexityDelta } = getDiffs(r, bestRoute);
     const faster = Math.abs(diffMin);
     if (trafficDelta > 0) {
-      return `${faster} мин быстрее, но пробки`;
+      return `Быстрее на ${faster} мин, но пробки`;
     }
     if (complexityDelta > 2) {
-      return `${faster} мин быстрее, но сложнее`;
+      return `Быстрее на ${faster} мин, но сложнее (+${complexityDelta} манёвров)`;
     }
     return `Быстрее на ${faster} мин`;
   }
 
   // alt
-  const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
-  
-  if (diffMin < 0) {
+  if (diffMin <= 0) {
     return `Быстрее на ${Math.abs(diffMin)} мин`;
   }
-  if (complexityDelta < -1) {
-    return `Проще на ${Math.abs(complexityDelta)} манёвров`;
+  if (complexityDelta < -1 && diffMin > 0) {
+    return `Проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${diffMin} мин`;
   }
-  if (trafficDelta < 0) {
-    return "Меньше пробок";
-  }
-  if (diffMin > 0) {
-    return `+${diffMin} мин`;
+  if (trafficDelta < 0 && diffMin > 0) {
+    return `Меньше пробок, но дольше на ${diffMin} мин`;
   }
   
-  return "Альтернатива";
+  return `+${diffMin} мин`;
 }
 
-// ===== DAY 3: WHY — короткое объяснение =====
+// ===== WHY — короткое объяснение =====
 
 function buildWhy(r, bestRoute, fastestRoute, role) {
+  const isFastest = r.index === fastestRoute.index;
+  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+
   if (role === "best") {
-    const parts = [];
-    const isFastest = r.index === fastestRoute.index;
-    
-    if (isFastest) parts.push("самый быстрый");
-    if (r.traffic === "low") parts.push("свободная дорога");
-    if (r.complexity <= 5) parts.push("простой маршрут");
-    if (r.highway) parts.push("по хайвею");
-    
-    if (parts.length === 0) return "Лучший баланс времени и комфорта";
-    return parts.slice(0, 2).join(", ");
+    if (isFastest) {
+      return "самый быстрый";
+    }
+    // Не fastest — объясняем конкретно
+    if (r.traffic === "low" && fastestRoute.traffic !== "low") {
+      return `меньше пробок (+${diffFromFastest} мин)`;
+    }
+    if (r.complexity < fastestRoute.complexity) {
+      return `проще на ${fastestRoute.complexity - r.complexity} манёвров (+${diffFromFastest} мин)`;
+    }
+    if (diffFromFastest <= 1) {
+      return `почти такой же по времени (+${diffFromFastest} мин), но спокойнее`;
+    }
+    return `быстрее на ${Math.abs(diffFromFastest)} мин`;
   }
 
   if (role === "fastest") {
-    const { trafficDelta, complexityDelta } = getDiffs(r, bestRoute);
-    if (trafficDelta > 0) return "Быстрее, но трафик плотнее";
-    if (complexityDelta > 2) return "Быстрее, но больше манёвров";
-    return "Самый быстрый вариант";
+    if (trafficDelta > 0) {
+      return `быстрее на ${Math.abs(diffMin)} мин, но пробки`;
+    }
+    if (complexityDelta > 2) {
+      return `быстрее на ${Math.abs(diffMin)} мин, но сложнее (+${complexityDelta} манёвров)`;
+    }
+    return `быстрее на ${Math.abs(diffMin)} мин`;
   }
 
   // alt
-  const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
-  const pros = [];
-  const cons = [];
-
-  if (diffMin < 0) pros.push(`быстрее на ${Math.abs(diffMin)} мин`);
-  if (complexityDelta < -1) pros.push("проще");
-  if (trafficDelta < 0) pros.push("меньше пробок");
-
-  if (diffMin > 0) cons.push(`дольше на ${diffMin} мин`);
-  if (complexityDelta > 1) cons.push("сложнее");
-  if (trafficDelta > 0) cons.push("больше пробок");
-
-  if (pros.length && cons.length) {
-    return `${pros[0]}, но ${cons[0]}`;
+  if (diffMin < 0) {
+    return `быстрее на ${Math.abs(diffMin)} мин`;
   }
-  if (pros.length) return pros[0];
-  if (cons.length) return cons[0];
+  if (complexityDelta < -1 && diffMin > 0) {
+    return `проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${diffMin} мин`;
+  }
+  if (trafficDelta < 0 && diffMin > 0) {
+    return `меньше пробок, но дольше на ${diffMin} мин`;
+  }
+  if (diffMin > 0) {
+    return `дольше на ${diffMin} мин`;
+  }
   
-  return "Похожий вариант";
+  return `+${Math.abs(diffMin)} мин`;
 }
 
 function drawRoute(fullResult, routeIndex, role) {
