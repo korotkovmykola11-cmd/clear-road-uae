@@ -1006,6 +1006,32 @@ function getRouteVisualRole(route, bestRoute, fastestRoute) {
   return "alt";
 }
 
+function getDecisionTitle(bestRoute, fastestRoute) {
+  if (!bestRoute || !fastestRoute) return "Лучший вариант сейчас";
+
+  if (bestRoute.index === fastestRoute.index) {
+    return "Лучший вариант сейчас";
+  }
+
+  const diff = getDisplayDiff(bestRoute, fastestRoute);
+  if (diff > 0) {
+    return `Спокойнее, чем самый быстрый (+${formatDiff(diff)})`;
+  }
+
+  return "Лучший вариант сейчас";
+}
+
+function getDecisionSubtitle(bestRoute, fastestRoute) {
+  const role = getRouteVisualRole(bestRoute, bestRoute, fastestRoute);
+  const highlight = buildHighlight(bestRoute, bestRoute, fastestRoute, role);
+  const why = buildWhy(bestRoute, bestRoute, fastestRoute, role);
+
+  if (!why) return highlight;
+  if (highlight.toLowerCase() === why.toLowerCase()) return highlight;
+
+  return `${highlight} · ${why}`;
+}
+
 // ===== HIGHLIGHT — главная строка разницы =====
 
 function buildHighlight(r, bestRoute, fastestRoute, role) {
@@ -1064,14 +1090,20 @@ function buildWhy(r, bestRoute, fastestRoute, role) {
     baselineRoute = fastestRoute.index !== r.index ? fastestRoute : null;
   }
 
-  const reasons = getWhyReasons(r, baselineRoute);
+  let reasons = getWhyReasons(r, baselineRoute);
   const character = getRouteCharacter(r);
+  const highlight = buildHighlight(r, bestRoute, fastestRoute, role).toLowerCase();
+
+  reasons = reasons.filter(reason => !highlight.includes(reason.toLowerCase()));
 
   if (reasons.length >= 2) {
     return `${reasons[0]}, ${reasons[1]}`;
   }
 
   if (reasons.length === 1) {
+    if (character.toLowerCase().includes(reasons[0].toLowerCase())) {
+      return character;
+    }
     return `${reasons[0]} · ${character}`;
   }
 
@@ -1174,15 +1206,16 @@ function renderDecisionCard(bestRoute, fastestRoute, confidence) {
 
   const minutes = getDisplayMinutes(bestRoute);
   const km = (bestRoute.distance / 1000).toFixed(1);
-  const why = buildWhy(bestRoute, bestRoute, fastestRoute, "best");
+  const title = getDecisionTitle(bestRoute, fastestRoute);
+  const subtitle = getDecisionSubtitle(bestRoute, fastestRoute);
 
   decision.innerHTML = `
     <div class="decision-card">
       <div class="decision-badge">AI DECISION</div>
       <div class="decision-top">
         <div>
-          <h2 class="decision-title">Рекомендуемый маршрут</h2>
-          <div class="decision-why">${why.charAt(0).toUpperCase() + why.slice(1)}.</div>
+          <h2 class="decision-title">${title}</h2>
+          <div class="decision-why">${subtitle.charAt(0).toUpperCase() + subtitle.slice(1)}.</div>
         </div>
         <div class="tag confidence" style="background:${getConfidenceColor(confidence)}">${getConfidenceLabel(confidence, bestRoute, analyzedRoutes)}</div>
       </div>
