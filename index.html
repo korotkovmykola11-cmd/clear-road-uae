@@ -671,7 +671,7 @@ function calculateConfidence(bestRoute, allRoutes) {
   let hasBetterInSomeMetric = false;
 
   competitors.forEach(r => {
-    const diffMin = Math.abs(((r.time - bestRoute.time) / 60));
+    const diffMin = Math.abs((r.time - bestRoute.time) / 60);
     const complexityDelta = r.complexity - bestRoute.complexity;
     const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
 
@@ -700,7 +700,7 @@ function calculateConfidence(bestRoute, allRoutes) {
 
 function formatMinuteDiff(minutesFloat, prefix = "") {
   const absValue = Math.abs(minutesFloat);
-  if (absValue < 1) {
+  if (absValue < 0.5) {
     return `${prefix}меньше 1 мин`;
   }
   return `${prefix}${Math.round(absValue)} мин`;
