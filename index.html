@@ -235,6 +235,73 @@
       border-top-color: rgba(22, 163, 74, 0.2);
     }
 
+
+
+    /* ===== AI DECISION LAYER ===== */
+    .decision-card {
+      margin: 12px;
+      margin-bottom: 0;
+      background: #ecfdf5;
+      border: 1px solid #bbf7d0;
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .decision-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: white;
+      background: #166534;
+      margin-bottom: 10px;
+    }
+
+    .decision-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .decision-title {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 800;
+      color: #166534;
+    }
+
+    .decision-why {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #334155;
+      line-height: 1.45;
+    }
+
+    .decision-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .decision-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: white;
+      color: #334155;
+      font-size: 13px;
+      border: 1px solid #d1fae5;
+      font-weight: 600;
+    }
+
     /* ===== NO ALT CARD ===== */
     .no-alt-card {
       background: #f8fafc;
@@ -377,80 +444,6 @@
       color: #166534;
       line-height: 1.5;
     }
-
-    /* ===== DAY 4.5: AI DECISION LAYER ===== */
-    .decision-panel {
-      margin: 12px;
-      padding: 16px;
-      background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
-      border: 1px solid #bbf7d0;
-      border-radius: 16px;
-      box-shadow: 0 6px 18px rgba(22, 163, 74, 0.08);
-      display: none;
-    }
-
-    .decision-panel.visible {
-      display: block;
-    }
-
-    .decision-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-
-    .decision-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: #166534;
-      color: white;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-
-    .decision-confidence {
-      font-size: 13px;
-      font-weight: 600;
-      color: #166534;
-    }
-
-    .decision-title {
-      margin: 0 0 6px 0;
-      font-size: 22px;
-      font-weight: 800;
-      color: #14532d;
-    }
-
-    .decision-main {
-      font-size: 16px;
-      color: #1e293b;
-      line-height: 1.45;
-      margin-bottom: 10px;
-    }
-
-    .decision-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .decision-pill {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: white;
-      border: 1px solid #dcfce7;
-      font-size: 13px;
-      font-weight: 600;
-      color: #334155;
-    }
-
   </style>
 </head>
 <body>
@@ -462,7 +455,7 @@
 </div>
 
 <div id="map"></div>
-<div class="decision-panel" id="decision-panel"></div>
+<div id="decision"></div>
 <div class="routes" id="routes"></div>
 
 <!-- DAY 4: Route Details Modal -->
@@ -493,8 +486,8 @@ function clearRoutes() {
   renderers = [];
   analyzedRoutes = [];
   document.getElementById("routes").innerHTML = "";
-  document.getElementById("decision-panel").innerHTML = "";
-  document.getElementById("decision-panel").classList.remove("visible");
+  const decision = document.getElementById("decision");
+  if (decision) decision.innerHTML = "";
 }
 
 function stripHtml(text) {
@@ -688,16 +681,32 @@ function calculateConfidence(bestRoute, allRoutes) {
   return "high";
 }
 
+function formatMinuteDiff(minutesFloat, prefix = "") {
+  const absValue = Math.abs(minutesFloat);
+  if (absValue < 1) {
+    return `${prefix}меньше 1 мин`;
+  }
+  return `${prefix}${Math.round(absValue)} мин`;
+}
+
+function formatSignedMinuteDiff(minutesFloat) {
+  const absValue = Math.abs(minutesFloat);
+  if (absValue < 1) {
+    return "меньше 1 мин";
+  }
+  const rounded = Math.round(absValue);
+  return `${minutesFloat >= 0 ? "+" : "-"}${rounded} мин`;
+}
+
 function getConfidenceLabel(level, bestRoute, allRoutes) {
   if (level === "high") return "Уверенно";
   if (level === "medium") return "Возможны варианты";
-  
-  // low — вычисляем минимальную разницу с конкурентами
+
   if (allRoutes && allRoutes.length > 1 && bestRoute) {
     const competitors = allRoutes.filter(r => r.index !== bestRoute.index);
     if (competitors.length > 0) {
-      const minDiff = Math.min(...competitors.map(r => Math.abs(Math.round((r.time - bestRoute.time) / 60))));
-      return `Разница всего ${minDiff} мин`;
+      const minDiff = Math.min(...competitors.map(r => Math.abs((r.time - bestRoute.time) / 60)));
+      return `Разница всего ${formatMinuteDiff(minDiff)}`;
     }
   }
   return "Почти одинаковые";
@@ -711,7 +720,7 @@ function getConfidenceColor(level) {
 
 function getDiffs(r, bestRoute) {
   return {
-    diffMin: Math.round((r.time - bestRoute.time) / 60),
+    diffMin: (r.time - bestRoute.time) / 60,
     complexityDelta: r.complexity - bestRoute.complexity,
     trafficDelta: trafficRank(r.traffic) - trafficRank(bestRoute.traffic)
   };
@@ -777,55 +786,55 @@ function getRouteVisualRole(route, bestRoute, fastestRoute) {
 
 function buildHighlight(r, bestRoute, fastestRoute, role) {
   const isFastest = r.index === fastestRoute.index;
-  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  const diffFromFastest = (r.time - fastestRoute.time) / 60;
   const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
+  const fasterText = formatMinuteDiff(Math.abs(diffMin));
+  const plusFromFastest = `(+${formatMinuteDiff(diffFromFastest)})`;
 
   if (role === "best") {
     if (isFastest) {
       return "Самый быстрый";
     }
     if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-      return `Меньше пробок (+${diffFromFastest} мин)`;
+      return `Меньше пробок ${plusFromFastest}`;
     }
     if (r.complexity < fastestRoute.complexity) {
-      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров (+${diffFromFastest} мин)`;
+      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров ${plusFromFastest}`;
     }
-    if (diffFromFastest <= 1) {
-      return `Почти такой же (+${diffFromFastest} мин)`;
+    if (Math.abs(diffFromFastest) < 1) {
+      return "Почти такой же";
     }
-    return `Дольше на ${diffFromFastest} мин, но спокойнее`;
+    return `Дольше на ${formatMinuteDiff(diffFromFastest)}, но спокойнее`;
   }
 
   if (role === "fastest") {
-    const faster = Math.abs(diffMin);
     if (trafficDelta > 0) {
-      return `Быстрее на ${faster} мин, но пробки`;
+      return `Быстрее на ${fasterText}, но пробки`;
     }
     if (complexityDelta > 2) {
-      return `Быстрее на ${faster} мин, но сложнее (+${complexityDelta} манёвров)`;
+      return `Быстрее на ${fasterText}, но сложнее (+${complexityDelta} манёвров)`;
     }
-    return `Быстрее на ${faster} мин`;
+    return `Быстрее на ${fasterText}`;
   }
 
-  // alt
   if (diffMin <= 0) {
-    return `Быстрее на ${Math.abs(diffMin)} мин`;
+    return `Быстрее на ${formatMinuteDiff(Math.abs(diffMin))}`;
   }
   if (complexityDelta < -1 && diffMin > 0) {
-    return `Проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${diffMin} мин`;
+    return `Проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatMinuteDiff(diffMin)}`;
   }
   if (trafficDelta < 0 && diffMin > 0) {
-    return `Меньше пробок, но дольше на ${diffMin} мин`;
+    return `Меньше пробок, но дольше на ${formatMinuteDiff(diffMin)}`;
   }
-  
-  return `+${diffMin} мин`;
+
+  return `+${formatMinuteDiff(diffMin)}`;
 }
 
 // ===== WHY — короткое объяснение =====
 
 function buildWhy(r, bestRoute, fastestRoute, role) {
   const isFastest = r.index === fastestRoute.index;
-  const diffFromFastest = Math.round((r.time - fastestRoute.time) / 60);
+  const diffFromFastest = (r.time - fastestRoute.time) / 60;
   const { diffMin, complexityDelta, trafficDelta } = getDiffs(r, bestRoute);
 
   if (role === "best") {
@@ -833,91 +842,41 @@ function buildWhy(r, bestRoute, fastestRoute, role) {
       return "самый быстрый";
     }
     if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-      return `меньше пробок (+${diffFromFastest} мин)`;
+      return `меньше пробок (+${formatMinuteDiff(diffFromFastest)})`;
     }
     if (r.complexity < fastestRoute.complexity) {
-      return `проще на ${fastestRoute.complexity - r.complexity} манёвров (+${diffFromFastest} мин)`;
+      return `проще на ${fastestRoute.complexity - r.complexity} манёвров (+${formatMinuteDiff(diffFromFastest)})`;
     }
-    return `почти такой же (+${diffFromFastest} мин), но спокойнее`;
+    if (Math.abs(diffFromFastest) < 1) {
+      return "почти такой же, но спокойнее";
+    }
+    return `дольше на ${formatMinuteDiff(diffFromFastest)}, но спокойнее`;
   }
 
   if (role === "fastest") {
     if (trafficDelta > 0) {
-      return `быстрее на ${Math.abs(diffMin)} мин, но пробки`;
+      return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}, но пробки`;
     }
     if (complexityDelta > 2) {
-      return `быстрее на ${Math.abs(diffMin)} мин, но сложнее (+${complexityDelta} манёвров)`;
+      return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}, но сложнее (+${complexityDelta} манёвров)`;
     }
-    return `быстрее на ${Math.abs(diffMin)} мин`;
+    return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}`;
   }
 
-  // alt
   if (diffMin < 0) {
-    return `быстрее на ${Math.abs(diffMin)} мин`;
+    return `быстрее на ${formatMinuteDiff(Math.abs(diffMin))}`;
   }
   if (complexityDelta < -1 && diffMin > 0) {
-    return `проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${diffMin} мин`;
+    return `проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatMinuteDiff(diffMin)}`;
   }
   if (trafficDelta < 0 && diffMin > 0) {
-    return `меньше пробок, но дольше на ${diffMin} мин`;
+    return `меньше пробок, но дольше на ${formatMinuteDiff(diffMin)}`;
   }
   if (diffMin > 0) {
-    return `дольше на ${diffMin} мин`;
-  }
-  
-  return `+${Math.abs(diffMin)} мин`;
-}
-
-
-function buildDecisionWhy(bestRoute, fastestRoute) {
-  if (!bestRoute || !fastestRoute) return "Маршрут выбран автоматически.";
-
-  const diffFromFastest = Math.round((bestRoute.time - fastestRoute.time) / 60);
-
-  if (bestRoute.index === fastestRoute.index) {
-    return "Самый быстрый вариант по текущей ситуации на дороге.";
+    return `дольше на ${formatMinuteDiff(diffMin)}`;
   }
 
-  if (bestRoute.traffic === "low" && fastestRoute.traffic !== "low") {
-    return `Меньше пробок, при этом разница всего ${Math.max(diffFromFastest, 1)} мин.`;
-  }
-
-  if (bestRoute.complexity < fastestRoute.complexity) {
-    return `Проще по манёврам на ${fastestRoute.complexity - bestRoute.complexity} и почти не проигрывает по времени.`;
-  }
-
-  if (diffFromFastest <= 1) {
-    return "Почти такой же по времени, но спокойнее в реальной поездке.";
-  }
-
-  return `Выбран как более стабильный вариант, хотя дольше на ${diffFromFastest} мин.`;
-}
-
-function renderDecisionPanel(bestRoute, fastestRoute, confidence) {
-  const panel = document.getElementById("decision-panel");
-  if (!panel || !bestRoute) return;
-
-  const minutes = Math.round(bestRoute.time / 60);
-  const km = (bestRoute.distance / 1000).toFixed(1);
-  const why = buildDecisionWhy(bestRoute, fastestRoute);
-  const trafficLabel = getTrafficLabel(bestRoute.traffic);
-
-  panel.innerHTML = `
-    <div class="decision-top">
-      <span class="decision-badge">AI DECISION</span>
-      <span class="decision-confidence">Уверенность: ${getConfidenceLabel(confidence, bestRoute, analyzedRoutes)}</span>
-    </div>
-    <h2 class="decision-title">Рекомендуемый маршрут</h2>
-    <div class="decision-main">${why}</div>
-    <div class="decision-meta">
-      <span class="decision-pill">⏱ ${minutes} мин</span>
-      <span class="decision-pill">📍 ${km} км</span>
-      <span class="decision-pill">${getTrafficIcon(bestRoute.traffic)} ${trafficLabel}</span>
-      <span class="decision-pill">↪ ${bestRoute.complexity} манёвров</span>
-    </div>
-  `;
-
-  panel.classList.add("visible");
+  return "почти одинаково";
 }
 
 function drawRoute(fullResult, routeIndex, role) {
@@ -1009,6 +968,34 @@ function renderCard(r, bestRoute, fastestRoute, confidence, allRoutes) {
   return div;
 }
 
+function renderDecisionCard(bestRoute, fastestRoute, confidence) {
+  const decision = document.getElementById("decision");
+  if (!decision || !bestRoute) return;
+
+  const minutes = Math.round(bestRoute.time / 60);
+  const km = (bestRoute.distance / 1000).toFixed(1);
+  const why = buildWhy(bestRoute, bestRoute, fastestRoute, "best");
+
+  decision.innerHTML = `
+    <div class="decision-card">
+      <div class="decision-badge">AI DECISION</div>
+      <div class="decision-top">
+        <div>
+          <h2 class="decision-title">Рекомендуемый маршрут</h2>
+          <div class="decision-why">${why.charAt(0).toUpperCase() + why.slice(1)}.</div>
+        </div>
+        <div class="tag confidence" style="background:${getConfidenceColor(confidence)}">${getConfidenceLabel(confidence, bestRoute, analyzedRoutes)}</div>
+      </div>
+      <div class="decision-metrics">
+        <span class="decision-metric">⏱ ${minutes} мин</span>
+        <span class="decision-metric">📍 ${km} км</span>
+        <span class="decision-metric">${getTrafficIcon(bestRoute.traffic)} ${getTrafficLabel(bestRoute.traffic)}</span>
+        <span class="decision-metric">↪ ${bestRoute.complexity} манёвров</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderNoAlternativeCard() {
   const div = document.createElement("div");
   div.className = "no-alt-card";
@@ -1038,6 +1025,7 @@ function openRouteDetails(r, bestRoute, fastestRoute) {
   };
   
   const roadType = r.highway ? "Хайвей" : "Городские дороги";
+  const recommended = r.index === bestRoute.index;
   
   details.innerHTML = `
     <div class="details-header">
@@ -1045,6 +1033,12 @@ function openRouteDetails(r, bestRoute, fastestRoute) {
       <button class="details-close" onclick="closeRouteDetails(event)">×</button>
     </div>
     <div class="details-grid">
+      ${recommended ? `
+      <div class="detail-item full-width">
+        <div class="detail-label">Статус</div>
+        <div class="detail-value">Рекомендован системой</div>
+      </div>
+      ` : ""}
       <div class="detail-item">
         <div class="detail-label">Время</div>
         <div class="detail-value">${minutes} мин</div>
@@ -1071,10 +1065,13 @@ function openRouteDetails(r, bestRoute, fastestRoute) {
         <div class="detail-label">Тип дороги</div>
         <div class="detail-value">${roadType}</div>
       </div>
+      <div class="detail-item">
+        <div class="detail-label">Score</div>
+        <div class="detail-value">${r.score}</div>
+      </div>
     </div>
     <div class="details-why">
-      <strong>Почему:</strong> ${why}<br>
-      <strong>Score:</strong> ${r.score}${role === "best" ? "<br><strong>Статус:</strong> рекомендован автоматически" : ""}
+      <strong>Почему:</strong> ${why}
     </div>
   `;
   
@@ -1153,7 +1150,7 @@ function calculateRoutes() {
       const confidence = calculateConfidence(bestRoute, analyzedRoutes);
       const routesToShow = analyzedRoutes;
 
-      renderDecisionPanel(bestRoute, fastestRoute, confidence);
+      renderDecisionCard(bestRoute, fastestRoute, confidence);
 
       routesToShow.forEach(r => {
         const role = getRouteVisualRole(r, bestRoute, fastestRoute);
