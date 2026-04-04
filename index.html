@@ -611,27 +611,44 @@ function selectBestRoute(routes) {
   if (!routes?.length) return null;
   if (routes.length === 1) return routes[0];
 
-  const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
+  const sortedByTime = [...routes].sort((a, b) => a.time - b.time);
+  const fastest = sortedByTime[0];
+  const secondFastest = sortedByTime[1] || fastest;
+  const fastestLeadMin = (secondFastest.time - fastest.time) / 60;
+
+  // Главное правило доверия:
+  // если самый быстрый маршрут выигрывает с небольшим отрывом или больше,
+  // его и нужно рекомендовать. Иначе продукт выглядит нелогично.
+  if (fastestLeadMin >= 0.5) {
+    return fastest;
+  }
+
   let best = [...routes].sort((a, b) => a.score - b.score)[0];
 
-  const timeGapMin = Math.round((best.time - fastest.time) / 60);
-
-  if (best.index !== fastest.index && timeGapMin > 4) {
+  const bestVsFastestMin = (best.time - fastest.time) / 60;
+  if (best.index !== fastest.index && bestVsFastestMin >= 1) {
     return fastest;
   }
 
   routes.forEach(route => {
     if (route.index === best.index) return;
 
-    const diffMin = Math.round((route.time - best.time) / 60);
+    const diffMin = (route.time - best.time) / 60;
     const routeTrafficRank = trafficRank(route.traffic);
     const bestTrafficRank = trafficRank(best.traffic);
 
-    if (diffMin <= 2 && diffMin >= -2) {
-      if (routeTrafficRank < bestTrafficRank) {
+    if (Math.abs(diffMin) <= 2) {
+      if (route.time < best.time - 30) {
         best = route;
-      } else if (routeTrafficRank === bestTrafficRank && route.complexity < best.complexity) {
-        best = route;
+        return;
+      }
+
+      if (Math.abs(diffMin) < 1) {
+        if (routeTrafficRank < bestTrafficRank) {
+          best = route;
+        } else if (routeTrafficRank === bestTrafficRank && route.complexity < best.complexity) {
+          best = route;
+        }
       }
     }
   });
@@ -706,7 +723,7 @@ function getConfidenceLabel(level, bestRoute, allRoutes) {
     const competitors = allRoutes.filter(r => r.index !== bestRoute.index);
     if (competitors.length > 0) {
       const minDiff = Math.min(...competitors.map(r => Math.abs((r.time - bestRoute.time) / 60)));
-      return `Разница всего ${formatMinuteDiff(minDiff)}`;
+      return minDiff < 1 ? 'Разница меньше 1 мин' : `Разница ${Math.round(minDiff)} мин`; 
     }
   }
   return "Почти одинаковые";
@@ -768,7 +785,7 @@ function getRouteColor(role) {
 function getRouteVisualRole(route, bestRoute, fastestRoute) {
   if (route.index === bestRoute.index) return "best";
 
-  const diffFromBestMin = Math.abs(Math.round((route.time - bestRoute.time) / 60));
+  const diffFromBestMin = Math.abs((route.time - bestRoute.time) / 60);
   const isShortTrip = bestRoute.time <= 12 * 60;
 
   if (
