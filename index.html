@@ -377,6 +377,80 @@
       color: #166534;
       line-height: 1.5;
     }
+
+    /* ===== DAY 4.5: AI DECISION LAYER ===== */
+    .decision-panel {
+      margin: 12px;
+      padding: 16px;
+      background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+      border: 1px solid #bbf7d0;
+      border-radius: 16px;
+      box-shadow: 0 6px 18px rgba(22, 163, 74, 0.08);
+      display: none;
+    }
+
+    .decision-panel.visible {
+      display: block;
+    }
+
+    .decision-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .decision-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #166534;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .decision-confidence {
+      font-size: 13px;
+      font-weight: 600;
+      color: #166534;
+    }
+
+    .decision-title {
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      font-weight: 800;
+      color: #14532d;
+    }
+
+    .decision-main {
+      font-size: 16px;
+      color: #1e293b;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    .decision-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .decision-pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: white;
+      border: 1px solid #dcfce7;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+    }
+
   </style>
 </head>
 <body>
@@ -388,6 +462,7 @@
 </div>
 
 <div id="map"></div>
+<div class="decision-panel" id="decision-panel"></div>
 <div class="routes" id="routes"></div>
 
 <!-- DAY 4: Route Details Modal -->
@@ -418,6 +493,8 @@ function clearRoutes() {
   renderers = [];
   analyzedRoutes = [];
   document.getElementById("routes").innerHTML = "";
+  document.getElementById("decision-panel").innerHTML = "";
+  document.getElementById("decision-panel").classList.remove("visible");
 }
 
 function stripHtml(text) {
@@ -791,6 +868,58 @@ function buildWhy(r, bestRoute, fastestRoute, role) {
   return `+${Math.abs(diffMin)} мин`;
 }
 
+
+function buildDecisionWhy(bestRoute, fastestRoute) {
+  if (!bestRoute || !fastestRoute) return "Маршрут выбран автоматически.";
+
+  const diffFromFastest = Math.round((bestRoute.time - fastestRoute.time) / 60);
+
+  if (bestRoute.index === fastestRoute.index) {
+    return "Самый быстрый вариант по текущей ситуации на дороге.";
+  }
+
+  if (bestRoute.traffic === "low" && fastestRoute.traffic !== "low") {
+    return `Меньше пробок, при этом разница всего ${Math.max(diffFromFastest, 1)} мин.`;
+  }
+
+  if (bestRoute.complexity < fastestRoute.complexity) {
+    return `Проще по манёврам на ${fastestRoute.complexity - bestRoute.complexity} и почти не проигрывает по времени.`;
+  }
+
+  if (diffFromFastest <= 1) {
+    return "Почти такой же по времени, но спокойнее в реальной поездке.";
+  }
+
+  return `Выбран как более стабильный вариант, хотя дольше на ${diffFromFastest} мин.`;
+}
+
+function renderDecisionPanel(bestRoute, fastestRoute, confidence) {
+  const panel = document.getElementById("decision-panel");
+  if (!panel || !bestRoute) return;
+
+  const minutes = Math.round(bestRoute.time / 60);
+  const km = (bestRoute.distance / 1000).toFixed(1);
+  const why = buildDecisionWhy(bestRoute, fastestRoute);
+  const trafficLabel = getTrafficLabel(bestRoute.traffic);
+
+  panel.innerHTML = `
+    <div class="decision-top">
+      <span class="decision-badge">AI DECISION</span>
+      <span class="decision-confidence">Уверенность: ${getConfidenceLabel(confidence, bestRoute, analyzedRoutes)}</span>
+    </div>
+    <h2 class="decision-title">Рекомендуемый маршрут</h2>
+    <div class="decision-main">${why}</div>
+    <div class="decision-meta">
+      <span class="decision-pill">⏱ ${minutes} мин</span>
+      <span class="decision-pill">📍 ${km} км</span>
+      <span class="decision-pill">${getTrafficIcon(bestRoute.traffic)} ${trafficLabel}</span>
+      <span class="decision-pill">↪ ${bestRoute.complexity} манёвров</span>
+    </div>
+  `;
+
+  panel.classList.add("visible");
+}
+
 function drawRoute(fullResult, routeIndex, role) {
   const renderer = new google.maps.DirectionsRenderer({
     map: map,
@@ -944,7 +1073,8 @@ function openRouteDetails(r, bestRoute, fastestRoute) {
       </div>
     </div>
     <div class="details-why">
-      <strong>Почему:</strong> ${why}
+      <strong>Почему:</strong> ${why}<br>
+      <strong>Score:</strong> ${r.score}${role === "best" ? "<br><strong>Статус:</strong> рекомендован автоматически" : ""}
     </div>
   `;
   
@@ -1022,6 +1152,8 @@ function calculateRoutes() {
       const fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
       const confidence = calculateConfidence(bestRoute, analyzedRoutes);
       const routesToShow = analyzedRoutes;
+
+      renderDecisionPanel(bestRoute, fastestRoute, confidence);
 
       routesToShow.forEach(r => {
         const role = getRouteVisualRole(r, bestRoute, fastestRoute);
