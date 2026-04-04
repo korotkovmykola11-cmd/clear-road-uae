@@ -640,6 +640,26 @@ function getDiffs(r, bestRoute) {
   };
 }
 
+function getMinuteDiffLabel(fromRoute, toRoute) {
+  const diffMinutes = Math.abs((fromRoute.time - toRoute.time) / 60);
+
+  if (diffMinutes < 1) {
+    return "меньше 1 мин";
+  }
+
+  return `${Math.round(diffMinutes)} мин`;
+}
+
+function getShortMinuteTag(fromRoute, toRoute) {
+  const diffMinutes = Math.abs((fromRoute.time - toRoute.time) / 60);
+
+  if (diffMinutes < 1) {
+    return "Почти одинаково";
+  }
+
+  return `+${Math.round(diffMinutes)} мин`;
+}
+
 function getTrafficLabel(traffic) {
   if (traffic === "low") return "Свободно";
   if (traffic === "medium") return "Средний трафик";
