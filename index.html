@@ -3,337 +3,423 @@
 <head>
   <meta charset="UTF-8" />
   <title>Clear Road UAE</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f5f5f0">
 
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --best-color: #16a34a;
-      --fastest-color: #2563eb;
-      --alt-color: #d97706;
-      --neutral-color: #6b7280;
-
-      --best-bg: #f0fdf4;
-      --fastest-bg: #eff6ff;
-      --alt-bg: #fffbeb;
-      --neutral-bg: #f8fafc;
+      --green: #2d6a4f;
+      --green-light: #40916c;
+      --green-bg: #d8f3dc;
+      --yellow: #f59e0b;
+      --yellow-bg: #fef3c7;
+      --beige: #a8a29e;
+      --beige-bg: #f5f5f0;
+      --gray: #6b7280;
+      --dark: #1f2937;
+      --white: #ffffff;
+      --border: #e5e5e5;
     }
 
     body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f1f5f9;
-    }
-
-    #map {
-      height: 55vh;
-      width: 100%;
-    }
-
-    .panel {
-      padding: 12px;
-      background: white;
-      border-bottom: 1px solid #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      background: var(--beige-bg);
+      color: var(--dark);
+      min-height: 100vh;
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      flex-direction: column;
+      padding-bottom: 80px;
     }
 
-    input {
-      flex: 1 1 280px;
-      padding: 12px 14px;
-      font-size: 15px;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      background: #f8fafc;
-    }
-
-    input:focus {
-      outline: none;
-      border-color: #2563eb;
-      background: white;
-    }
-
-    button {
-      width: 100%;
-      padding: 14px;
-      font-size: 16px;
-      font-weight: 600;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #1d4ed8;
-    }
-
-    .routes {
-      padding: 12px;
-    }
-
-    /* ===== КАРТОЧКИ МАРШРУТОВ ===== */
-
-    .route {
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
+    /* ===== INPUT PANEL ===== */
+    .input-panel {
+      background: var(--white);
+      margin: 16px;
+      border-radius: 20px;
       padding: 16px;
-      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+    }
+
+    .input-row:first-child {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .input-label {
+      font-size: 14px;
+      color: var(--gray);
+      min-width: 40px;
+    }
+
+    .input-value {
+      flex: 1;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--dark);
+      border: none;
+      background: transparent;
+      outline: none;
+    }
+
+    .input-value::placeholder {
+      color: var(--gray);
+      font-weight: 400;
+    }
+
+    .voice-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--green);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       cursor: pointer;
-      transition: all 0.2s ease;
+    }
+
+    .voice-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+
+    /* ===== BEST ROUTE CARD ===== */
+    .best-card {
+      background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+      margin: 0 16px 12px;
+      border-radius: 20px;
+      padding: 20px;
       position: relative;
     }
 
-    .route:hover {
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      transform: translateY(-1px);
-    }
-
-    /* BEST — сильное выделение */
-    .route.best {
-      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-      border: 2px solid var(--best-color);
-      box-shadow: 0 4px 20px rgba(22, 163, 74, 0.15);
-      padding: 20px;
-    }
-
-    .route.best::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: var(--best-color);
-      border-radius: 16px 16px 0 0;
-    }
-
-    .route.fastest {
-      border-left: 5px solid var(--fastest-color);
-      background: var(--fastest-bg);
-    }
-
-    .route.alt {
-      border-left: 5px solid var(--alt-color);
-      background: var(--alt-bg);
-    }
-
-    /* ЗАГОЛОВОК */
-    .route-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .best-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--green);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
       margin-bottom: 8px;
     }
 
-    .route-icon {
-      font-size: 24px;
-      line-height: 1;
+    .best-badge {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 32px;
+      height: 32px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    .route-title {
-      font-size: 20px;
+    .best-badge svg {
+      width: 18px;
+      height: 18px;
+      fill: white;
+    }
+
+    .best-title {
+      font-size: 24px;
       font-weight: 700;
-      color: #1e293b;
-      margin: 0;
-    }
-
-    .route.best .route-title {
-      font-size: 24px;
-      color: var(--best-color);
-    }
-
-    /* ГЛАВНАЯ СТРОКА РАЗНИЦЫ */
-    .route-highlight {
-      font-size: 18px;
-      font-weight: 600;
-      color: #334155;
-      margin: 8px 0 12px 0;
-      padding: 8px 12px;
-      background: rgba(255,255,255,0.7);
-      border-radius: 8px;
-      display: inline-block;
-    }
-
-    .route.best .route-highlight {
-      background: white;
-      color: var(--best-color);
-      font-size: 20px;
-    }
-
-    .route.fastest .route-highlight {
-      color: var(--fastest-color);
-    }
-
-    .route.alt .route-highlight {
-      color: var(--alt-color);
-    }
-
-    /* МЕТРИКИ — компактная строка */
-    .route-metrics {
+      color: var(--dark);
+      margin-bottom: 4px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .best-title .check {
+      color: var(--green);
+    }
+
+    .best-subtitle {
       font-size: 15px;
-      color: #475569;
-      margin-bottom: 10px;
+      color: #4b5563;
+      margin-bottom: 12px;
     }
 
-    .route.best .route-metrics {
-      font-size: 16px;
-    }
-
-    .metric-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .metric-value {
-      font-weight: 600;
-      color: #1e293b;
-    }
-
-    /* ТЕГИ — минимализм */
-    .route-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 10px;
-    }
-
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 12px;
+    .best-reason {
+      font-size: 15px;
+      color: #374151;
+      line-height: 1.5;
+      margin-bottom: 12px;
       font-weight: 500;
-      background: #f1f5f9;
-      color: #64748b;
     }
 
-    .tag.confidence {
+    .best-points {
+      margin-bottom: 16px;
+    }
+
+    .best-point {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    .best-point::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .confidence-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .confidence-high {
+      background: var(--green);
       color: white;
     }
 
-    /* WHY — мелко внизу */
-    .route-why {
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(0,0,0,0.06);
-      font-size: 13px;
-      color: #64748b;
-      line-height: 1.4;
+    .confidence-medium {
+      background: #fbbf24;
+      color: #1f2937;
     }
 
-    .route.best .route-why {
-      border-top-color: rgba(22, 163, 74, 0.2);
+    .confidence-low {
+      background: #d1d5db;
+      color: #374151;
     }
 
-    /* ===== AI DECISION LAYER ===== */
-    .decision-card {
-      margin: 12px;
-      margin-bottom: 0;
-      background: #ecfdf5;
-      border: 1px solid #bbf7d0;
+    .start-btn {
+      width: 100%;
+      padding: 16px;
+      background: var(--green);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+
+    .start-btn:hover {
+      background: var(--green-light);
+    }
+
+    .why-link {
+      text-align: center;
+      font-size: 14px;
+      color: var(--gray);
+      cursor: pointer;
+    }
+
+    .why-link:hover {
+      color: var(--dark);
+    }
+
+    /* ===== ALTERNATIVE CARDS ===== */
+    .alt-card {
+      margin: 0 16px 12px;
       border-radius: 16px;
       padding: 16px;
-    }
-
-    .decision-badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: white;
-      background: #166534;
-      margin-bottom: 10px;
-    }
-
-    .decision-top {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .decision-title {
-      margin: 0;
-      font-size: 17px;
-      font-weight: 800;
-      color: #166534;
-    }
-
-    .decision-why {
-      margin-top: 8px;
-      font-size: 14px;
-      color: #334155;
-      line-height: 1.45;
-    }
-
-    .decision-metrics {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 12px;
-    }
-
-    .decision-metric {
-      display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: white;
-      color: #334155;
-      font-size: 13px;
-      border: 1px solid #d1fae5;
-      font-weight: 600;
+      gap: 14px;
+      cursor: pointer;
+      transition: transform 0.15s;
     }
 
-    /* ===== NO ALT CARD ===== */
-    .no-alt-card {
+    .alt-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .alt-card.faster_risky {
+      background: var(--yellow-bg);
+    }
+
+    .alt-card.more_relaxed {
+      background: #f5f5f0;
+      border: 1px solid var(--border);
+    }
+
+    .alt-card.balanced, .alt-card.similar {
       background: #f8fafc;
-      border: 1px dashed #94a3b8;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 10px;
-      text-align: center;
+      border: 1px solid var(--border);
     }
 
-    .no-alt-card .route-title {
-      color: #64748b;
+    .alt-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .alt-card.faster_risky .alt-icon {
+      background: #fcd34d;
+    }
+
+    .alt-card.more_relaxed .alt-icon {
+      background: #d6d3d1;
+    }
+
+    .alt-card.balanced .alt-icon,
+    .alt-card.similar .alt-icon {
+      background: #e2e8f0;
+    }
+
+    .alt-content {
+      flex: 1;
+    }
+
+    .alt-title {
       font-size: 16px;
       font-weight: 600;
+      color: var(--dark);
+      margin-bottom: 2px;
     }
 
-    .no-alt-card p {
-      color: #94a3b8;
-      font-size: 13px;
-      margin: 8px 0 0 0;
-    }
-
-    /* ===== ОШИБКИ ===== */
-    .error {
-      color: #b91c1c;
-      padding: 12px;
+    .alt-subtitle {
       font-size: 14px;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 10px;
-      margin: 10px;
+      color: var(--gray);
     }
 
-    /* ===== DAY 4: ROUTE DETAILS MODAL ===== */
+    .alt-arrow {
+      color: var(--gray);
+      font-size: 18px;
+    }
+
+    /* ===== QUICK ACCESS ===== */
+    .quick-section {
+      margin: 20px 16px 12px;
+    }
+
+    .quick-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .quick-list {
+      background: var(--white);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .quick-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    .quick-item:last-child {
+      border-bottom: none;
+    }
+
+    .quick-item:hover {
+      background: #fafafa;
+    }
+
+    .quick-icon {
+      width: 40px;
+      height: 40px;
+      background: #f3f4f6;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--gray);
+      font-size: 18px;
+    }
+
+    .quick-label {
+      flex: 1;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--dark);
+    }
+
+    .quick-arrow {
+      color: #d1d5db;
+      font-size: 18px;
+    }
+
+    /* ===== MAP PREVIEW ===== */
+    .map-preview {
+      margin: 0 16px;
+      height: 180px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #e5e5e5;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ===== BOTTOM NAV ===== */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      padding: 10px 0 20px;
+      z-index: 100;
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      padding: 6px 16px;
+    }
+
+    .nav-item.active {
+      color: var(--green);
+    }
+
+    .nav-item svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    /* ===== ROUTE DETAILS MODAL ===== */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -355,95 +441,211 @@
       visibility: visible;
     }
 
-    .route-details {
+    .modal-content {
       background: white;
-      border-radius: 20px 20px 0 0;
-      padding: 20px;
+      border-radius: 24px 24px 0 0;
+      padding: 24px;
       width: 100%;
       max-width: 500px;
-      max-height: 70vh;
+      max-height: 85vh;
       overflow-y: auto;
       transform: translateY(100%);
       transition: transform 0.3s ease;
     }
 
-    .modal-overlay.visible .route-details {
+    .modal-overlay.visible .modal-content {
       transform: translateY(0);
     }
 
-    .details-header {
+    .modal-handle {
+      width: 40px;
+      height: 4px;
+      background: #d1d5db;
+      border-radius: 2px;
+      margin: 0 auto 20px;
+    }
+
+    .modal-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #e2e8f0;
+      align-items: flex-start;
+      margin-bottom: 20px;
     }
 
-    .details-title {
-      font-size: 20px;
+    .modal-title {
+      font-size: 22px;
       font-weight: 700;
-      color: #1e293b;
-      margin: 0;
+      color: var(--dark);
     }
 
-    .details-close {
-      width: 32px;
-      height: 32px;
-      border: none;
-      background: #f1f5f9;
-      border-radius: 50%;
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #64748b;
+    .modal-role-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
     }
 
-    .details-close:hover {
-      background: #e2e8f0;
+    .modal-role-badge.recommended {
+      background: var(--green);
+      color: white;
     }
 
-    .details-grid {
+    .modal-role-badge.alternative {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .detail-section {
+      margin-bottom: 20px;
+    }
+
+    .detail-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .detail-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-bottom: 16px;
     }
 
     .detail-item {
-      background: #f8fafc;
-      padding: 12px;
-      border-radius: 10px;
+      background: #f9fafb;
+      padding: 14px;
+      border-radius: 12px;
     }
 
     .detail-label {
       font-size: 12px;
-      color: #64748b;
+      color: var(--gray);
       margin-bottom: 4px;
     }
 
     .detail-value {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
-      color: #1e293b;
+      color: var(--dark);
     }
 
     .detail-item.full-width {
       grid-column: 1 / -1;
     }
 
-    .details-why {
+    .modal-why {
       background: #f0fdf4;
-      padding: 12px;
-      border-radius: 10px;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .modal-why-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    .modal-why-points {
+      list-style: none;
+    }
+
+    .modal-why-points li {
       font-size: 14px;
       color: #166534;
       line-height: 1.5;
+      padding-left: 20px;
+      position: relative;
+      margin-bottom: 6px;
     }
 
-    /* ===== DAY 5: DRIVE MODE ===== */
+    .modal-why-points li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+    }
+
+    .segment-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .segment-item {
+      background: #f9fafb;
+      padding: 14px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .segment-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .segment-icon.highway { background: #dbeafe; }
+    .segment-icon.city { background: #fef3c7; }
+    .segment-icon.traffic { background: #fee2e2; }
+    .segment-icon.turns { background: #f3e8ff; }
+
+    .segment-content {
+      flex: 1;
+    }
+
+    .segment-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--dark);
+    }
+
+    .segment-details {
+      font-size: 13px;
+      color: var(--gray);
+    }
+
+    .comparison-note {
+      background: #fef3c7;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      color: #92400e;
+      margin-bottom: 16px;
+    }
+
+    .modal-cta {
+      width: 100%;
+      padding: 16px;
+      background: var(--green);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .modal-cta:hover {
+      background: var(--green-light);
+    }
+
+    /* ===== DRIVE MODE ===== */
     .drive-mode {
       display: none;
       position: fixed;
@@ -461,38 +663,128 @@
     }
 
     .drive-header {
-      padding: 16px;
+      padding: 16px 20px;
       background: #1e293b;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
+    .drive-status {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
     .drive-exit {
-      padding: 10px 16px;
+      padding: 10px 20px;
       background: #ef4444;
       color: white;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
     }
 
-    .drive-status {
-      color: #94a3b8;
-      font-size: 13px;
-    }
-
-    .drive-map {
+    .drive-map-container {
       flex: 1;
       min-height: 0;
+      position: relative;
+    }
+
+    #drive-map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ===== DRIVE MODE: AHEAD BLOCK ===== */
+    .drive-ahead {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      background: rgba(30, 41, 59, 0.95);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .drive-ahead-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .drive-ahead-icon.stable { background: #166534; }
+    .drive-ahead-icon.warning { background: #f59e0b; }
+    .drive-ahead-icon.alert { background: #ef4444; }
+
+    .drive-ahead-text {
+      flex: 1;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* ===== DRIVE MODE: SMART ALERT ===== */
+    .drive-alert {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      background: rgba(30, 41, 59, 0.95);
+      border-radius: 14px;
+      padding: 16px;
+      display: none;
+    }
+
+    .drive-alert.visible {
+      display: block;
+    }
+
+    .drive-alert-message {
+      color: white;
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .drive-alert-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .drive-alert-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+
+    .drive-alert-btn.primary {
+      background: var(--green);
+      color: white;
+    }
+
+    .drive-alert-btn.secondary {
+      background: #475569;
+      color: white;
     }
 
     .drive-panel {
       background: #1e293b;
-      padding: 20px;
-      border-radius: 24px 24px 0 0;
+      padding: 24px 20px;
+      border-radius: 28px 28px 0 0;
     }
 
     .drive-eta {
@@ -501,7 +793,7 @@
     }
 
     .drive-eta-time {
-      font-size: 48px;
+      font-size: 56px;
       font-weight: 700;
       color: white;
       line-height: 1;
@@ -509,14 +801,14 @@
 
     .drive-eta-label {
       font-size: 14px;
-      color: #94a3b8;
+      color: #64748b;
       margin-top: 4px;
     }
 
     .drive-info {
       display: flex;
       justify-content: center;
-      gap: 24px;
+      gap: 32px;
       padding: 16px 0;
       border-top: 1px solid #334155;
     }
@@ -526,7 +818,7 @@
     }
 
     .drive-info-value {
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 600;
       color: white;
     }
@@ -534,28 +826,29 @@
     .drive-info-label {
       font-size: 12px;
       color: #64748b;
-      margin-top: 2px;
+      margin-top: 4px;
     }
 
     .drive-next {
       margin-top: 16px;
-      padding: 16px;
+      padding: 18px;
       background: #334155;
-      border-radius: 12px;
+      border-radius: 16px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
     }
 
     .drive-next-icon {
-      width: 48px;
-      height: 48px;
-      background: #16a34a;
-      border-radius: 12px;
+      width: 52px;
+      height: 52px;
+      background: var(--green);
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: 26px;
+      color: white;
     }
 
     .drive-next-text {
@@ -564,77 +857,152 @@
 
     .drive-next-instruction {
       color: white;
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 600;
     }
 
     .drive-next-distance {
       color: #94a3b8;
       font-size: 14px;
-      margin-top: 2px;
+      margin-top: 4px;
     }
 
-    .start-drive-btn {
-      width: 100%;
-      margin-top: 12px;
-      padding: 14px;
-      font-size: 16px;
-      font-weight: 600;
-      background: #16a34a;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
+    /* ===== HIDDEN ELEMENTS ===== */
+    .hidden {
+      display: none !important;
     }
 
-    .start-drive-btn:hover {
-      background: #15803d;
+    /* ===== LOADING STATE ===== */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--gray);
+      font-size: 15px;
+    }
+
+    .error {
+      margin: 16px;
+      padding: 16px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      color: #b91c1c;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
 
-<div class="panel">
-  <input id="start" placeholder="Откуда (например, Dubai Marina)" value="Sharjah">
-  <input id="end" placeholder="Куда" value="Abu Dhabi">
-  <button onclick="calculateRoutes()">Сравнить маршруты</button>
+<!-- INPUT PANEL -->
+<div class="input-panel">
+  <div class="input-row">
+    <span class="input-label">From:</span>
+    <input type="text" class="input-value" id="start" placeholder="Current location" value="Dubai Marina">
+    <button class="voice-btn">
+      <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
+    </button>
+  </div>
+  <div class="input-row">
+    <span class="input-label">To:</span>
+    <input type="text" class="input-value" id="end" placeholder="Where to?" value="Dubai International Airport">
+  </div>
 </div>
 
-<div id="map"></div>
-<div id="decision"></div>
-<div class="routes" id="routes"></div>
+<!-- RESULTS CONTAINER -->
+<div id="results"></div>
 
-<!-- DAY 4: Route Details Modal -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeRouteDetails(event)">
-  <div class="route-details" id="route-details"></div>
+<!-- QUICK ACCESS -->
+<div class="quick-section" id="quick-access">
+  <div class="quick-title">Quick Access</div>
+  <div class="quick-list">
+    <div class="quick-item" onclick="setDestination('Home')">
+      <div class="quick-icon">&#127968;</div>
+      <div class="quick-label">Home</div>
+      <div class="quick-arrow">&#8250;</div>
+    </div>
+    <div class="quick-item" onclick="setDestination('Work')">
+      <div class="quick-icon">&#128188;</div>
+      <div class="quick-label">Work</div>
+      <div class="quick-arrow">&#8250;</div>
+    </div>
+  </div>
 </div>
 
-<!-- DAY 5: Drive Mode -->
+<!-- MAP PREVIEW -->
+<div class="map-preview">
+  <div id="map"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <div class="nav-item active">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+    <span class="nav-label">Start</span>
+  </div>
+  <div class="nav-item">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+    <span class="nav-label">History</span>
+  </div>
+  <div class="nav-item">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+    <span class="nav-label">AI Insights</span>
+  </div>
+  <div class="nav-item">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+    <span class="nav-label">Settings</span>
+  </div>
+</nav>
+
+<!-- ROUTE DETAILS MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal-content" id="modal-content"></div>
+</div>
+
+<!-- DRIVE MODE -->
 <div class="drive-mode" id="drive-mode">
   <div class="drive-header">
-    <div class="drive-status">В пути</div>
-    <button class="drive-exit" onclick="exitDriveMode()">Завершить</button>
+    <div class="drive-status" id="drive-status">In progress</div>
+    <button class="drive-exit" onclick="exitDriveMode()">End</button>
   </div>
-  <div class="drive-map" id="drive-map"></div>
+  <div class="drive-map-container">
+    <div id="drive-map"></div>
+    
+    <!-- AHEAD BLOCK -->
+    <div class="drive-ahead" id="drive-ahead">
+      <div class="drive-ahead-icon stable" id="drive-ahead-icon">&#9728;</div>
+      <div class="drive-ahead-text" id="drive-ahead-text">Stable traffic ahead</div>
+    </div>
+    
+    <!-- SMART ALERT -->
+    <div class="drive-alert" id="drive-alert">
+      <div class="drive-alert-message" id="drive-alert-message">Alternative route now available</div>
+      <div class="drive-alert-actions">
+        <button class="drive-alert-btn primary" id="drive-alert-switch" onclick="switchToAlternative()">Switch</button>
+        <button class="drive-alert-btn secondary" onclick="dismissAlert()">Keep current</button>
+      </div>
+    </div>
+  </div>
   <div class="drive-panel">
     <div class="drive-eta">
       <div class="drive-eta-time" id="drive-eta-time">--</div>
-      <div class="drive-eta-label">до прибытия</div>
+      <div class="drive-eta-label">min until arrival</div>
     </div>
     <div class="drive-info">
       <div class="drive-info-item">
         <div class="drive-info-value" id="drive-distance">--</div>
-        <div class="drive-info-label">км</div>
+        <div class="drive-info-label">km</div>
       </div>
       <div class="drive-info-item">
         <div class="drive-info-value" id="drive-traffic">--</div>
-        <div class="drive-info-label">трафик</div>
+        <div class="drive-info-label">traffic</div>
       </div>
     </div>
-    <div class="drive-next" id="drive-next">
-      <div class="drive-next-icon" id="drive-next-icon">↑</div>
+    <div class="drive-next">
+      <div class="drive-next-icon" id="drive-next-icon">&#8593;</div>
       <div class="drive-next-text">
-        <div class="drive-next-instruction" id="drive-next-instruction">Следуйте по маршруту</div>
+        <div class="drive-next-instruction" id="drive-next-instruction">Follow the route</div>
         <div class="drive-next-distance" id="drive-next-distance"></div>
       </div>
     </div>
@@ -648,38 +1016,690 @@ let directionsService;
 let renderers = [];
 let analyzedRoutes = [];
 let selectedRoute = null;
-let driveRenderer = null;
 let currentDirectionsResult = null;
+let driveRenderer = null;
+let driveInterval = null;
+let currentStepIndex = 0;
+let betterRouteIndex = null;
 
-// ===== ЕДИНАЯ ТОЧКА РАСЧЁТА МИНУТ =====
-// Все diff-тексты должны соответствовать отображаемым минутам
+// ===== ТЗ2: ROUTE METRICS & SCORE =====
+
+function calculateRouteMetrics(route, leg, rawRoute) {
+  const baseTime = leg.duration.value;
+  const time = leg.duration_in_traffic?.value || baseTime;
+  const distance = leg.distance.value;
+  const delaySeconds = Math.max(0, time - baseTime);
+  const delayMinutes = Math.round(delaySeconds / 60);
+  const complexity = countComplexity(leg, rawRoute);
+  const highwayShare = calculateHighwayShare(leg, rawRoute);
+  const traffic = getTrafficLevel(baseTime, time);
+  
+  return {
+    time,
+    baseTime,
+    distance,
+    delaySeconds,
+    delayMinutes,
+    complexity,
+    highwayShare,
+    traffic,
+    highway: highwayShare >= 0.35
+  };
+}
+
+function calculateHighwayShare(leg, route) {
+  const total = leg.distance?.value || 0;
+  if (!total) return 0;
+  
+  let hwDistance = 0;
+  leg.steps.forEach(step => {
+    if (stepLooksLikeHighway(step, route)) {
+      hwDistance += step.distance?.value || 0;
+    }
+  });
+  
+  return hwDistance / total;
+}
+
+function calculateRouteScore(r, allRoutes) {
+  // Нормализованный score
+  const fastest = allRoutes.length ? Math.min(...allRoutes.map(x => x.time)) : r.time;
+  const timeScore = (r.time - fastest) / 60; // в минутах от fastest
+  
+  const trafficPenalty = r.traffic === "high" ? 15 : r.traffic === "medium" ? 5 : 0;
+  const complexityPenalty = r.complexity * 0.75;
+  const highwayBonus = r.highwayShare * -3; // бонус за highway
+  const delayPenalty = r.delayMinutes * 1.5;
+  
+  // Stability score (0-100, выше = стабильнее)
+  const stabilityScore = Math.max(0, 100 - trafficPenalty * 3 - r.complexity * 2 - r.delayMinutes * 4);
+  
+  const score = timeScore + trafficPenalty + complexityPenalty + highwayBonus + delayPenalty;
+  
+  return {
+    score,
+    timeScore,
+    trafficPenalty,
+    complexityPenalty,
+    highwayBonus,
+    delayPenalty,
+    stabilityScore
+  };
+}
+
+function getRouteRole(r, bestRoute, fastestRoute, allRoutes) {
+  if (r.index === bestRoute.index) return "recommended";
+  
+  const isFaster = r.time < bestRoute.time;
+  const isRiskier = trafficRank(r.traffic) > trafficRank(bestRoute.traffic) || r.delayMinutes > bestRoute.delayMinutes + 2;
+  const isSimpler = r.complexity < bestRoute.complexity - 2;
+  const isSimilar = Math.abs(getDisplayDiff(r, bestRoute)) <= 1 && Math.abs(r.complexity - bestRoute.complexity) <= 2;
+  
+  if (isFaster && isRiskier) return "faster_risky";
+  if (!isFaster && isSimpler) return "more_relaxed";
+  if (isSimilar) return "similar";
+  return "balanced";
+}
+
+// ===== ТЗ2: WHY GENERATION =====
+
+function buildPrimaryWhy(r, bestRoute, fastestRoute, allRoutes) {
+  const isBest = r.index === bestRoute.index;
+  const isFastest = r.index === fastestRoute.index;
+  const diffFromFastest = getDisplayDiff(r, fastestRoute);
+  const diffFromBest = getDisplayDiff(r, bestRoute);
+  
+  if (isBest) {
+    if (isFastest) {
+      if (r.traffic === "low") {
+        return "Fastest route with stable traffic.";
+      }
+      return "Fastest available route.";
+    }
+    
+    // Best but not fastest
+    if (r.traffic === "low" && fastestRoute.traffic !== "low") {
+      return `Recommended because traffic is lighter than on the fastest option.`;
+    }
+    if (r.stabilityScore > fastestRoute.stabilityScore + 10) {
+      return `Only ${Math.abs(diffFromFastest)} min slower, but with more stable conditions.`;
+    }
+    if (r.complexity < fastestRoute.complexity - 2) {
+      return `${Math.abs(diffFromFastest)} min slower, but with fewer turns and easier driving.`;
+    }
+    return `Best balance of speed and comfort.`;
+  }
+  
+  // Alternative routes
+  const role = r.role;
+  
+  if (role === "faster_risky") {
+    const faster = Math.abs(diffFromBest);
+    if (r.traffic === "high") {
+      return `${faster} min faster, but heavy traffic expected.`;
+    }
+    if (r.delayMinutes > bestRoute.delayMinutes) {
+      return `${faster} min faster, but delay risk is higher.`;
+    }
+    return `${faster} min faster, but less predictable.`;
+  }
+  
+  if (role === "more_relaxed") {
+    const slower = diffFromBest;
+    const fewerTurns = bestRoute.complexity - r.complexity;
+    if (fewerTurns > 0) {
+      return `${slower} min slower, but ${fewerTurns} fewer maneuvers.`;
+    }
+    return `More relaxed route with easier driving.`;
+  }
+  
+  if (role === "similar") {
+    return `Similar to recommended route.`;
+  }
+  
+  return `Alternative option.`;
+}
+
+function buildSecondaryWhyPoints(r, bestRoute, fastestRoute, allRoutes) {
+  const points = [];
+  const isBest = r.index === bestRoute.index;
+  
+  // Traffic status
+  if (r.traffic === "low") {
+    points.push("Traffic is stable — no slowdowns expected.");
+  } else if (r.traffic === "medium") {
+    points.push("Moderate traffic expected.");
+  } else {
+    points.push("Heavy traffic on this route.");
+  }
+  
+  // Complexity
+  if (r.complexity <= 4) {
+    points.push("Minimal stops and turns.");
+  } else if (r.complexity <= 7) {
+    points.push("Few turns required.");
+  } else {
+    points.push("More complex route with multiple turns.");
+  }
+  
+  // Highway share
+  if (r.highwayShare > 0.5) {
+    points.push("Mostly highway driving.");
+  } else if (r.highwayShare > 0.25) {
+    points.push("Partial highway route.");
+  }
+  
+  // Delay
+  if (r.delayMinutes > 5) {
+    points.push(`Estimated delay: +${r.delayMinutes} min from traffic.`);
+  }
+  
+  // Comparison with best (for alternatives)
+  if (!isBest) {
+    const diff = getDisplayDiff(r, bestRoute);
+    if (diff > 0) {
+      points.push(`${diff} min slower than recommended.`);
+    } else if (diff < 0) {
+      points.push(`${Math.abs(diff)} min faster than recommended.`);
+    }
+  }
+  
+  return points.slice(0, 3); // Max 3 points
+}
+
+// ===== ТЗ3: CONFIDENCE LEVEL =====
+
+function getConfidenceLevel(bestRoute, allRoutes) {
+  if (allRoutes.length <= 1) return "high";
+  
+  const sorted = [...allRoutes].sort((a, b) => a.score - b.score);
+  const best = sorted[0];
+  const second = sorted[1];
+  
+  const scoreDiff = second.score - best.score;
+  const timeDiff = Math.abs(getDisplayDiff(best, second));
+  
+  // High confidence: clear winner
+  if (scoreDiff > 8 || timeDiff >= 5) return "high";
+  
+  // Low confidence: very similar routes
+  if (scoreDiff < 3 && timeDiff <= 1) return "low";
+  
+  // Medium confidence: some difference
+  return "medium";
+}
+
+function getConfidenceText(level) {
+  if (level === "high") return "High confidence";
+  if (level === "medium") return "Good option";
+  return "Close alternatives";
+}
+
+// ===== ТЗ3: VIEW MODELS =====
+
+function buildBestCardViewModel(best, fastest, allRoutes) {
+  const confidence = getConfidenceLevel(best, allRoutes);
+  const primaryWhy = buildPrimaryWhy(best, best, fastest, allRoutes);
+  const whyPoints = buildSecondaryWhyPoints(best, best, fastest, allRoutes);
+  
+  return {
+    name: getRouteSummaryName(best),
+    minutes: getDisplayMinutes(best),
+    traffic: best.traffic,
+    complexity: best.complexity,
+    confidence,
+    confidenceText: getConfidenceText(confidence),
+    primaryWhy,
+    whyPoints,
+    index: best.index
+  };
+}
+
+function buildAlternativeCardViewModel(r, best, fastest, allRoutes) {
+  const role = r.role;
+  const diff = getDisplayDiff(r, best);
+  const mins = getDisplayMinutes(r);
+  
+  const roleLabels = {
+    faster_risky: "Faster, but risky",
+    more_relaxed: "More relaxed",
+    balanced: "Alternative",
+    similar: "Similar option"
+  };
+  
+  let subtitle = `~${mins} min`;
+  
+  if (role === "faster_risky") {
+    if (r.traffic !== "low") subtitle += " · heavier traffic";
+  } else if (role === "more_relaxed") {
+    subtitle += " · fewer stops";
+  } else if (diff > 0) {
+    subtitle += ` · +${diff} min`;
+  } else if (diff < 0) {
+    subtitle += ` · ${Math.abs(diff)} min faster`;
+  }
+  
+  return {
+    title: roleLabels[role] || "Alternative",
+    subtitle,
+    role,
+    index: r.index
+  };
+}
+
+// ===== ТЗ4: ROUTE SEGMENTS =====
+
+function buildRouteSegments(r) {
+  const leg = r.route.legs[0];
+  const steps = leg.steps;
+  const segments = [];
+  
+  let currentSegment = null;
+  let segmentSteps = [];
+  
+  steps.forEach((step, i) => {
+    const isHw = stepLooksLikeHighway(step, r.route);
+    const isMeaningful = isMeaningfulManeuver(step, r.route);
+    
+    // Определяем тип сегмента
+    let type = isHw ? "highway" : "city";
+    
+    // Проверяем плотность манёвров
+    if (!isHw && isMeaningful) {
+      const nearbyManeuvers = steps.slice(Math.max(0, i-2), i+3)
+        .filter(s => isMeaningfulManeuver(s, r.route)).length;
+      if (nearbyManeuvers >= 3) {
+        type = "turns";
+      }
+    }
+    
+    if (!currentSegment || currentSegment.type !== type) {
+      if (currentSegment && segmentSteps.length > 0) {
+        currentSegment.distance = segmentSteps.reduce((sum, s) => sum + (s.distance?.value || 0), 0);
+        currentSegment.duration = segmentSteps.reduce((sum, s) => sum + (s.duration?.value || 0), 0);
+        segments.push(currentSegment);
+      }
+      
+      currentSegment = { type, steps: [] };
+      segmentSteps = [];
+    }
+    
+    segmentSteps.push(step);
+    currentSegment.steps = segmentSteps;
+  });
+  
+  // Добавляем последний сегмент
+  if (currentSegment && segmentSteps.length > 0) {
+    currentSegment.distance = segmentSteps.reduce((sum, s) => sum + (s.distance?.value || 0), 0);
+    currentSegment.duration = segmentSteps.reduce((sum, s) => sum + (s.duration?.value || 0), 0);
+    segments.push(currentSegment);
+  }
+  
+  // Объединяем маленькие сегменты и добавляем traffic если есть задержка
+  const mergedSegments = [];
+  segments.forEach(seg => {
+    if (seg.distance < 500 && mergedSegments.length > 0) {
+      // Объединяем с предыдущим
+      const prev = mergedSegments[mergedSegments.length - 1];
+      prev.distance += seg.distance;
+      prev.duration += seg.duration;
+    } else {
+      mergedSegments.push(seg);
+    }
+  });
+  
+  // Помечаем сегменты с traffic проблемами
+  if (r.delayMinutes > 3 && mergedSegments.length > 0) {
+    // Предполагаем что traffic проблемы в городских участках
+    const citySegment = mergedSegments.find(s => s.type === "city");
+    if (citySegment) {
+      citySegment.type = "traffic";
+    }
+  }
+  
+  return mergedSegments.map(seg => classifySegment(seg, r));
+}
+
+function classifySegment(seg, route) {
+  const km = (seg.distance / 1000).toFixed(1);
+  const mins = Math.round(seg.duration / 60);
+  
+  const labels = {
+    highway: { icon: "&#128739;", title: "Highway section", note: "stable flow" },
+    city: { icon: "&#127961;", title: "City driving", note: "urban roads" },
+    traffic: { icon: "&#128679;", title: "Congested area", note: "expect delays" },
+    turns: { icon: "&#128260;", title: "Complex section", note: "multiple turns" }
+  };
+  
+  const label = labels[seg.type] || labels.city;
+  
+  return {
+    type: seg.type,
+    icon: label.icon,
+    title: label.title,
+    details: `${km} km · ~${mins} min · ${label.note}`,
+    distance: seg.distance,
+    duration: seg.duration
+  };
+}
+
+function buildRouteDetailsViewModel(r, bestRoute, fastestRoute, allRoutes) {
+  const isBest = r.index === bestRoute.index;
+  const role = isBest ? "recommended" : r.role;
+  const confidence = isBest ? getConfidenceLevel(bestRoute, allRoutes) : null;
+  
+  const primaryWhy = buildPrimaryWhy(r, bestRoute, fastestRoute, allRoutes);
+  const whyPoints = buildSecondaryWhyPoints(r, bestRoute, fastestRoute, allRoutes);
+  const segments = buildRouteSegments(r);
+  
+  let comparisonNote = null;
+  if (!isBest) {
+    const diff = getDisplayDiff(r, bestRoute);
+    if (diff < 0) {
+      comparisonNote = `${Math.abs(diff)} min faster than recommended, but with ${r.traffic === "high" ? "heavier traffic" : "higher risk"}.`;
+    } else if (diff > 0) {
+      comparisonNote = `${diff} min slower than recommended${r.complexity < bestRoute.complexity ? ", but with fewer maneuvers" : ""}.`;
+    }
+  }
+  
+  // Comfort/stability label
+  let stabilityLabel = "Stable";
+  if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
+  else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
+  else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
+  else stabilityLabel = "Unpredictable";
+  
+  return {
+    name: getRouteSummaryName(r),
+    role,
+    roleLabel: isBest ? "Recommended" : "Alternative",
+    confidence,
+    minutes: getDisplayMinutes(r),
+    distance: (r.distance / 1000).toFixed(1),
+    delayMinutes: r.delayMinutes,
+    traffic: r.traffic,
+    trafficText: getTrafficText(r.traffic),
+    complexity: r.complexity,
+    highwayShare: Math.round(r.highwayShare * 100),
+    stabilityLabel,
+    primaryWhy,
+    whyPoints,
+    segments,
+    comparisonNote,
+    index: r.index
+  };
+}
+
+// ===== ТЗ5: DRIVE MODE FUNCTIONS =====
+
+function buildDriveViewModel(r, stepIndex) {
+  const leg = r.route.legs[0];
+  const steps = leg.steps;
+  
+  // Вычисляем оставшееся расстояние и время
+  let remainingDistance = 0;
+  let remainingTime = 0;
+  
+  for (let i = stepIndex; i < steps.length; i++) {
+    remainingDistance += steps[i].distance?.value || 0;
+    remainingTime += steps[i].duration?.value || 0;
+  }
+  
+  const currentStep = steps[stepIndex] || steps[0];
+  const nextStep = steps[stepIndex + 1];
+  
+  return {
+    eta: Math.round(remainingTime / 60),
+    distance: (remainingDistance / 1000).toFixed(1),
+    traffic: r.traffic,
+    trafficText: getTrafficText(r.traffic),
+    instruction: stripHtml(currentStep?.html_instructions || "Follow the route"),
+    instructionDistance: currentStep?.distance?.text || "",
+    maneuver: currentStep?.maneuver || "",
+    stepIndex,
+    totalSteps: steps.length
+  };
+}
+
+function getUpcomingCondition(r, stepIndex) {
+  const leg = r.route.legs[0];
+  const steps = leg.steps;
+  const upcoming = steps.slice(stepIndex, stepIndex + 5);
+  
+  // Проверяем что впереди
+  const hasHighway = upcoming.some(s => stepLooksLikeHighway(s, r.route));
+  const hasManyTurns = upcoming.filter(s => isMeaningfulManeuver(s, r.route)).length >= 3;
+  const isNearEnd = stepIndex >= steps.length - 3;
+  
+  if (r.traffic === "high") {
+    return { type: "warning", icon: "&#9888;", text: "Heavier traffic ahead" };
+  }
+  
+  if (hasManyTurns) {
+    return { type: "warning", icon: "&#128260;", text: "Multiple turns ahead" };
+  }
+  
+  if (isNearEnd) {
+    return { type: "stable", icon: "&#127937;", text: "Approaching destination" };
+  }
+  
+  if (hasHighway) {
+    return { type: "stable", icon: "&#128739;", text: "Highway section ahead — smooth driving" };
+  }
+  
+  if (r.traffic === "low") {
+    return { type: "stable", icon: "&#9728;", text: "Stable traffic ahead" };
+  }
+  
+  return { type: "stable", icon: "&#9728;", text: "Moderate conditions ahead" };
+}
+
+function evaluateReroute(currentRoute, allRoutes) {
+  if (allRoutes.length <= 1) return null;
+  
+  const alternatives = allRoutes.filter(r => r.index !== currentRoute.index);
+  
+  for (const alt of alternatives) {
+    const scoreDiff = currentRoute.score - alt.score;
+    const timeDiff = getDisplayDiff(currentRoute, alt);
+    
+    // Если альтернатива стала заметно лучше
+    if (scoreDiff > 5 || (timeDiff > 2 && trafficRank(alt.traffic) < trafficRank(currentRoute.traffic))) {
+      const benefit = timeDiff > 0 
+        ? `${timeDiff} min faster, calmer traffic`
+        : `Calmer traffic, similar time`;
+      
+      return {
+        index: alt.index,
+        benefit,
+        name: getRouteSummaryName(alt)
+      };
+    }
+  }
+  
+  return null;
+}
+
+function startDriveMode(index) {
+  const r = analyzedRoutes.find(x => x.index === index);
+  if (!r || !currentDirectionsResult) return;
+  
+  selectedRoute = r;
+  currentStepIndex = 0;
+  betterRouteIndex = null;
+  
+  document.getElementById("drive-mode").classList.add("active");
+  
+  if (!driveMap) {
+    driveMap = new google.maps.Map(document.getElementById("drive-map"), {
+      center: { lat: 25.2048, lng: 55.2708 },
+      zoom: 14,
+      disableDefaultUI: true,
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] }
+      ]
+    });
+  }
+  
+  if (driveRenderer) {
+    driveRenderer.setMap(null);
+  }
+  
+  driveRenderer = new google.maps.DirectionsRenderer({
+    map: driveMap,
+    directions: currentDirectionsResult,
+    routeIndex: r.index,
+    polylineOptions: {
+      strokeColor: "#2d6a4f",
+      strokeWeight: 6
+    }
+  });
+  
+  updateDriveUI();
+  driveMap.fitBounds(r.route.bounds);
+  
+  // Запускаем симуляцию
+  if (driveInterval) clearInterval(driveInterval);
+  driveInterval = setInterval(simulateDriveProgress, 5000);
+}
+
+function updateDriveUI() {
+  const r = selectedRoute;
+  if (!r) return;
+  
+  const vm = buildDriveViewModel(r, currentStepIndex);
+  const condition = getUpcomingCondition(r, currentStepIndex);
+  
+  document.getElementById("drive-eta-time").textContent = vm.eta;
+  document.getElementById("drive-distance").textContent = vm.distance;
+  document.getElementById("drive-traffic").textContent = vm.trafficText;
+  document.getElementById("drive-next-instruction").textContent = vm.instruction;
+  document.getElementById("drive-next-distance").textContent = vm.instructionDistance;
+  
+  // Иконка манёвра
+  let icon = "&#8593;";
+  if (vm.maneuver.includes("left")) icon = "&#8592;";
+  else if (vm.maneuver.includes("right")) icon = "&#8594;";
+  else if (vm.maneuver.includes("uturn")) icon = "&#8634;";
+  document.getElementById("drive-next-icon").innerHTML = icon;
+  
+  // Ahead block
+  const aheadIcon = document.getElementById("drive-ahead-icon");
+  aheadIcon.innerHTML = condition.icon;
+  aheadIcon.className = `drive-ahead-icon ${condition.type}`;
+  document.getElementById("drive-ahead-text").textContent = condition.text;
+  
+  // Status
+  document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
+}
+
+function simulateDriveProgress() {
+  if (!selectedRoute) return;
+  
+  const leg = selectedRoute.route.legs[0];
+  const totalSteps = leg.steps.length;
+  
+  // Продвигаемся по маршруту
+  if (currentStepIndex < totalSteps - 1) {
+    currentStepIndex++;
+    updateDriveUI();
+  }
+  
+  // Проверяем альтернативы
+  const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
+  if (reroute && reroute.index !== betterRouteIndex) {
+    betterRouteIndex = reroute.index;
+    showDriveAlert(`Better route available: ${reroute.name}`, reroute.benefit);
+  }
+}
+
+function showDriveAlert(message, benefit) {
+  const alert = document.getElementById("drive-alert");
+  document.getElementById("drive-alert-message").textContent = `${message} — ${benefit}`;
+  alert.classList.add("visible");
+}
+
+function dismissAlert() {
+  document.getElementById("drive-alert").classList.remove("visible");
+  betterRouteIndex = null;
+}
+
+function switchToAlternative() {
+  if (betterRouteIndex !== null) {
+    dismissAlert();
+    startDriveMode(betterRouteIndex);
+  }
+}
+
+function exitDriveMode() {
+  document.getElementById("drive-mode").classList.remove("active");
+  if (driveInterval) {
+    clearInterval(driveInterval);
+    driveInterval = null;
+  }
+  currentStepIndex = 0;
+  betterRouteIndex = null;
+}
+
+// Alias for compatibility
+function startDrive(index) {
+  startDriveMode(index);
+}
+
+// ===== DISPLAY HELPERS =====
 
 function getDisplayMinutes(route) {
   return Math.round(route.time / 60);
 }
 
 function getDisplayDiff(routeA, routeB) {
-  const minA = getDisplayMinutes(routeA);
-  const minB = getDisplayMinutes(routeB);
-  return minA - minB;
+  return getDisplayMinutes(routeA) - getDisplayMinutes(routeB);
 }
 
 function formatDiff(diff) {
   const absDiff = Math.abs(diff);
-  if (absDiff === 0) return "меньше 1 мин";
-  return `${absDiff} мин`;
+  if (absDiff === 0) return "less than 1 min";
+  return `${absDiff} min`;
 }
+
+function getTrafficText(traffic) {
+  if (traffic === "low") return "stable";
+  if (traffic === "medium") return "moderate";
+  return "heavy";
+}
+
+function getRouteSummaryName(route) {
+  const summary = route.route.summary || "";
+  if (summary.includes("E311")) return "E311";
+  if (summary.includes("E11")) return "E11";
+  if (summary.includes("E611")) return "E611";
+  if (summary.includes("Sheikh Zayed")) return "Sheikh Zayed Rd";
+  return summary.split("/")[0].trim() || `Route ${route.displayIndex}`;
+}
+
+// ===== MAP INIT =====
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 24.4539, lng: 54.3773 },
-    zoom: 8,
-    mapTypeControl: true,
-    streetViewControl: true,
-    fullscreenControl: true
+    center: { lat: 25.2048, lng: 55.2708 },
+    zoom: 11,
+    disableDefaultUI: true,
+    styles: [
+      { featureType: "poi", stylers: [{ visibility: "off" }] },
+      { featureType: "transit", stylers: [{ visibility: "off" }] }
+    ]
   });
 
   directionsService = new google.maps.DirectionsService();
+  
+  setTimeout(calculateRoutes, 500);
+  
+  document.getElementById("start").addEventListener("change", calculateRoutes);
+  document.getElementById("end").addEventListener("change", calculateRoutes);
 }
 
 function clearRoutes() {
@@ -687,21 +1707,18 @@ function clearRoutes() {
   renderers = [];
   analyzedRoutes = [];
   selectedRoute = null;
-  document.getElementById("routes").innerHTML = "";
-  const decision = document.getElementById("decision");
-  if (decision) decision.innerHTML = "";
 }
 
+// ===== ROUTE ANALYSIS =====
+
 function stripHtml(text) {
-  return (text || "").replace(/<[^>]*>/g, " ");
+  return (text || "").replace(/<[^>]*>/g, " ").trim();
 }
 
 function normalizeRoadText(step, route) {
   const summary = (route.summary || "");
-  const htmlInstructions = stripHtml(step.html_instructions || "");
-  const instructions = step.instructions || "";
-  const maneuver = step.maneuver || "";
-  return `${summary} ${htmlInstructions} ${instructions} ${maneuver}`.toUpperCase();
+  const html = stripHtml(step.html_instructions || "");
+  return `${summary} ${html}`.toUpperCase();
 }
 
 function stepLooksLikeHighway(step, route) {
@@ -710,43 +1727,17 @@ function stepLooksLikeHighway(step, route) {
     /\bE11\b/.test(text) ||
     /\bE311\b/.test(text) ||
     /\bE611\b/.test(text) ||
-    /\bE66\b/.test(text) ||
-    /\bE77\b/.test(text) ||
-    text.includes("SHEIKH MOHAMMED BIN ZAYED") ||
-    text.includes("SHEIKH ZAYED") ||
-    text.includes("EMIRATES ROAD") ||
+    text.includes("SHEIKH") ||
     text.includes("HIGHWAY") ||
-    text.includes("EXPRESSWAY") ||
-    text.includes("MOTORWAY") ||
-    text.includes("FREEWAY")
+    text.includes("EXPRESSWAY")
   );
 }
 
-function getHighwayShare(route) {
-  const leg = route.legs[0];
-  const totalDistance = leg.distance?.value || 0;
-  if (!totalDistance) return 0;
-
-  let highwayDistance = 0;
-  leg.steps.forEach(step => {
-    if (stepLooksLikeHighway(step, route)) {
-      highwayDistance += step.distance?.value || 0;
-    }
-  });
-
-  return highwayDistance / totalDistance;
-}
-
-function isHighway(route) {
-  return getHighwayShare(route) >= 0.35;
-}
-
-function getTrafficLevel(baseTimeSeconds, trafficTimeSeconds) {
-  if (!trafficTimeSeconds || !baseTimeSeconds || trafficTimeSeconds <= baseTimeSeconds) return "low";
-
-  const delayRatio = (trafficTimeSeconds - baseTimeSeconds) / baseTimeSeconds;
-  if (delayRatio <= 0.05) return "low";
-  if (delayRatio <= 0.15) return "medium";
+function getTrafficLevel(base, traffic) {
+  if (!traffic || !base || traffic <= base) return "low";
+  const ratio = (traffic - base) / base;
+  if (ratio <= 0.05) return "low";
+  if (ratio <= 0.15) return "medium";
   return "high";
 }
 
@@ -756,711 +1747,339 @@ function trafficRank(level) {
   return 3;
 }
 
-function getRouteCharacter(routeData) {
-  if (routeData.traffic === "low" && routeData.highwayShare >= 0.55 && routeData.complexity <= 4) {
-    return "спокойный маршрут";
-  }
-
-  if (routeData.highwayShare >= 0.65) {
-    return "стабильный маршрут по трассе";
-  }
-
-  if (routeData.complexity >= 8) {
-    return "более сложный городской маршрут";
-  }
-
-  if (routeData.traffic === "high") {
-    return "маршрут с плотным трафиком";
-  }
-
-  return "сбалансированный маршрут";
-}
-
-function getWhyReasons(routeData, baselineRoute) {
-  const reasons = [];
-
-  if (!baselineRoute) {
-    if (routeData.traffic === "low") reasons.push("меньше пробок");
-    if (routeData.highwayShare >= 0.5) reasons.push("больше движения по трассе");
-    if (routeData.complexity <= 4) reasons.push("меньше сложных манёвров");
-    return reasons;
-  }
-
-  if (trafficRank(routeData.traffic) < trafficRank(baselineRoute.traffic)) {
-    reasons.push("меньше пробок");
-  }
-
-  if (routeData.complexity <= baselineRoute.complexity - 2) {
-    reasons.push("меньше сложных манёвров");
-  }
-
-  if (routeData.highwayShare >= baselineRoute.highwayShare + 0.15) {
-    reasons.push("больше движения по трассе");
-  }
-
-  if (routeData.distance <= baselineRoute.distance - 3000) {
-    reasons.push("меньше лишнего километража");
-  }
-
-  if (!reasons.length) {
-    if (routeData.traffic === "low") reasons.push("трафик остаётся спокойным");
-    if (routeData.highwayShare >= 0.5) reasons.push("маршрут идёт по более стабильной дороге");
-    if (routeData.complexity <= 4) reasons.push("маршрут проще для водителя");
-  }
-
-  return reasons;
-}
-
 function isMeaningfulManeuver(step, route) {
   if (!step) return false;
-
+  
   const html = stripHtml(step.html_instructions || "").toLowerCase();
   const maneuver = (step.maneuver || "").toLowerCase();
-  const stepDistance = step.distance?.value || 0;
-  const onHighway = stepLooksLikeHighway(step, route);
-
-  const strongManeuvers = new Set([
-    "turn-left",
-    "turn-right",
-    "uturn-left",
-    "uturn-right",
-    "roundabout-left",
-    "roundabout-right",
-    "roundabout"
-  ]);
-
-  if (strongManeuvers.has(maneuver)) return true;
+  
+  const strong = ["turn-left", "turn-right", "uturn-left", "uturn-right", "roundabout"];
+  if (strong.some(m => maneuver.includes(m))) return true;
   if (html.includes("exit")) return true;
-
-  if (maneuver.includes("merge")) {
-    return !onHighway || stepDistance > 2000;
-  }
-
-  if (
-    html.includes("continue") ||
-    html.includes("keep") ||
-    html.includes("slight")
-  ) {
-    return false;
-  }
-
-  if (stepDistance < 150) return false;
-
+  if (html.includes("continue") || html.includes("keep") || html.includes("slight")) return false;
+  
   return false;
 }
 
-function countRouteComplexity(leg, route) {
-  return leg.steps.filter(step => isMeaningfulManeuver(step, route)).length;
-}
-
-function scoreRoute(routeData) {
-  let score = 0;
-
-  // 1. БАЗА — фактическое время в пути
-  score += routeData.time;
-
-  // 2. ТРАФИК — сильный фактор
-  if (routeData.traffic === "high") score += 1200;
-  if (routeData.traffic === "medium") score += 400;
-
-  // 3. СЛОЖНОСТЬ — каждый манёвр ухудшает комфорт
-  score += routeData.complexity * 60;
-
-  // 4. ДЛИНА — небольшой штраф за лишний километраж
-  score += routeData.distance * 0.15;
-
-  // 5. ХАЙВЕЙ — бонус за стабильное движение
-  score -= routeData.highwayShare * 800;
-
-  return score;
+function countComplexity(leg, route) {
+  return leg.steps.filter(s => isMeaningfulManeuver(s, route)).length;
 }
 
 function selectBestRoute(routes) {
   if (!routes?.length) return null;
   if (routes.length === 1) return routes[0];
-
+  
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
   let best = [...routes].sort((a, b) => a.score - b.score)[0];
-
-  const timeGapMin = getDisplayDiff(best, fastest);
-
-  if (best.index !== fastest.index && timeGapMin > 4) {
+  
+  const gap = getDisplayDiff(best, fastest);
+  
+  // Если best сильно медленнее fastest — выбираем fastest
+  if (best.index !== fastest.index && gap > 4) {
     return fastest;
   }
-
-  routes.forEach(route => {
-    if (route.index === best.index) return;
-
-    const diffMin = getDisplayDiff(route, best);
-    const routeTrafficRank = trafficRank(route.traffic);
-    const bestTrafficRank = trafficRank(best.traffic);
-
-    if (diffMin <= 2 && diffMin >= -2) {
-      if (routeTrafficRank < bestTrafficRank) {
-        best = route;
-      } else if (routeTrafficRank === bestTrafficRank && route.complexity < best.complexity) {
-        best = route;
+  
+  // Проверяем не слишком ли рискован best
+  routes.forEach(r => {
+    if (r.index === best.index) return;
+    const diff = getDisplayDiff(r, best);
+    
+    // Если есть маршрут с похожим временем, но лучшим трафиком
+    if (Math.abs(diff) <= 2) {
+      if (trafficRank(r.traffic) < trafficRank(best.traffic)) {
+        best = r;
+      } else if (trafficRank(r.traffic) === trafficRank(best.traffic) && r.complexity < best.complexity) {
+        best = r;
       }
     }
   });
-
+  
   return best;
 }
 
-function calculateConfidence(bestRoute, allRoutes) {
-  if (!allRoutes || allRoutes.length <= 1) return "high";
+// ===== RENDER FUNCTIONS =====
 
-  const competitors = allRoutes.filter(r => r.index !== bestRoute.index);
-  if (!competitors.length) return "high";
-
-  const fastest = [...allRoutes].sort((a, b) => a.time - b.time)[0];
-  const bestSlowerByMin = getDisplayDiff(bestRoute, fastest);
-  const isShortTrip = bestRoute.time <= 12 * 60;
-
-  let hasAlmostEqual = false;
-  let hasClose = false;
-  let hasBetterInSomeMetric = false;
-
-  competitors.forEach(r => {
-    const diffMin = Math.abs(getDisplayDiff(r, bestRoute));
-    const complexityDelta = r.complexity - bestRoute.complexity;
-    const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
-
-    if (r.time < bestRoute.time) hasBetterInSomeMetric = true;
-    if (complexityDelta < -2) hasBetterInSomeMetric = true;
-    if (trafficDelta < 0) hasBetterInSomeMetric = true;
-
-    if (diffMin <= 1 && Math.abs(complexityDelta) <= 1 && Math.abs(trafficDelta) <= 1) {
-      hasAlmostEqual = true;
-    } else if (diffMin <= 3 && Math.abs(complexityDelta) <= 2 && Math.abs(trafficDelta) <= 1) {
-      hasClose = true;
-    }
+function renderResults() {
+  const container = document.getElementById("results");
+  const quickAccess = document.getElementById("quick-access");
+  
+  if (!analyzedRoutes.length) {
+    container.innerHTML = "";
+    quickAccess.classList.remove("hidden");
+    return;
+  }
+  
+  quickAccess.classList.add("hidden");
+  
+  const best = selectBestRoute(analyzedRoutes);
+  const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+  selectedRoute = best;
+  
+  // Назначаем роли
+  analyzedRoutes.forEach(r => {
+    r.role = getRouteRole(r, best, fastest, analyzedRoutes);
   });
-
-  if (isShortTrip) {
-    if (hasAlmostEqual) return "low";
-    if (hasClose || bestSlowerByMin >= 2) return "medium";
-    return "high";
-  }
-
-  if (hasAlmostEqual) return "low";
-  if (hasClose && hasBetterInSomeMetric) return "medium";
-  if (hasClose) return "medium";
-  return "high";
-}
-
-function getConfidenceLabel(level, bestRoute, allRoutes) {
-  if (level === "high") return "Уверенно";
-  if (level === "medium") return "Возможны варианты";
-
-  if (allRoutes && allRoutes.length > 1 && bestRoute) {
-    const competitors = allRoutes.filter(r => r.index !== bestRoute.index);
-    if (competitors.length > 0) {
-      const minDiff = Math.min(...competitors.map(r => Math.abs(getDisplayDiff(r, bestRoute))));
-      if (minDiff === 0) return "Разница меньше 1 мин";
-      return `Разница ${minDiff} мин`;
-    }
-  }
-  return "Почти одинаковые";
-}
-
-function getConfidenceColor(level) {
-  if (level === "high") return "#16a34a";
-  if (level === "medium") return "#d97706";
-  return "#dc2626";
-}
-
-function getTrafficLabel(traffic) {
-  if (traffic === "low") return "Свободно";
-  if (traffic === "medium") return "Средний трафик";
-  return "Пробки";
-}
-
-function getTrafficIcon(traffic) {
-  if (traffic === "low") return "🟢";
-  if (traffic === "medium") return "🟡";
-  return "🔴";
-}
-
-function getRouteColor(role) {
-  if (role === "best") return "#16a34a";
-  if (role === "fastest") return "#2563eb";
-  if (role === "alt") return "#d97706";
-  return "#6b7280";
-}
-
-function getRouteVisualRole(route, bestRoute, fastestRoute) {
-  if (route.index === bestRoute.index) return "best";
-
-  const diffFromBestMin = Math.abs(getDisplayDiff(route, bestRoute));
-  const isShortTrip = bestRoute.time <= 12 * 60;
-
-  if (
-    route.index === fastestRoute.index &&
-    fastestRoute.index !== bestRoute.index &&
-    !(isShortTrip && diffFromBestMin <= 1)
-  ) {
-    return "fastest";
-  }
-
-  return "alt";
-}
-
-// ===== HIGHLIGHT — главная строка разницы =====
-
-function buildHighlight(r, bestRoute, fastestRoute, role) {
-  const isFastest = r.index === fastestRoute.index;
-  const diffFromBest = getDisplayDiff(r, bestRoute);
-  const diffFromFastest = getDisplayDiff(r, fastestRoute);
-  const complexityDelta = r.complexity - bestRoute.complexity;
-  const trafficDelta = trafficRank(r.traffic) - trafficRank(bestRoute.traffic);
-
-  if (role === "best") {
-    if (isFastest) {
-      return "Самый быстрый";
-    }
-    if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-      return `Меньше пробок (+${formatDiff(diffFromFastest)})`;
-    }
-    if (r.complexity < fastestRoute.complexity) {
-      return `Проще на ${fastestRoute.complexity - r.complexity} манёвров (+${formatDiff(diffFromFastest)})`;
-    }
-    if (diffFromFastest === 0) {
-      return "Почти такой же";
-    }
-    return `Дольше на ${formatDiff(diffFromFastest)}, но спокойнее`;
-  }
-
-  if (role === "fastest") {
-    if (trafficDelta > 0) {
-      return `Быстрее на ${formatDiff(diffFromBest)}, но пробки`;
-    }
-    if (complexityDelta > 2) {
-      return `Быстрее на ${formatDiff(diffFromBest)}, но сложнее (+${complexityDelta} манёвров)`;
-    }
-    return `Быстрее на ${formatDiff(diffFromBest)}`;
-  }
-
-  // alt
-  if (diffFromBest < 0) {
-    return `Быстрее на ${formatDiff(diffFromBest)}`;
-  }
-  if (complexityDelta < -1 && diffFromBest > 0) {
-    return `Проще на ${Math.abs(complexityDelta)} манёвров, но дольше на ${formatDiff(diffFromBest)}`;
-  }
-  if (trafficDelta < 0 && diffFromBest > 0) {
-    return `Меньше пробок, но дольше на ${formatDiff(diffFromBest)}`;
-  }
-
-  return `+${formatDiff(diffFromBest)}`;
-}
-
-// ===== WHY — короткое объяснение =====
-
-function buildWhy(r, bestRoute, fastestRoute, role) {
-  let baselineRoute = bestRoute;
-
-  if (role === "best") {
-    baselineRoute = fastestRoute.index !== r.index ? fastestRoute : null;
-  }
-
-  const reasons = getWhyReasons(r, baselineRoute);
-  const character = getRouteCharacter(r);
-
-  if (reasons.length >= 2) {
-    return `${reasons[0]}, ${reasons[1]}`;
-  }
-
-  if (reasons.length === 1) {
-    return `${reasons[0]} · ${character}`;
-  }
-
-  return character;
-}
-
-function drawRoute(fullResult, routeIndex, role) {
-  const renderer = new google.maps.DirectionsRenderer({
-    map: map,
-    directions: fullResult,
-    routeIndex: routeIndex,
-    suppressMarkers: false,
-    polylineOptions: {
-      strokeColor: getRouteColor(role),
-      strokeOpacity: role === "best" ? 1 : 0.7,
-      strokeWeight: role === "best" ? 7 : 5
-    }
+  
+  let html = "";
+  
+  // Best card (ТЗ3: AI Decision Layer)
+  const bestVM = buildBestCardViewModel(best, fastest, analyzedRoutes);
+  const confidenceClass = `confidence-${bestVM.confidence}`;
+  
+  html += `
+    <div class="best-card">
+      <div class="best-label">AI Recommendation</div>
+      <div class="best-badge">
+        <svg viewBox="0 0 24 24"><path fill="white" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      </div>
+      <h2 class="best-title">Best route: ${bestVM.name}</h2>
+      <p class="best-subtitle">${bestVM.minutes} min &middot; ${getTrafficText(bestVM.traffic)} traffic &middot; ${bestVM.complexity <= 4 ? "minimal stops" : bestVM.complexity + " turns"}</p>
+      <p class="best-reason">${bestVM.primaryWhy}</p>
+      <div class="best-points">
+        ${bestVM.whyPoints.slice(0, 2).map(p => `<div class="best-point">${p}</div>`).join("")}
+      </div>
+      <span class="confidence-badge ${confidenceClass}">${bestVM.confidenceText}</span>
+      <button class="start-btn" onclick="startDrive(${bestVM.index})">Start via ${bestVM.name}</button>
+      <div class="why-link" onclick="openRouteDetails(${bestVM.index})">Why this route? &rsaquo;</div>
+    </div>
+  `;
+  
+  // Alternative cards (ТЗ3)
+  analyzedRoutes.forEach(r => {
+    if (r.index === best.index) return;
+    
+    const altVM = buildAlternativeCardViewModel(r, best, fastest, analyzedRoutes);
+    const icons = {
+      faster_risky: "&#9888;",
+      more_relaxed: "&#128663;",
+      balanced: "&#128736;",
+      similar: "&#128257;"
+    };
+    
+    html += `
+      <div class="alt-card ${altVM.role}" onclick="openRouteDetails(${altVM.index})">
+        <div class="alt-icon">${icons[altVM.role] || "&#128736;"}</div>
+        <div class="alt-content">
+          <div class="alt-title">${altVM.title}</div>
+          <div class="alt-subtitle">${altVM.subtitle}</div>
+        </div>
+        <div class="alt-arrow">&#8250;</div>
+      </div>
+    `;
   });
-
-  renderers.push(renderer);
+  
+  container.innerHTML = html;
 }
 
-// ===== DAY 3: RENDER CARD =====
-
-function renderCard(r, bestRoute, fastestRoute, confidence, allRoutes) {
-  const div = document.createElement("div");
-  const role = getRouteVisualRole(r, bestRoute, fastestRoute);
-
-  div.className = `route ${role}`;
-
-  const minutes = getDisplayMinutes(r);
-  const km = (r.distance / 1000).toFixed(1);
-
-  let icon = "";
-  let title = "";
-
-  if (role === "best") {
-    icon = "✓";
-    title = "Лучший маршрут";
-  } else if (role === "fastest") {
-    icon = "⚡";
-    title = "Быстрый";
-  } else {
-    icon = "↗";
-    title = "Альтернатива";
+function drawRoutes(result) {
+  const best = selectBestRoute(analyzedRoutes);
+  
+  analyzedRoutes.forEach(r => {
+    const isBest = r.index === best.index;
+    const renderer = new google.maps.DirectionsRenderer({
+      map: map,
+      directions: result,
+      routeIndex: r.index,
+      suppressMarkers: !isBest,
+      polylineOptions: {
+        strokeColor: isBest ? "#2d6a4f" : "#9ca3af",
+        strokeOpacity: isBest ? 1 : 0.6,
+        strokeWeight: isBest ? 6 : 4
+      }
+    });
+    renderers.push(renderer);
+  });
+  
+  if (best) {
+    map.fitBounds(best.route.bounds);
   }
+}
 
-  const highlight = buildHighlight(r, bestRoute, fastestRoute, role);
+// ===== CALCULATE ROUTES =====
 
-  let tagsHtml = "";
-  if (role === "best") {
-    tagsHtml = `
-      <div class="route-tags">
-        <span class="tag confidence" style="background:${getConfidenceColor(confidence)}">${getConfidenceLabel(confidence, bestRoute, allRoutes)}</span>
+function calculateRoutes() {
+  clearRoutes();
+  
+  const start = document.getElementById("start").value.trim();
+  const end = document.getElementById("end").value.trim();
+  
+  if (!start || !end) {
+    document.getElementById("results").innerHTML = "";
+    return;
+  }
+  
+  document.getElementById("results").innerHTML = '<div class="loading">Finding best routes...</div>';
+  
+  directionsService.route({
+    origin: start,
+    destination: end,
+    travelMode: google.maps.TravelMode.DRIVING,
+    provideRouteAlternatives: true,
+    drivingOptions: {
+      departureTime: new Date(),
+      trafficModel: "bestguess"
+    }
+  }, (result, status) => {
+    if (status !== "OK") {
+      document.getElementById("results").innerHTML = `<div class="error">Could not find route: ${status}</div>`;
+      return;
+    }
+    
+    const routes = result.routes;
+    if (!routes?.length) {
+      document.getElementById("results").innerHTML = '<div class="error">No routes found.</div>';
+      return;
+    }
+    
+    currentDirectionsResult = result;
+    
+    // Первый проход: базовые метрики
+    analyzedRoutes = routes.map((route, i) => {
+      const leg = route.legs[0];
+      const metrics = calculateRouteMetrics(route, leg, route);
+      
+      return {
+        route,
+        index: i,
+        displayIndex: i + 1,
+        ...metrics
+      };
+    });
+    
+    // Второй проход: score и normalized metrics
+    analyzedRoutes = analyzedRoutes.map(r => {
+      const scoreData = calculateRouteScore(r, analyzedRoutes);
+      return {
+        ...r,
+        ...scoreData
+      };
+    });
+    
+    renderResults();
+    drawRoutes(result);
+  });
+}
+
+// ===== ROUTE DETAILS MODAL (ТЗ4) =====
+
+function openRouteDetails(index) {
+  const r = analyzedRoutes.find(x => x.index === index);
+  if (!r) return;
+  
+  const best = selectBestRoute(analyzedRoutes);
+  const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+  
+  const vm = buildRouteDetailsViewModel(r, best, fastest, analyzedRoutes);
+  
+  let segmentsHtml = "";
+  if (vm.segments.length > 0) {
+    segmentsHtml = `
+      <div class="detail-section">
+        <div class="detail-section-title">Route Breakdown</div>
+        <div class="segment-list">
+          ${vm.segments.map(seg => `
+            <div class="segment-item">
+              <div class="segment-icon ${seg.type}">${seg.icon}</div>
+              <div class="segment-content">
+                <div class="segment-title">${seg.title}</div>
+                <div class="segment-details">${seg.details}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
       </div>
     `;
   }
-
-  const why = buildWhy(r, bestRoute, fastestRoute, role);
-
-  let driveButton = "";
-  if (role === "best") {
-    driveButton = `<button class="start-drive-btn" onclick="event.stopPropagation(); startDriveMode(${r.index})">Поехали</button>`;
+  
+  let comparisonHtml = "";
+  if (vm.comparisonNote) {
+    comparisonHtml = `<div class="comparison-note">${vm.comparisonNote}</div>`;
   }
-
-  div.innerHTML = `
-    <div class="route-header">
-      <span class="route-icon">${icon}</span>
-      <h3 class="route-title">${title}</h3>
+  
+  let confidenceHtml = "";
+  if (vm.confidence) {
+    const confClass = `confidence-${vm.confidence}`;
+    confidenceHtml = `<span class="confidence-badge ${confClass}" style="margin-left: 8px">${getConfidenceText(vm.confidence)}</span>`;
+  }
+  
+  document.getElementById("modal-content").innerHTML = `
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">${vm.name}</h2>
+      </div>
+      <span class="modal-role-badge ${vm.role}">${vm.roleLabel}</span>
     </div>
-    <div class="route-highlight">${highlight}</div>
-    <div class="route-metrics">
-      <div class="metric-item">
-        <span>${getTrafficIcon(r.traffic)}</span>
-        <span class="metric-value">${minutes} мин</span>
-      </div>
-      <div class="metric-item">
-        <span>📍</span>
-        <span class="metric-value">${km} км</span>
-      </div>
-      <div class="metric-item">
-        <span>↪</span>
-        <span class="metric-value">${r.complexity}</span>
-        <span>манёвров</span>
-      </div>
-    </div>
-    ${tagsHtml}
-    <div class="route-why">${why}</div>
-    ${driveButton}
-  `;
-
-  div.onclick = () => openRouteDetails(r, bestRoute, fastestRoute);
-
-  return div;
-}
-
-function renderDecisionCard(bestRoute, fastestRoute, confidence) {
-  const decision = document.getElementById("decision");
-  if (!decision || !bestRoute) return;
-
-  const minutes = getDisplayMinutes(bestRoute);
-  const km = (bestRoute.distance / 1000).toFixed(1);
-  const why = buildWhy(bestRoute, bestRoute, fastestRoute, "best");
-
-  decision.innerHTML = `
-    <div class="decision-card">
-      <div class="decision-badge">AI DECISION</div>
-      <div class="decision-top">
-        <div>
-          <h2 class="decision-title">Рекомендуемый маршрут</h2>
-          <div class="decision-why">${why.charAt(0).toUpperCase() + why.slice(1)}.</div>
+    
+    <div class="detail-section">
+      <div class="detail-section-title">Core Metrics</div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Time</div>
+          <div class="detail-value">${vm.minutes} min</div>
         </div>
-        <div class="tag confidence" style="background:${getConfidenceColor(confidence)}">${getConfidenceLabel(confidence, bestRoute, analyzedRoutes)}</div>
-      </div>
-      <div class="decision-metrics">
-        <span class="decision-metric">⏱ ${minutes} мин</span>
-        <span class="decision-metric">📍 ${km} км</span>
-        <span class="decision-metric">${getTrafficIcon(bestRoute.traffic)} ${getTrafficLabel(bestRoute.traffic)}</span>
-        <span class="decision-metric">↪ ${bestRoute.complexity} манёвров</span>
+        <div class="detail-item">
+          <div class="detail-label">Distance</div>
+          <div class="detail-value">${vm.distance} km</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Maneuvers</div>
+          <div class="detail-value">${vm.complexity}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Traffic</div>
+          <div class="detail-value">${vm.trafficText}</div>
+        </div>
+        ${vm.delayMinutes > 0 ? `
+        <div class="detail-item">
+          <div class="detail-label">Est. Delay</div>
+          <div class="detail-value">+${vm.delayMinutes} min</div>
+        </div>
+        ` : ""}
+        <div class="detail-item">
+          <div class="detail-label">Highway</div>
+          <div class="detail-value">${vm.highwayShare}%</div>
+        </div>
+        <div class="detail-item full-width">
+          <div class="detail-label">Stability</div>
+          <div class="detail-value">${vm.stabilityLabel}${confidenceHtml}</div>
+        </div>
       </div>
     </div>
+    
+    <div class="modal-why">
+      <div class="modal-why-title">Why this route?</div>
+      <ul class="modal-why-points">
+        <li><strong>${vm.primaryWhy}</strong></li>
+        ${vm.whyPoints.map(p => `<li>${p}</li>`).join("")}
+      </ul>
+    </div>
+    
+    ${segmentsHtml}
+    ${comparisonHtml}
+    
+    <button class="modal-cta" onclick="closeModal(event); startDrive(${vm.index})">Start this route</button>
   `;
+  
+  document.getElementById("modal-overlay").classList.add("visible");
 }
 
-function renderNoAlternativeCard() {
-  const div = document.createElement("div");
-  div.className = "no-alt-card";
-  div.innerHTML = `
-    <h3 class="route-title">Альтернатив нет</h3>
-    <p>Google Maps вернул только один вариант</p>
-  `;
-  return div;
-}
-
-// ===== DAY 4: ROUTE DETAILS =====
-
-function openRouteDetails(r, bestRoute, fastestRoute) {
-  const modal = document.getElementById("modal-overlay");
-  const details = document.getElementById("route-details");
-
-  const minutes = getDisplayMinutes(r);
-  const km = (r.distance / 1000).toFixed(1);
-  const delayMin = Math.round(r.delaySeconds / 60);
-  const role = getRouteVisualRole(r, bestRoute, fastestRoute);
-  const why = buildWhy(r, bestRoute, fastestRoute, role);
-
-  const trafficLabels = {
-    low: "Свободно",
-    medium: "Средний",
-    high: "Пробки"
-  };
-
-  const roadType = r.highway ? "Хайвей" : "Городские дороги";
-  const recommended = r.index === bestRoute.index;
-
-  details.innerHTML = `
-    <div class="details-header">
-      <h3 class="details-title">Маршрут ${r.displayIndex}</h3>
-      <button class="details-close" onclick="closeRouteDetails(event)">×</button>
-    </div>
-    <div class="details-grid">
-      ${recommended ? `
-      <div class="detail-item full-width">
-        <div class="detail-label">Статус</div>
-        <div class="detail-value">Рекомендован системой</div>
-      </div>
-      ` : ""}
-      <div class="detail-item">
-        <div class="detail-label">Время</div>
-        <div class="detail-value">${minutes} мин</div>
-      </div>
-      <div class="detail-item">
-        <div class="detail-label">Дистанция</div>
-        <div class="detail-value">${km} км</div>
-      </div>
-      <div class="detail-item">
-        <div class="detail-label">Манёвры</div>
-        <div class="detail-value">${r.complexity}</div>
-      </div>
-      <div class="detail-item">
-        <div class="detail-label">Трафик</div>
-        <div class="detail-value">${getTrafficIcon(r.traffic)} ${trafficLabels[r.traffic]}</div>
-      </div>
-      ${delayMin > 0 ? `
-      <div class="detail-item">
-        <div class="detail-label">Задержка</div>
-        <div class="detail-value">+${delayMin} мин</div>
-      </div>
-      ` : ''}
-      <div class="detail-item">
-        <div class="detail-label">Тип дороги</div>
-        <div class="detail-value">${roadType}</div>
-      </div>
-      <div class="detail-item">
-        <div class="detail-label">Score</div>
-        <div class="detail-value">${r.score}</div>
-      </div>
-    </div>
-    <div class="details-why">
-      <strong>Почему:</strong> ${why}
-    </div>
-    <button class="start-drive-btn" onclick="closeRouteDetails(event); startDriveMode(${r.index})">Выбрать и поехать</button>
-  `;
-
-  modal.classList.add("visible");
-  map.fitBounds(r.route.bounds);
-}
-
-function closeRouteDetails(event) {
-  if (event.target.id === "modal-overlay" || event.target.classList.contains("details-close") || event.target.classList.contains("start-drive-btn")) {
+function closeModal(event) {
+  if (event.target.id === "modal-overlay" || event.target.classList.contains("modal-cta")) {
     document.getElementById("modal-overlay").classList.remove("visible");
   }
 }
 
-// ===== DAY 5: DRIVE MODE =====
+// ===== QUICK ACCESS =====
 
-function startDriveMode(routeIndex) {
-  if (!currentDirectionsResult || !analyzedRoutes[routeIndex]) return;
-
-  selectedRoute = analyzedRoutes[routeIndex];
-  const driveMode = document.getElementById("drive-mode");
-  driveMode.classList.add("active");
-
-  if (!driveMap) {
-    driveMap = new google.maps.Map(document.getElementById("drive-map"), {
-      center: { lat: 24.4539, lng: 54.3773 },
-      zoom: 14,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-      zoomControl: false
-    });
-  }
-
-  if (driveRenderer) {
-    driveRenderer.setMap(null);
-  }
-
-  driveRenderer = new google.maps.DirectionsRenderer({
-    map: driveMap,
-    directions: currentDirectionsResult,
-    routeIndex: routeIndex,
-    suppressMarkers: false,
-    polylineOptions: {
-      strokeColor: "#16a34a",
-      strokeOpacity: 1,
-      strokeWeight: 6
-    }
-  });
-
-  updateDriveInfo(selectedRoute);
-  driveMap.fitBounds(selectedRoute.route.bounds);
+function setDestination(place) {
+  document.getElementById("end").value = place;
+  calculateRoutes();
 }
 
-function updateDriveInfo(route) {
-  const minutes = getDisplayMinutes(route);
-  const km = (route.distance / 1000).toFixed(1);
+// ===== INIT =====
 
-  document.getElementById("drive-eta-time").textContent = `${minutes} мин`;
-  document.getElementById("drive-distance").textContent = km;
-  document.getElementById("drive-traffic").textContent = getTrafficLabel(route.traffic);
-
-  const firstStep = route.route.legs[0]?.steps[0];
-  if (firstStep) {
-    const instruction = stripHtml(firstStep.html_instructions);
-    const distance = firstStep.distance?.text || "";
-
-    document.getElementById("drive-next-instruction").textContent = instruction;
-    document.getElementById("drive-next-distance").textContent = distance;
-
-    const maneuver = firstStep.maneuver || "";
-    let icon = "↑";
-    if (maneuver.includes("left")) icon = "↰";
-    else if (maneuver.includes("right")) icon = "↱";
-    else if (maneuver.includes("uturn")) icon = "↺";
-    else if (maneuver.includes("roundabout")) icon = "⟳";
-
-    document.getElementById("drive-next-icon").textContent = icon;
-  }
-}
-
-function exitDriveMode() {
-  const driveMode = document.getElementById("drive-mode");
-  driveMode.classList.remove("active");
-  selectedRoute = null;
-
-  if (driveRenderer) {
-    driveRenderer.setMap(null);
-    driveRenderer = null;
-  }
-}
-
-function calculateRoutes() {
-  clearRoutes();
-
-  const start = document.getElementById("start").value.trim();
-  const end = document.getElementById("end").value.trim();
-
-  if (!start || !end) {
-    document.getElementById("routes").innerHTML =
-      '<div class="error">Введите начальную и конечную точки маршрута.</div>';
-    return;
-  }
-
-  directionsService.route(
-    {
-      origin: start,
-      destination: end,
-      travelMode: google.maps.TravelMode.DRIVING,
-      provideRouteAlternatives: true,
-      drivingOptions: {
-        departureTime: new Date(),
-        trafficModel: "bestguess"
-      }
-    },
-    (result, status) => {
-      if (status !== "OK") {
-        document.getElementById("routes").innerHTML =
-          `<div class="error">Ошибка запроса маршрута: ${status}</div>`;
-        return;
-      }
-
-      currentDirectionsResult = result;
-
-      const routes = result.routes;
-      if (!routes?.length) {
-        document.getElementById("routes").innerHTML =
-          '<div class="error">Маршруты не найдены.</div>';
-        return;
-      }
-
-      analyzedRoutes = routes.map((route, i) => {
-        const leg = route.legs[0];
-        const baseTime = leg.duration.value;
-        const time = leg.duration_in_traffic ? leg.duration_in_traffic.value : baseTime;
-        const distance = leg.distance.value;
-        const complexity = countRouteComplexity(leg, route);
-        const highwayShare = getHighwayShare(route);
-        const highway = highwayShare >= 0.35;
-        const traffic = getTrafficLevel(baseTime, time);
-
-        return {
-          route,
-          index: i,
-          displayIndex: i + 1,
-          time,
-          baseTime,
-          delaySeconds: Math.max(0, time - baseTime),
-          distance,
-          complexity,
-          highway,
-          highwayShare,
-          traffic
-        };
-      }).map(r => ({ ...r, score: scoreRoute(r) }));
-
-      const bestRoute = selectBestRoute(analyzedRoutes);
-      const fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-      const confidence = calculateConfidence(bestRoute, analyzedRoutes);
-      const routesToShow = analyzedRoutes;
-
-      renderDecisionCard(bestRoute, fastestRoute, confidence);
-
-      routesToShow.forEach(r => {
-        const role = getRouteVisualRole(r, bestRoute, fastestRoute);
-        drawRoute(result, r.index, role);
-      });
-
-      document.getElementById("routes").innerHTML = "";
-
-      const orderedRoutes = [
-        routesToShow.find(r => r.index === bestRoute.index),
-        ...routesToShow.filter(r => r.index !== bestRoute.index).sort((a, b) => a.time - b.time)
-      ].filter(Boolean);
-
-      orderedRoutes.forEach(r => {
-        document.getElementById("routes").appendChild(
-          renderCard(r, bestRoute, fastestRoute, confidence, analyzedRoutes)
-        );
-      });
-
-      if (analyzedRoutes.length === 1) {
-        document.getElementById("routes").appendChild(renderNoAlternativeCard());
-      }
-
-      map.fitBounds(bestRoute.route.bounds);
-    }
-  );
-}
+window.initMap = initMap;
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
