@@ -180,6 +180,30 @@
       flex-shrink: 0;
     }
 
+    .confidence-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .confidence-high {
+      background: var(--green);
+      color: white;
+    }
+
+    .confidence-medium {
+      background: #fbbf24;
+      color: #1f2937;
+    }
+
+    .confidence-low {
+      background: #d1d5db;
+      color: #374151;
+    }
+
     .start-btn {
       width: 100%;
       padding: 16px;
@@ -1106,6 +1130,19 @@ function getRouteSummaryName(route) {
   return summary.split("/")[0].trim() || `Route ${route.displayIndex}`;
 }
 
+function getConfidenceText(level, bestRoute, fastestRoute) {
+  // No generic labels — always comparative
+  if (level === "high") return "Clear best choice";
+  if (level === "medium") {
+    if (fastestRoute && bestRoute && bestRoute.index !== fastestRoute.index) {
+      const diff = Math.abs(getDisplayDiff(bestRoute, fastestRoute));
+      return `${diff} min trade-off vs fastest`;
+    }
+    return "Slight edge over alternatives";
+  }
+  return "Routes nearly identical";
+}
+
 // ============================================================
 //  ROUTE METRICS
 // ============================================================
@@ -1308,6 +1345,25 @@ function getRouteRole(r, bestRoute, fastestRoute, allRoutes) {
   if (isSlower && isMoreRelaxed) return "more_relaxed";
   if (isSimilar) return "similar";
   return "balanced";
+}
+
+// ============================================================
+//  CONFIDENCE LEVEL
+// ============================================================
+
+function getConfidenceLevel(bestRoute, allRoutes) {
+  if (allRoutes.length <= 1) return "high";
+
+  const sorted = [...allRoutes].sort((a, b) => a.score - b.score);
+  const best = sorted[0];
+  const second = sorted[1];
+
+  const scoreDiff = second.score - best.score;
+  const timeDiff = Math.abs(getDisplayDiff(best, second));
+
+  if (scoreDiff > 8 || timeDiff >= 5) return "high";
+  if (scoreDiff < 3 && timeDiff <= 1) return "low";
+  return "medium";
 }
 
 // ============================================================
