@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Clear Road UAE</title>
@@ -950,49 +950,50 @@
     <span class="nav-label">AI Insights</span>
   </div>
   <div class="nav-item">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-    <span class="nav-label">Settings</span>
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+    <span class="nav-label">Places</span>
   </div>
 </nav>
 
 <!-- ROUTE DETAILS MODAL -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal-content" id="modal-content"></div>
+  <div class="modal-content" id="modal-content">
+  </div>
 </div>
 
 <!-- DRIVE MODE -->
 <div class="drive-mode" id="drive-mode">
   <div class="drive-header">
-    <div class="drive-status" id="drive-status">In progress</div>
-    <button class="drive-exit" onclick="exitDriveMode()">End</button>
+    <span class="drive-status" id="drive-status">Navigating...</span>
+    <button class="drive-exit" onclick="exitDriveMode()">Exit</button>
   </div>
+
   <div class="drive-map-container">
     <div id="drive-map"></div>
-    
-    <!-- AHEAD BLOCK -->
-    <div class="drive-ahead" id="drive-ahead">
+
+    <div class="drive-ahead">
       <div class="drive-ahead-icon stable" id="drive-ahead-icon">&#9728;</div>
-      <div class="drive-ahead-text" id="drive-ahead-text">Stable traffic ahead</div>
+      <div class="drive-ahead-text" id="drive-ahead-text">Calculating conditions...</div>
     </div>
-    
-    <!-- SMART ALERT -->
+
     <div class="drive-alert" id="drive-alert">
-      <div class="drive-alert-message" id="drive-alert-message">Alternative route now available</div>
+      <div class="drive-alert-message" id="drive-alert-message"></div>
       <div class="drive-alert-actions">
-        <button class="drive-alert-btn primary" id="drive-alert-switch" onclick="switchToAlternative()">Switch</button>
-        <button class="drive-alert-btn secondary" onclick="dismissAlert()">Keep current</button>
+        <button class="drive-alert-btn primary" onclick="switchToAlternative()">Switch Route</button>
+        <button class="drive-alert-btn secondary" onclick="dismissAlert()">Keep Current</button>
       </div>
     </div>
   </div>
+
   <div class="drive-panel">
     <div class="drive-eta">
       <div class="drive-eta-time" id="drive-eta-time">--</div>
-      <div class="drive-eta-label">min until arrival</div>
+      <div class="drive-eta-label">min remaining</div>
     </div>
     <div class="drive-info">
       <div class="drive-info-item">
         <div class="drive-info-value" id="drive-distance">--</div>
-        <div class="drive-info-label">km</div>
+        <div class="drive-info-label">km left</div>
       </div>
       <div class="drive-info-item">
         <div class="drive-info-value" id="drive-traffic">--</div>
@@ -1010,6 +1011,9 @@
 </div>
 
 <script>
+// ============================================================
+//  GLOBAL STATE
+// ============================================================
 let map;
 let driveMap;
 let directionsService;
@@ -1022,745 +1026,9 @@ let driveInterval = null;
 let currentStepIndex = 0;
 let betterRouteIndex = null;
 
-// ===== ТЗ2: ROUTE METRICS & SCORE =====
-
-function calculateRouteMetrics(route, leg, rawRoute) {
-  const baseTime = leg.duration.value;
-  const time = leg.duration_in_traffic?.value || baseTime;
-  const distance = leg.distance.value;
-  const delaySeconds = Math.max(0, time - baseTime);
-  const delayMinutes = Math.round(delaySeconds / 60);
-  const complexity = countComplexity(leg, rawRoute);
-  const highwayShare = calculateHighwayShare(leg, rawRoute);
-  const traffic = getTrafficLevel(baseTime, time);
-  
-  return {
-    time,
-    baseTime,
-    distance,
-    delaySeconds,
-    delayMinutes,
-    complexity,
-    highwayShare,
-    traffic,
-    highway: highwayShare >= 0.35
-  };
-}
-
-function calculateHighwayShare(leg, route) {
-  const total = leg.distance?.value || 0;
-  if (!total) return 0;
-  
-  let hwDistance = 0;
-  leg.steps.forEach(step => {
-    if (stepLooksLikeHighway(step, route)) {
-      hwDistance += step.distance?.value || 0;
-    }
-  });
-  
-  return hwDistance / total;
-}
-
-function calculateRouteScore(r, allRoutes) {
-  // Нормализованный score
-  const fastest = allRoutes.length ? Math.min(...allRoutes.map(x => x.time)) : r.time;
-  const timeScore = (r.time - fastest) / 60; // в минутах от fastest
-  
-  const trafficPenalty = r.traffic === "high" ? 15 : r.traffic === "medium" ? 5 : 0;
-  const complexityPenalty = r.complexity * 0.75;
-  const highwayBonus = r.highwayShare * -3; // бонус за highway
-  const delayPenalty = r.delayMinutes * 1.5;
-  
-  // Stability score (0-100, выше = стабильнее)
-  const stabilityScore = Math.max(0, 100 - trafficPenalty * 3 - r.complexity * 2 - r.delayMinutes * 4);
-  
-  const score = timeScore + trafficPenalty + complexityPenalty + highwayBonus + delayPenalty;
-  
-  return {
-    score,
-    timeScore,
-    trafficPenalty,
-    complexityPenalty,
-    highwayBonus,
-    delayPenalty,
-    stabilityScore
-  };
-}
-
-function getRouteRole(r, bestRoute, fastestRoute, allRoutes) {
-  // ТЗ STEP 4: Assign EXACTLY one role based on comparison
-  if (r.index === bestRoute.index) return "recommended";
-  
-  const diffFromBest = getDisplayDiff(r, bestRoute); // negative = faster
-  const isFaster = diffFromBest < 0;
-  const isSlower = diffFromBest > 0;
-  
-  // Check risk factors
-  const hasMoreTraffic = trafficRank(r.traffic) > trafficRank(bestRoute.traffic);
-  const hasMoreDelay = r.delayMinutes > bestRoute.delayMinutes + 2;
-  const isRiskier = hasMoreTraffic || hasMoreDelay;
-  
-  // Check relaxation factors
-  const fewerTurns = r.complexity < bestRoute.complexity - 1;
-  const lighterTraffic = trafficRank(r.traffic) < trafficRank(bestRoute.traffic);
-  const isMoreRelaxed = fewerTurns || lighterTraffic;
-  
-  // Check similarity
-  const timeSimilar = Math.abs(diffFromBest) <= 1;
-  const complexitySimilar = Math.abs(r.complexity - bestRoute.complexity) <= 2;
-  const trafficSimilar = trafficRank(r.traffic) === trafficRank(bestRoute.traffic);
-  const isSimilar = timeSimilar && complexitySimilar && trafficSimilar;
-  
-  // Assign role
-  if (isFaster && isRiskier) return "faster_risky";
-  if (isSlower && isMoreRelaxed) return "more_relaxed";
-  if (isSimilar) return "similar";
-  return "balanced";
-}
-
-// ===== ТЗ2: WHY GENERATION =====
-
-function buildPrimaryWhy(r, bestRoute, fastestRoute, allRoutes) {
-  const isBest = r.index === bestRoute.index;
-  const isFastest = r.index === fastestRoute.index;
-  const diffFromFastest = getDisplayDiff(r, fastestRoute);
-  const diffFromBest = getDisplayDiff(r, bestRoute);
-  
-  // ТЗ: WHY MUST compare routes. No generic statements.
-  
-  if (isBest) {
-    if (isFastest) {
-      // Best = Fastest
-      if (r.delayMinutes <= 2) {
-        return "Fastest route with stable traffic.";
-      }
-      return "Fastest route available.";
-    }
-    
-    // Best but NOT fastest - MUST explain why chosen over fastest
-    const absDiff = Math.abs(diffFromFastest);
-    
-    if (r.delayMinutes < fastestRoute.delayMinutes) {
-      const delayDiff = fastestRoute.delayMinutes - r.delayMinutes;
-      return `Only ${absDiff} min slower than fastest, but ${delayDiff} min lower delay risk.`;
-    }
-    
-    if (trafficRank(r.traffic) < trafficRank(fastestRoute.traffic)) {
-      return `Only ${absDiff} min slower than fastest, but with lighter traffic.`;
-    }
-    
-    if (r.stabilityScore > fastestRoute.stabilityScore + 10) {
-      return `Only ${absDiff} min slower than fastest, but more stable conditions.`;
-    }
-    
-    if (r.complexity < fastestRoute.complexity - 1) {
-      const fewerTurns = fastestRoute.complexity - r.complexity;
-      return `${absDiff} min slower than fastest, but ${fewerTurns} fewer turns.`;
-    }
-    
-    return `Same time as alternatives, but lower delay risk.`;
-  }
-  
-  // Alternative routes - MUST compare to recommended
-  const role = r.role;
-  const absDiffFromBest = Math.abs(diffFromBest);
-  
-  if (role === "faster_risky") {
-    if (r.traffic === "high" && bestRoute.traffic !== "high") {
-      return `${absDiffFromBest} min faster than recommended, but heavy traffic expected.`;
-    }
-    if (r.delayMinutes > bestRoute.delayMinutes) {
-      const delayDiff = r.delayMinutes - bestRoute.delayMinutes;
-      return `${absDiffFromBest} min faster than recommended, but +${delayDiff} min delay risk.`;
-    }
-    return `${absDiffFromBest} min faster than recommended, but less predictable.`;
-  }
-  
-  if (role === "more_relaxed") {
-    const fewerTurns = bestRoute.complexity - r.complexity;
-    if (fewerTurns > 0) {
-      return `${diffFromBest} min slower than recommended, but ${fewerTurns} fewer maneuvers.`;
-    }
-    if (trafficRank(r.traffic) < trafficRank(bestRoute.traffic)) {
-      return `${diffFromBest} min slower than recommended, but lighter traffic.`;
-    }
-    return `${diffFromBest} min slower than recommended, but more relaxed driving.`;
-  }
-  
-  if (role === "similar") {
-    if (diffFromBest === 0) {
-      return "Same time as recommended, similar conditions.";
-    }
-    return `${absDiffFromBest} min ${diffFromBest > 0 ? "slower" : "faster"} than recommended, similar overall.`;
-  }
-  
-  // balanced
-  if (diffFromBest > 0) {
-    return `${diffFromBest} min slower than recommended.`;
-  } else if (diffFromBest < 0) {
-    return `${absDiffFromBest} min faster than recommended.`;
-  }
-  return "Similar to recommended route.";
-}
-
-function buildSecondaryWhyPoints(r, bestRoute, fastestRoute, allRoutes) {
-  const points = [];
-  const isBest = r.index === bestRoute.index;
-  const isFastest = r.index === fastestRoute.index;
-  
-  // ТЗ: Secondary points MUST be comparative when possible (max 2 points)
-  
-  if (isBest) {
-    // Compare to alternatives/fastest
-    if (!isFastest) {
-      const diffFromFastest = Math.abs(getDisplayDiff(r, fastestRoute));
-      if (r.delayMinutes < fastestRoute.delayMinutes) {
-        points.push(`Lower delay than fastest option (+${fastestRoute.delayMinutes - r.delayMinutes} min saved).`);
-      }
-    }
-    
-    // Highway comparison
-    const avgHighway = allRoutes.reduce((sum, x) => sum + x.highwayShare, 0) / allRoutes.length;
-    if (r.highwayShare > avgHighway + 0.1) {
-      points.push(`Higher highway usage than alternatives.`);
-    }
-    
-    // Complexity comparison
-    const avgComplexity = allRoutes.reduce((sum, x) => sum + x.complexity, 0) / allRoutes.length;
-    if (r.complexity < avgComplexity - 1) {
-      points.push(`Fewer turns than alternatives.`);
-    }
-    
-  } else {
-    // Alternative route - compare to recommended
-    const diff = getDisplayDiff(r, bestRoute);
-    
-    // Traffic comparison
-    if (trafficRank(r.traffic) > trafficRank(bestRoute.traffic)) {
-      points.push("Heavier traffic than recommended.");
-    } else if (trafficRank(r.traffic) < trafficRank(bestRoute.traffic)) {
-      points.push("Lighter traffic than recommended.");
-    }
-    
-    // Complexity comparison
-    if (r.complexity > bestRoute.complexity + 2) {
-      points.push(`More complex route (+${r.complexity - bestRoute.complexity} turns).`);
-    } else if (r.complexity < bestRoute.complexity - 2) {
-      points.push(`Fewer turns (${bestRoute.complexity - r.complexity} less).`);
-    }
-    
-    // Delay comparison
-    if (r.delayMinutes > bestRoute.delayMinutes + 2) {
-      points.push(`Higher delay risk (+${r.delayMinutes - bestRoute.delayMinutes} min).`);
-    }
-  }
-  
-  return points.slice(0, 2); // ТЗ: Max 2 points
-}
-
-// ===== ТЗ3: CONFIDENCE LEVEL =====
-
-function getConfidenceLevel(bestRoute, allRoutes) {
-  if (allRoutes.length <= 1) return "high";
-  
-  const sorted = [...allRoutes].sort((a, b) => a.score - b.score);
-  const best = sorted[0];
-  const second = sorted[1];
-  
-  const scoreDiff = second.score - best.score;
-  const timeDiff = Math.abs(getDisplayDiff(best, second));
-  
-  // High confidence: clear winner
-  if (scoreDiff > 8 || timeDiff >= 5) return "high";
-  
-  // Low confidence: very similar routes
-  if (scoreDiff < 3 && timeDiff <= 1) return "low";
-  
-  // Medium confidence: some difference
-  return "medium";
-}
-
-function getConfidenceText(level) {
-  if (level === "high") return "High confidence";
-  if (level === "medium") return "Good option";
-  return "Close alternatives";
-}
-
-// ===== ТЗ3: VIEW MODELS =====
-
-function buildBestCardViewModel(best, fastest, allRoutes) {
-  const confidence = getConfidenceLevel(best, allRoutes);
-  const primaryWhy = buildPrimaryWhy(best, best, fastest, allRoutes);
-  const whyPoints = buildSecondaryWhyPoints(best, best, fastest, allRoutes);
-  
-  return {
-    name: getRouteSummaryName(best),
-    minutes: getDisplayMinutes(best),
-    traffic: best.traffic,
-    complexity: best.complexity,
-    confidence,
-    confidenceText: getConfidenceText(confidence),
-    primaryWhy,
-    whyPoints,
-    index: best.index
-  };
-}
-
-function buildAlternativeCardViewModel(r, best, fastest, allRoutes) {
-  const role = r.role;
-  const diff = getDisplayDiff(r, best);
-  const mins = getDisplayMinutes(r);
-  
-  const roleLabels = {
-    faster_risky: "Faster, but risky",
-    more_relaxed: "More relaxed",
-    balanced: "Alternative",
-    similar: "Similar option"
-  };
-  
-  let subtitle = `~${mins} min`;
-  
-  if (role === "faster_risky") {
-    if (r.traffic !== "low") subtitle += " · heavier traffic";
-  } else if (role === "more_relaxed") {
-    subtitle += " · fewer stops";
-  } else if (diff > 0) {
-    subtitle += ` · +${diff} min`;
-  } else if (diff < 0) {
-    subtitle += ` · ${Math.abs(diff)} min faster`;
-  }
-  
-  return {
-    title: roleLabels[role] || "Alternative",
-    subtitle,
-    role,
-    index: r.index
-  };
-}
-
-// ===== ТЗ4: ROUTE SEGMENTS =====
-
-function buildRouteSegments(r) {
-  const leg = r.route.legs[0];
-  const steps = leg.steps;
-  const segments = [];
-  
-  let currentSegment = null;
-  let segmentSteps = [];
-  
-  steps.forEach((step, i) => {
-    const isHw = stepLooksLikeHighway(step, r.route);
-    const isMeaningful = isMeaningfulManeuver(step, r.route);
-    
-    // Определяем тип сегмента
-    let type = isHw ? "highway" : "city";
-    
-    // Проверяем плотность манёвров
-    if (!isHw && isMeaningful) {
-      const nearbyManeuvers = steps.slice(Math.max(0, i-2), i+3)
-        .filter(s => isMeaningfulManeuver(s, r.route)).length;
-      if (nearbyManeuvers >= 3) {
-        type = "turns";
-      }
-    }
-    
-    if (!currentSegment || currentSegment.type !== type) {
-      if (currentSegment && segmentSteps.length > 0) {
-        currentSegment.distance = segmentSteps.reduce((sum, s) => sum + (s.distance?.value || 0), 0);
-        currentSegment.duration = segmentSteps.reduce((sum, s) => sum + (s.duration?.value || 0), 0);
-        segments.push(currentSegment);
-      }
-      
-      currentSegment = { type, steps: [] };
-      segmentSteps = [];
-    }
-    
-    segmentSteps.push(step);
-    currentSegment.steps = segmentSteps;
-  });
-  
-  // Добавляем последний сегмент
-  if (currentSegment && segmentSteps.length > 0) {
-    currentSegment.distance = segmentSteps.reduce((sum, s) => sum + (s.distance?.value || 0), 0);
-    currentSegment.duration = segmentSteps.reduce((sum, s) => sum + (s.duration?.value || 0), 0);
-    segments.push(currentSegment);
-  }
-  
-  // Объединяем маленькие сегменты и добавляем traffic если есть задержка
-  const mergedSegments = [];
-  segments.forEach(seg => {
-    if (seg.distance < 500 && mergedSegments.length > 0) {
-      // Объединяем с предыдущим
-      const prev = mergedSegments[mergedSegments.length - 1];
-      prev.distance += seg.distance;
-      prev.duration += seg.duration;
-    } else {
-      mergedSegments.push(seg);
-    }
-  });
-  
-  // Помечаем сегменты с traffic проблемами
-  if (r.delayMinutes > 3 && mergedSegments.length > 0) {
-    // Предполагаем что traffic проблемы в городских участках
-    const citySegment = mergedSegments.find(s => s.type === "city");
-    if (citySegment) {
-      citySegment.type = "traffic";
-    }
-  }
-  
-  return mergedSegments.map(seg => classifySegment(seg, r));
-}
-
-function classifySegment(seg, route) {
-  const km = (seg.distance / 1000).toFixed(1);
-  const mins = Math.round(seg.duration / 60);
-  
-  const labels = {
-    highway: { icon: "&#128739;", title: "Highway section", note: "stable flow" },
-    city: { icon: "&#127961;", title: "City driving", note: "urban roads" },
-    traffic: { icon: "&#128679;", title: "Congested area", note: "expect delays" },
-    turns: { icon: "&#128260;", title: "Complex section", note: "multiple turns" }
-  };
-  
-  const label = labels[seg.type] || labels.city;
-  
-  return {
-    type: seg.type,
-    icon: label.icon,
-    title: label.title,
-    details: `${km} km · ~${mins} min · ${label.note}`,
-    distance: seg.distance,
-    duration: seg.duration
-  };
-}
-
-function buildRouteDetailsViewModel(r, bestRoute, fastestRoute, allRoutes) {
-  const isBest = r.index === bestRoute.index;
-  const role = isBest ? "recommended" : r.role;
-  const confidence = isBest ? getConfidenceLevel(bestRoute, allRoutes) : null;
-  
-  const primaryWhy = buildPrimaryWhy(r, bestRoute, fastestRoute, allRoutes);
-  const whyPoints = buildSecondaryWhyPoints(r, bestRoute, fastestRoute, allRoutes);
-  const segments = buildRouteSegments(r);
-  
-  let comparisonNote = null;
-  if (!isBest) {
-    const diff = getDisplayDiff(r, bestRoute);
-    if (diff < 0) {
-      comparisonNote = `${Math.abs(diff)} min faster than recommended, but with ${r.traffic === "high" ? "heavier traffic" : "higher risk"}.`;
-    } else if (diff > 0) {
-      comparisonNote = `${diff} min slower than recommended${r.complexity < bestRoute.complexity ? ", but with fewer maneuvers" : ""}.`;
-    }
-  }
-  
-  // Comfort/stability label
-  let stabilityLabel = "Stable";
-  if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
-  else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
-  else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
-  else stabilityLabel = "Unpredictable";
-  
-  return {
-    name: getRouteSummaryName(r),
-    role,
-    roleLabel: isBest ? "Recommended" : "Alternative",
-    confidence,
-    minutes: getDisplayMinutes(r),
-    distance: (r.distance / 1000).toFixed(1),
-    delayMinutes: r.delayMinutes,
-    traffic: r.traffic,
-    trafficText: getTrafficText(r.traffic),
-    complexity: r.complexity,
-    highwayShare: Math.round(r.highwayShare * 100),
-    stabilityLabel,
-    primaryWhy,
-    whyPoints,
-    segments,
-    comparisonNote,
-    index: r.index
-  };
-}
-
-// ===== ТЗ5: DRIVE MODE FUNCTIONS =====
-
-function buildDriveViewModel(r, stepIndex) {
-  const leg = r.route.legs[0];
-  const steps = leg.steps;
-  
-  // Вычисляем оставшееся расстояние и время
-  let remainingDistance = 0;
-  let remainingTime = 0;
-  
-  for (let i = stepIndex; i < steps.length; i++) {
-    remainingDistance += steps[i].distance?.value || 0;
-    remainingTime += steps[i].duration?.value || 0;
-  }
-  
-  const currentStep = steps[stepIndex] || steps[0];
-  const nextStep = steps[stepIndex + 1];
-  
-  return {
-    eta: Math.round(remainingTime / 60),
-    distance: (remainingDistance / 1000).toFixed(1),
-    traffic: r.traffic,
-    trafficText: getTrafficText(r.traffic),
-    instruction: stripHtml(currentStep?.html_instructions || "Follow the route"),
-    instructionDistance: currentStep?.distance?.text || "",
-    maneuver: currentStep?.maneuver || "",
-    stepIndex,
-    totalSteps: steps.length
-  };
-}
-
-function getUpcomingCondition(r, stepIndex) {
-  const leg = r.route.legs[0];
-  const steps = leg.steps;
-  const upcoming = steps.slice(stepIndex, stepIndex + 5);
-  
-  // Проверяем что впереди
-  const hasHighway = upcoming.some(s => stepLooksLikeHighway(s, r.route));
-  const hasManyTurns = upcoming.filter(s => isMeaningfulManeuver(s, r.route)).length >= 3;
-  const isNearEnd = stepIndex >= steps.length - 3;
-  
-  if (r.traffic === "high") {
-    return { type: "warning", icon: "&#9888;", text: "Heavier traffic ahead" };
-  }
-  
-  if (hasManyTurns) {
-    return { type: "warning", icon: "&#128260;", text: "Multiple turns ahead" };
-  }
-  
-  if (isNearEnd) {
-    return { type: "stable", icon: "&#127937;", text: "Approaching destination" };
-  }
-  
-  if (hasHighway) {
-    return { type: "stable", icon: "&#128739;", text: "Highway section ahead — smooth driving" };
-  }
-  
-  if (r.traffic === "low") {
-    return { type: "stable", icon: "&#9728;", text: "Stable traffic ahead" };
-  }
-  
-  return { type: "stable", icon: "&#9728;", text: "Moderate conditions ahead" };
-}
-
-function evaluateReroute(currentRoute, allRoutes) {
-  if (allRoutes.length <= 1) return null;
-  
-  const alternatives = allRoutes.filter(r => r.index !== currentRoute.index);
-  
-  for (const alt of alternatives) {
-    const scoreDiff = currentRoute.score - alt.score;
-    const timeDiff = getDisplayDiff(currentRoute, alt);
-    
-    // Если альтернатива стала заметно лучше
-    if (scoreDiff > 5 || (timeDiff > 2 && trafficRank(alt.traffic) < trafficRank(currentRoute.traffic))) {
-      const benefit = timeDiff > 0 
-        ? `${timeDiff} min faster, calmer traffic`
-        : `Calmer traffic, similar time`;
-      
-      return {
-        index: alt.index,
-        benefit,
-        name: getRouteSummaryName(alt)
-      };
-    }
-  }
-  
-  return null;
-}
-
-function startDriveMode(index) {
-  const r = analyzedRoutes.find(x => x.index === index);
-  if (!r || !currentDirectionsResult) return;
-  
-  selectedRoute = r;
-  currentStepIndex = 0;
-  betterRouteIndex = null;
-  
-  document.getElementById("drive-mode").classList.add("active");
-  
-  if (!driveMap) {
-    driveMap = new google.maps.Map(document.getElementById("drive-map"), {
-      center: { lat: 25.2048, lng: 55.2708 },
-      zoom: 14,
-      disableDefaultUI: true,
-      styles: [
-        { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
-        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] }
-      ]
-    });
-  }
-  
-  if (driveRenderer) {
-    driveRenderer.setMap(null);
-  }
-  
-  driveRenderer = new google.maps.DirectionsRenderer({
-    map: driveMap,
-    directions: currentDirectionsResult,
-    routeIndex: r.index,
-    polylineOptions: {
-      strokeColor: "#2d6a4f",
-      strokeWeight: 6
-    }
-  });
-  
-  updateDriveUI();
-  driveMap.fitBounds(r.route.bounds);
-  
-  // Запускаем симуляцию
-  if (driveInterval) clearInterval(driveInterval);
-  driveInterval = setInterval(simulateDriveProgress, 5000);
-}
-
-function updateDriveUI() {
-  const r = selectedRoute;
-  if (!r) return;
-  
-  const vm = buildDriveViewModel(r, currentStepIndex);
-  const condition = getUpcomingCondition(r, currentStepIndex);
-  
-  document.getElementById("drive-eta-time").textContent = vm.eta;
-  document.getElementById("drive-distance").textContent = vm.distance;
-  document.getElementById("drive-traffic").textContent = vm.trafficText;
-  document.getElementById("drive-next-instruction").textContent = vm.instruction;
-  document.getElementById("drive-next-distance").textContent = vm.instructionDistance;
-  
-  // Иконка манёвра
-  let icon = "&#8593;";
-  if (vm.maneuver.includes("left")) icon = "&#8592;";
-  else if (vm.maneuver.includes("right")) icon = "&#8594;";
-  else if (vm.maneuver.includes("uturn")) icon = "&#8634;";
-  document.getElementById("drive-next-icon").innerHTML = icon;
-  
-  // Ahead block
-  const aheadIcon = document.getElementById("drive-ahead-icon");
-  aheadIcon.innerHTML = condition.icon;
-  aheadIcon.className = `drive-ahead-icon ${condition.type}`;
-  document.getElementById("drive-ahead-text").textContent = condition.text;
-  
-  // Status
-  document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
-}
-
-function simulateDriveProgress() {
-  if (!selectedRoute) return;
-  
-  const leg = selectedRoute.route.legs[0];
-  const totalSteps = leg.steps.length;
-  
-  // Продвигаемся по маршруту
-  if (currentStepIndex < totalSteps - 1) {
-    currentStepIndex++;
-    updateDriveUI();
-  }
-  
-  // Проверяем альтернативы
-  const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
-  if (reroute && reroute.index !== betterRouteIndex) {
-    betterRouteIndex = reroute.index;
-    showDriveAlert(`Better route available: ${reroute.name}`, reroute.benefit);
-  }
-}
-
-function showDriveAlert(message, benefit) {
-  const alert = document.getElementById("drive-alert");
-  document.getElementById("drive-alert-message").textContent = `${message} — ${benefit}`;
-  alert.classList.add("visible");
-}
-
-function dismissAlert() {
-  document.getElementById("drive-alert").classList.remove("visible");
-  betterRouteIndex = null;
-}
-
-function switchToAlternative() {
-  if (betterRouteIndex !== null) {
-    dismissAlert();
-    startDriveMode(betterRouteIndex);
-  }
-}
-
-function exitDriveMode() {
-  document.getElementById("drive-mode").classList.remove("active");
-  if (driveInterval) {
-    clearInterval(driveInterval);
-    driveInterval = null;
-  }
-  currentStepIndex = 0;
-  betterRouteIndex = null;
-}
-
-// Alias for compatibility
-function startDrive(index) {
-  startDriveMode(index);
-}
-
-// ===== DISPLAY HELPERS =====
-
-function getDisplayMinutes(route) {
-  return Math.round(route.time / 60);
-}
-
-function getDisplayDiff(routeA, routeB) {
-  return getDisplayMinutes(routeA) - getDisplayMinutes(routeB);
-}
-
-function formatDiff(diff) {
-  const absDiff = Math.abs(diff);
-  if (absDiff === 0) return "less than 1 min";
-  return `${absDiff} min`;
-}
-
-function getTrafficText(traffic) {
-  if (traffic === "low") return "stable";
-  if (traffic === "medium") return "moderate";
-  return "heavy";
-}
-
-function getRouteSummaryName(route) {
-  const summary = route.route.summary || "";
-  if (summary.includes("E311")) return "E311";
-  if (summary.includes("E11")) return "E11";
-  if (summary.includes("E611")) return "E611";
-  if (summary.includes("Sheikh Zayed")) return "Sheikh Zayed Rd";
-  return summary.split("/")[0].trim() || `Route ${route.displayIndex}`;
-}
-
-// ===== MAP INIT =====
-
-function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 25.2048, lng: 55.2708 },
-    zoom: 11,
-    disableDefaultUI: true,
-    styles: [
-      { featureType: "poi", stylers: [{ visibility: "off" }] },
-      { featureType: "transit", stylers: [{ visibility: "off" }] }
-    ]
-  });
-
-  directionsService = new google.maps.DirectionsService();
-  
-  setTimeout(calculateRoutes, 500);
-  
-  document.getElementById("start").addEventListener("change", calculateRoutes);
-  document.getElementById("end").addEventListener("change", calculateRoutes);
-}
-
-function clearRoutes() {
-  renderers.forEach(r => r.setMap(null));
-  renderers = [];
-  analyzedRoutes = [];
-  selectedRoute = null;
-}
-
-// ===== ROUTE ANALYSIS =====
+// ============================================================
+//  HELPERS
+// ============================================================
 
 function stripHtml(text) {
   return (text || "").replace(/<[^>]*>/g, " ").trim();
@@ -1798,17 +1066,20 @@ function trafficRank(level) {
   return 3;
 }
 
+function getTrafficText(traffic) {
+  if (traffic === "low") return "stable";
+  if (traffic === "medium") return "moderate";
+  return "heavy";
+}
+
 function isMeaningfulManeuver(step, route) {
   if (!step) return false;
-  
   const html = stripHtml(step.html_instructions || "").toLowerCase();
   const maneuver = (step.maneuver || "").toLowerCase();
-  
   const strong = ["turn-left", "turn-right", "uturn-left", "uturn-right", "roundabout"];
   if (strong.some(m => maneuver.includes(m))) return true;
   if (html.includes("exit")) return true;
   if (html.includes("continue") || html.includes("keep") || html.includes("slight")) return false;
-  
   return false;
 }
 
@@ -1816,42 +1087,287 @@ function countComplexity(leg, route) {
   return leg.steps.filter(s => isMeaningfulManeuver(s, route)).length;
 }
 
+function calculateHighwayShare(leg, route) {
+  const total = leg.distance?.value || 0;
+  if (!total) return 0;
+  let hwDistance = 0;
+  leg.steps.forEach(step => {
+    if (stepLooksLikeHighway(step, route)) {
+      hwDistance += step.distance?.value || 0;
+    }
+  });
+  return hwDistance / total;
+}
+
+function getDisplayMinutes(route) {
+  return Math.round(route.time / 60);
+}
+
+function getDisplayDiff(routeA, routeB) {
+  return getDisplayMinutes(routeA) - getDisplayMinutes(routeB);
+}
+
+function getRouteSummaryName(route) {
+  const summary = route.route.summary || "";
+  if (summary.includes("E311")) return "E311";
+  if (summary.includes("E11")) return "E11";
+  if (summary.includes("E611")) return "E611";
+  if (summary.includes("Sheikh Zayed")) return "Sheikh Zayed Rd";
+  return summary.split("/")[0].trim() || `Route ${route.displayIndex}`;
+}
+
+function getConfidenceText(level) {
+  if (level === "high") return "High confidence";
+  if (level === "medium") return "Good option";
+  return "Close alternatives";
+}
+
+// ============================================================
+//  ROUTE METRICS
+// ============================================================
+
+function calculateRouteMetrics(route, leg, rawRoute) {
+  const baseTime = leg.duration.value;
+  const time = leg.duration_in_traffic?.value || baseTime;
+  const distance = leg.distance.value;
+  const delaySeconds = Math.max(0, time - baseTime);
+  const delayMinutes = Math.round(delaySeconds / 60);
+  const complexity = countComplexity(leg, rawRoute);
+  const highwayShare = calculateHighwayShare(leg, rawRoute);
+  const traffic = getTrafficLevel(baseTime, time);
+
+  return {
+    time,
+    baseTime,
+    distance,
+    delaySeconds,
+    delayMinutes,
+    complexity,
+    highwayShare,
+    traffic,
+    highway: highwayShare >= 0.35
+  };
+}
+
+function calculateRouteScore(r, allRoutes) {
+  const fastest = allRoutes.length ? Math.min(...allRoutes.map(x => x.time)) : r.time;
+  const timeScore = (r.time - fastest) / 60;
+  const trafficPenalty = r.traffic === "high" ? 15 : r.traffic === "medium" ? 5 : 0;
+  const complexityPenalty = r.complexity * 0.75;
+  const highwayBonus = r.highwayShare * -3;
+  const delayPenalty = r.delayMinutes * 1.5;
+  const stabilityScore = Math.max(0, 100 - trafficPenalty * 3 - r.complexity * 2 - r.delayMinutes * 4);
+  const score = timeScore + trafficPenalty + complexityPenalty + highwayBonus + delayPenalty;
+
+  return {
+    score,
+    timeScore,
+    trafficPenalty,
+    complexityPenalty,
+    highwayBonus,
+    delayPenalty,
+    stabilityScore
+  };
+}
+
+// ============================================================
+//  TZ2: SINGLE SOURCE OF TRUTH — generateWhy()
+//  ALL why text comes from here. No other function may
+//  generate recommendation text.
+// ============================================================
+
+function generateWhy(route, recommendedRoute, fastestRoute, allRoutes) {
+  const isBest = route.index === recommendedRoute.index;
+  const isFastest = route.index === fastestRoute.index;
+
+  // ---- PRIMARY WHY ----
+  let primary;
+
+  if (isBest) {
+    if (isFastest) {
+      // Recommended === fastest
+      if (route.delayMinutes <= 2) {
+        primary = "Fastest route with no additional delay compared to alternatives.";
+      } else {
+        primary = `Fastest available route, though ${route.delayMinutes} min delay is expected due to traffic.`;
+      }
+    } else {
+      // Recommended is NOT fastest — must explain trade-off vs fastest
+      const diffFromFastest = Math.abs(getDisplayDiff(route, fastestRoute));
+
+      if (route.delayMinutes < fastestRoute.delayMinutes) {
+        const delayDiff = fastestRoute.delayMinutes - route.delayMinutes;
+        primary = `Only ${diffFromFastest} min slower than fastest, but ${delayDiff} min lower delay risk.`;
+      } else if (trafficRank(route.traffic) < trafficRank(fastestRoute.traffic)) {
+        primary = `Only ${diffFromFastest} min slower than fastest, but with lighter traffic conditions.`;
+      } else if (route.stabilityScore > fastestRoute.stabilityScore + 10) {
+        primary = `Only ${diffFromFastest} min slower than fastest, but more stable and predictable.`;
+      } else if (route.complexity < fastestRoute.complexity - 1) {
+        const fewerTurns = fastestRoute.complexity - route.complexity;
+        primary = `${diffFromFastest} min slower than fastest, but ${fewerTurns} fewer turns required.`;
+      } else {
+        primary = `Same time as alternatives, but lower delay risk than other options.`;
+      }
+    }
+  } else {
+    // Alternative route — compare to recommended
+    const diffFromBest = getDisplayDiff(route, recommendedRoute);
+    const absDiff = Math.abs(diffFromBest);
+    const role = route.role;
+
+    if (route.time < recommendedRoute.time) {
+      // Faster than recommended
+      if (route.traffic === "high" && recommendedRoute.traffic !== "high") {
+        primary = `${absDiff} min faster than recommended, but heavy traffic expected.`;
+      } else if (route.delayMinutes > recommendedRoute.delayMinutes) {
+        const delayDiff = route.delayMinutes - recommendedRoute.delayMinutes;
+        primary = `${absDiff} min faster than recommended, but +${delayDiff} min higher delay risk.`;
+      } else {
+        primary = `${absDiff} min faster than recommended, but higher delay risk.`;
+      }
+    } else {
+      // Slower than recommended
+      const fewerTurns = recommendedRoute.complexity - route.complexity;
+      if (fewerTurns > 0) {
+        primary = `${diffFromBest} min slower than recommended, but ${fewerTurns} fewer maneuvers.`;
+      } else if (trafficRank(route.traffic) < trafficRank(recommendedRoute.traffic)) {
+        primary = `${diffFromBest} min slower than recommended, but with lighter traffic.`;
+      } else if (diffFromBest === 0) {
+        if (Math.abs(route.complexity - recommendedRoute.complexity) <= 2) {
+          primary = "Almost identical to recommended route.";
+        } else {
+          primary = "Same time as recommended, similar overall conditions.";
+        }
+      } else {
+        primary = `${diffFromBest} min slower than recommended, but more stable traffic.`;
+      }
+    }
+  }
+
+  // ---- SECONDARY WHY (max 2, all comparative) ----
+  const secondary = [];
+
+  if (isBest) {
+    // Compare to other routes / fastest
+    if (!isFastest && fastestRoute.delayMinutes > route.delayMinutes) {
+      secondary.push(`Lower delay than fastest option (+${fastestRoute.delayMinutes - route.delayMinutes} min saved).`);
+    }
+    const avgHighway = allRoutes.reduce((s, x) => s + x.highwayShare, 0) / allRoutes.length;
+    if (route.highwayShare > avgHighway + 0.1) {
+      secondary.push("Higher highway usage than alternatives.");
+    }
+    const avgComplexity = allRoutes.reduce((s, x) => s + x.complexity, 0) / allRoutes.length;
+    if (route.complexity < avgComplexity - 1) {
+      secondary.push("Fewer turns than alternatives.");
+    }
+    if (trafficRank(route.traffic) < trafficRank(fastestRoute.traffic) && !isFastest) {
+      secondary.push("Lighter traffic than fastest option.");
+    }
+  } else {
+    // Compare alternative to recommended
+    if (trafficRank(route.traffic) > trafficRank(recommendedRoute.traffic)) {
+      secondary.push("Heavier traffic than recommended.");
+    } else if (trafficRank(route.traffic) < trafficRank(recommendedRoute.traffic)) {
+      secondary.push("Lighter traffic than recommended.");
+    }
+    if (route.complexity > recommendedRoute.complexity + 2) {
+      secondary.push(`More complex route (+${route.complexity - recommendedRoute.complexity} turns).`);
+    } else if (route.complexity < recommendedRoute.complexity - 2) {
+      secondary.push(`Fewer turns (${recommendedRoute.complexity - route.complexity} less than recommended).`);
+    }
+    if (route.delayMinutes > recommendedRoute.delayMinutes + 2) {
+      secondary.push(`Higher delay risk (+${route.delayMinutes - recommendedRoute.delayMinutes} min).`);
+    }
+  }
+
+  return {
+    primary,
+    secondary: secondary.slice(0, 2)
+  };
+}
+
+// ============================================================
+//  ROUTE ROLE CLASSIFICATION
+// ============================================================
+
+function getRouteRole(r, bestRoute, fastestRoute, allRoutes) {
+  if (r.index === bestRoute.index) return "recommended";
+
+  const diffFromBest = getDisplayDiff(r, bestRoute);
+  const isFaster = diffFromBest < 0;
+  const isSlower = diffFromBest > 0;
+
+  const hasMoreTraffic = trafficRank(r.traffic) > trafficRank(bestRoute.traffic);
+  const hasMoreDelay = r.delayMinutes > bestRoute.delayMinutes + 2;
+  const isRiskier = hasMoreTraffic || hasMoreDelay;
+
+  const fewerTurns = r.complexity < bestRoute.complexity - 1;
+  const lighterTraffic = trafficRank(r.traffic) < trafficRank(bestRoute.traffic);
+  const isMoreRelaxed = fewerTurns || lighterTraffic;
+
+  const timeSimilar = Math.abs(diffFromBest) <= 1;
+  const complexitySimilar = Math.abs(r.complexity - bestRoute.complexity) <= 2;
+  const trafficSimilar = trafficRank(r.traffic) === trafficRank(bestRoute.traffic);
+  const isSimilar = timeSimilar && complexitySimilar && trafficSimilar;
+
+  if (isFaster && isRiskier) return "faster_risky";
+  if (isSlower && isMoreRelaxed) return "more_relaxed";
+  if (isSimilar) return "similar";
+  return "balanced";
+}
+
+// ============================================================
+//  CONFIDENCE LEVEL
+// ============================================================
+
+function getConfidenceLevel(bestRoute, allRoutes) {
+  if (allRoutes.length <= 1) return "high";
+
+  const sorted = [...allRoutes].sort((a, b) => a.score - b.score);
+  const best = sorted[0];
+  const second = sorted[1];
+
+  const scoreDiff = second.score - best.score;
+  const timeDiff = Math.abs(getDisplayDiff(best, second));
+
+  if (scoreDiff > 8 || timeDiff >= 5) return "high";
+  if (scoreDiff < 3 && timeDiff <= 1) return "low";
+  return "medium";
+}
+
+// ============================================================
+//  DECISION LOGIC — SELECT RECOMMENDED ROUTE
+// ============================================================
+
 function selectBestRoute(routes) {
-  // ТЗ: STRICT RULES for selecting recommended route
   if (!routes?.length) return null;
   if (routes.length === 1) return routes[0];
-  
-  // STEP 2: Find fastest route
+
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
-  
-  // STEP 3: Determine recommended route
+
   // Rule 1: If fastest has low delay, use fastest
   if (fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
     return fastest;
   }
-  
+
   // Rule 2: Find route within 2-3 min of fastest with better stability
   let recommended = fastest;
-  
+
   for (const r of routes) {
     if (r.index === fastest.index) continue;
-    
-    const timeDiff = getDisplayDiff(r, fastest); // positive = r is slower
-    
-    // Within 3 minutes of fastest
+
+    const timeDiff = getDisplayDiff(r, fastest);
+
     if (timeDiff >= 0 && timeDiff <= 3) {
-      // Check if this route has lower delay OR higher stability
       const hasLowerDelay = r.delayMinutes < fastest.delayMinutes - 1;
       const hasHigherStability = r.stabilityScore > fastest.stabilityScore + 10;
       const hasLighterTraffic = trafficRank(r.traffic) < trafficRank(fastest.traffic);
-      
+
       if (hasLowerDelay || hasHigherStability || hasLighterTraffic) {
-        // This route is better despite being slightly slower
         if (recommended.index === fastest.index) {
           recommended = r;
         } else {
-          // Compare with current recommended
-          const betterThanCurrent = 
+          const betterThanCurrent =
             (r.delayMinutes < recommended.delayMinutes) ||
             (r.stabilityScore > recommended.stabilityScore);
           if (betterThanCurrent) {
@@ -1861,123 +1377,340 @@ function selectBestRoute(routes) {
       }
     }
   }
-  
+
   return recommended;
 }
 
-// ===== RENDER FUNCTIONS =====
+// ============================================================
+//  ROUTE SEGMENTS (for Route Details modal)
+// ============================================================
 
-function renderResults() {
-  const container = document.getElementById("results");
-  const quickAccess = document.getElementById("quick-access");
-  
-  if (!analyzedRoutes.length) {
-    container.innerHTML = "";
-    quickAccess.classList.remove("hidden");
-    return;
-  }
-  
-  quickAccess.classList.add("hidden");
-  
-  const best = selectBestRoute(analyzedRoutes);
-  const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-  selectedRoute = best;
-  
-  // Назначаем роли
-  analyzedRoutes.forEach(r => {
-    r.role = getRouteRole(r, best, fastest, analyzedRoutes);
-  });
-  
-  let html = "";
-  
-  // Best card (ТЗ3: AI Decision Layer)
-  const bestVM = buildBestCardViewModel(best, fastest, analyzedRoutes);
-  const confidenceClass = `confidence-${bestVM.confidence}`;
-  
-  html += `
-    <div class="best-card">
-      <div class="best-label">AI Recommendation</div>
-      <div class="best-badge">
-        <svg viewBox="0 0 24 24"><path fill="white" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-      </div>
-      <h2 class="best-title">Best route: ${bestVM.name}</h2>
-      <p class="best-subtitle">${bestVM.minutes} min &middot; ${getTrafficText(bestVM.traffic)} traffic &middot; ${bestVM.complexity <= 4 ? "minimal stops" : bestVM.complexity + " turns"}</p>
-      <p class="best-reason">${bestVM.primaryWhy}</p>
-      <div class="best-points">
-        ${bestVM.whyPoints.slice(0, 2).map(p => `<div class="best-point">${p}</div>`).join("")}
-      </div>
-      <span class="confidence-badge ${confidenceClass}">${bestVM.confidenceText}</span>
-      <button class="start-btn" onclick="startDrive(${bestVM.index})">Start via ${bestVM.name}</button>
-      <div class="why-link" onclick="openRouteDetails(${bestVM.index})">Why this route? &rsaquo;</div>
-    </div>
-  `;
-  
-  // Alternative cards (ТЗ3)
-  analyzedRoutes.forEach(r => {
-    if (r.index === best.index) return;
-    
-    const altVM = buildAlternativeCardViewModel(r, best, fastest, analyzedRoutes);
-    const icons = {
-      faster_risky: "&#9888;",
-      more_relaxed: "&#128663;",
-      balanced: "&#128736;",
-      similar: "&#128257;"
-    };
-    
-    html += `
-      <div class="alt-card ${altVM.role}" onclick="openRouteDetails(${altVM.index})">
-        <div class="alt-icon">${icons[altVM.role] || "&#128736;"}</div>
-        <div class="alt-content">
-          <div class="alt-title">${altVM.title}</div>
-          <div class="alt-subtitle">${altVM.subtitle}</div>
-        </div>
-        <div class="alt-arrow">&#8250;</div>
-      </div>
-    `;
-  });
-  
-  container.innerHTML = html;
-}
+function buildRouteSegments(r) {
+  const leg = r.route.legs[0];
+  const steps = leg.steps;
+  const segments = [];
 
-function drawRoutes(result) {
-  const best = selectBestRoute(analyzedRoutes);
-  
-  analyzedRoutes.forEach(r => {
-    const isBest = r.index === best.index;
-    const renderer = new google.maps.DirectionsRenderer({
-      map: map,
-      directions: result,
-      routeIndex: r.index,
-      suppressMarkers: !isBest,
-      polylineOptions: {
-        strokeColor: isBest ? "#2d6a4f" : "#9ca3af",
-        strokeOpacity: isBest ? 1 : 0.6,
-        strokeWeight: isBest ? 6 : 4
+  let currentSegment = null;
+  let segmentSteps = [];
+
+  steps.forEach((step, i) => {
+    const isHw = stepLooksLikeHighway(step, r.route);
+    const isMeaningful = isMeaningfulManeuver(step, r.route);
+
+    let type = isHw ? "highway" : "city";
+
+    if (!isHw && isMeaningful) {
+      const nearbyManeuvers = steps.slice(Math.max(0, i - 2), i + 3)
+        .filter(s => isMeaningfulManeuver(s, r.route)).length;
+      if (nearbyManeuvers >= 3) type = "turns";
+    }
+
+    if (!currentSegment || currentSegment.type !== type) {
+      if (currentSegment && segmentSteps.length > 0) {
+        currentSegment.distance = segmentSteps.reduce((sum, s) => sum + (s.distance?.value || 0), 0);
+        currentSegment.duration = segmentSteps.reduce((sum, s) => sum + (s.duration?.value || 0), 0);
+        segments.push(currentSegment);
       }
-    });
-    renderers.push(renderer);
+      currentSegment = { type, steps: [] };
+      segmentSteps = [];
+    }
+
+    segmentSteps.push(step);
+    currentSegment.steps = segmentSteps;
   });
-  
-  if (best) {
-    map.fitBounds(best.route.bounds);
+
+  if (currentSegment && segmentSteps.length > 0) {
+    currentSegment.distance = segmentSteps.reduce((sum, s) => sum + (s.distance?.value || 0), 0);
+    currentSegment.duration = segmentSteps.reduce((sum, s) => sum + (s.duration?.value || 0), 0);
+    segments.push(currentSegment);
+  }
+
+  const mergedSegments = [];
+  segments.forEach(seg => {
+    if (seg.distance < 500 && mergedSegments.length > 0) {
+      const prev = mergedSegments[mergedSegments.length - 1];
+      prev.distance += seg.distance;
+      prev.duration += seg.duration;
+    } else {
+      mergedSegments.push(seg);
+    }
+  });
+
+  if (r.delayMinutes > 3 && mergedSegments.length > 0) {
+    const citySegment = mergedSegments.find(s => s.type === "city");
+    if (citySegment) citySegment.type = "traffic";
+  }
+
+  return mergedSegments.map(seg => {
+    const km = (seg.distance / 1000).toFixed(1);
+    const mins = Math.round(seg.duration / 60);
+    const labels = {
+      highway: { icon: "&#128739;", title: "Highway section", note: "stable flow" },
+      city: { icon: "&#127961;", title: "City driving", note: "urban roads" },
+      traffic: { icon: "&#128679;", title: "Congested area", note: "expect delays" },
+      turns: { icon: "&#128260;", title: "Complex section", note: "multiple turns" }
+    };
+    const label = labels[seg.type] || labels.city;
+    return {
+      type: seg.type,
+      icon: label.icon,
+      title: label.title,
+      details: `${km} km · ~${mins} min · ${label.note}`,
+      distance: seg.distance,
+      duration: seg.duration
+    };
+  });
+}
+
+// ============================================================
+//  DRIVE MODE
+// ============================================================
+
+function buildDriveViewModel(r, stepIndex) {
+  const leg = r.route.legs[0];
+  const steps = leg.steps;
+  let remainingDistance = 0;
+  let remainingTime = 0;
+
+  for (let i = stepIndex; i < steps.length; i++) {
+    remainingDistance += steps[i].distance?.value || 0;
+    remainingTime += steps[i].duration?.value || 0;
+  }
+
+  const currentStep = steps[stepIndex] || steps[0];
+
+  return {
+    eta: Math.round(remainingTime / 60),
+    distance: (remainingDistance / 1000).toFixed(1),
+    traffic: r.traffic,
+    trafficText: getTrafficText(r.traffic),
+    instruction: stripHtml(currentStep?.html_instructions || "Follow the route"),
+    instructionDistance: currentStep?.distance?.text || "",
+    maneuver: currentStep?.maneuver || "",
+    stepIndex,
+    totalSteps: steps.length
+  };
+}
+
+function getUpcomingCondition(r, stepIndex) {
+  const leg = r.route.legs[0];
+  const steps = leg.steps;
+  const upcoming = steps.slice(stepIndex, stepIndex + 5);
+
+  const hasHighway = upcoming.some(s => stepLooksLikeHighway(s, r.route));
+  const hasManyTurns = upcoming.filter(s => isMeaningfulManeuver(s, r.route)).length >= 3;
+  const isNearEnd = stepIndex >= steps.length - 3;
+
+  if (r.traffic === "high") {
+    return { type: "warning", icon: "&#9888;", text: "Heavier traffic ahead" };
+  }
+  if (hasManyTurns) {
+    return { type: "warning", icon: "&#128260;", text: "Multiple turns ahead" };
+  }
+  if (isNearEnd) {
+    return { type: "stable", icon: "&#127937;", text: "Approaching destination" };
+  }
+  if (hasHighway) {
+    return { type: "stable", icon: "&#128739;", text: "Highway section ahead — smooth driving" };
+  }
+  if (r.traffic === "low") {
+    return { type: "stable", icon: "&#9728;", text: "Stable traffic ahead" };
+  }
+  return { type: "stable", icon: "&#9728;", text: "Moderate conditions ahead" };
+}
+
+function evaluateReroute(currentRoute, allRoutes) {
+  if (allRoutes.length <= 1) return null;
+
+  const alternatives = allRoutes.filter(r => r.index !== currentRoute.index);
+
+  for (const alt of alternatives) {
+    const scoreDiff = currentRoute.score - alt.score;
+    const timeDiff = getDisplayDiff(currentRoute, alt);
+
+    if (scoreDiff > 5 || (timeDiff > 2 && trafficRank(alt.traffic) < trafficRank(currentRoute.traffic))) {
+      const benefit = timeDiff > 0
+        ? `${timeDiff} min faster, calmer traffic`
+        : `Calmer traffic, similar time`;
+
+      return {
+        index: alt.index,
+        benefit,
+        name: getRouteSummaryName(alt)
+      };
+    }
+  }
+  return null;
+}
+
+function startDriveMode(index) {
+  const r = analyzedRoutes.find(x => x.index === index);
+  if (!r || !currentDirectionsResult) return;
+
+  selectedRoute = r;
+  currentStepIndex = 0;
+  betterRouteIndex = null;
+
+  document.getElementById("drive-mode").classList.add("active");
+
+  if (!driveMap) {
+    driveMap = new google.maps.Map(document.getElementById("drive-map"), {
+      center: { lat: 25.2048, lng: 55.2708 },
+      zoom: 14,
+      disableDefaultUI: true,
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] }
+      ]
+    });
+  }
+
+  if (driveRenderer) driveRenderer.setMap(null);
+
+  driveRenderer = new google.maps.DirectionsRenderer({
+    map: driveMap,
+    directions: currentDirectionsResult,
+    routeIndex: r.index,
+    polylineOptions: {
+      strokeColor: "#2d6a4f",
+      strokeWeight: 6
+    }
+  });
+
+  updateDriveUI();
+  driveMap.fitBounds(r.route.bounds);
+
+  if (driveInterval) clearInterval(driveInterval);
+  driveInterval = setInterval(simulateDriveProgress, 5000);
+}
+
+function updateDriveUI() {
+  const r = selectedRoute;
+  if (!r) return;
+
+  const vm = buildDriveViewModel(r, currentStepIndex);
+  const condition = getUpcomingCondition(r, currentStepIndex);
+
+  document.getElementById("drive-eta-time").textContent = vm.eta;
+  document.getElementById("drive-distance").textContent = vm.distance;
+  document.getElementById("drive-traffic").textContent = vm.trafficText;
+  document.getElementById("drive-next-instruction").textContent = vm.instruction;
+  document.getElementById("drive-next-distance").textContent = vm.instructionDistance;
+
+  let icon = "&#8593;";
+  if (vm.maneuver.includes("left")) icon = "&#8592;";
+  else if (vm.maneuver.includes("right")) icon = "&#8594;";
+  else if (vm.maneuver.includes("uturn")) icon = "&#8634;";
+  document.getElementById("drive-next-icon").innerHTML = icon;
+
+  const aheadIcon = document.getElementById("drive-ahead-icon");
+  aheadIcon.innerHTML = condition.icon;
+  aheadIcon.className = `drive-ahead-icon ${condition.type}`;
+  document.getElementById("drive-ahead-text").textContent = condition.text;
+
+  document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
+}
+
+function simulateDriveProgress() {
+  if (!selectedRoute) return;
+
+  const leg = selectedRoute.route.legs[0];
+  const totalSteps = leg.steps.length;
+
+  if (currentStepIndex < totalSteps - 1) {
+    currentStepIndex++;
+    updateDriveUI();
+  }
+
+  const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
+  if (reroute && reroute.index !== betterRouteIndex) {
+    betterRouteIndex = reroute.index;
+    showDriveAlert(`Better route available: ${reroute.name}`, reroute.benefit);
   }
 }
 
-// ===== CALCULATE ROUTES =====
+function showDriveAlert(message, benefit) {
+  const alert = document.getElementById("drive-alert");
+  document.getElementById("drive-alert-message").textContent = `${message} — ${benefit}`;
+  alert.classList.add("visible");
+}
+
+function dismissAlert() {
+  document.getElementById("drive-alert").classList.remove("visible");
+  betterRouteIndex = null;
+}
+
+function switchToAlternative() {
+  if (betterRouteIndex !== null) {
+    dismissAlert();
+    startDriveMode(betterRouteIndex);
+  }
+}
+
+function exitDriveMode() {
+  document.getElementById("drive-mode").classList.remove("active");
+  if (driveInterval) {
+    clearInterval(driveInterval);
+    driveInterval = null;
+  }
+  currentStepIndex = 0;
+  betterRouteIndex = null;
+}
+
+function startDrive(index) {
+  startDriveMode(index);
+}
+
+// ============================================================
+//  MAP INIT
+// ============================================================
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: { lat: 25.2048, lng: 55.2708 },
+    zoom: 11,
+    disableDefaultUI: true,
+    styles: [
+      { featureType: "poi", stylers: [{ visibility: "off" }] },
+      { featureType: "transit", stylers: [{ visibility: "off" }] }
+    ]
+  });
+
+  directionsService = new google.maps.DirectionsService();
+
+  setTimeout(calculateRoutes, 500);
+
+  document.getElementById("start").addEventListener("change", calculateRoutes);
+  document.getElementById("end").addEventListener("change", calculateRoutes);
+}
+
+function clearRoutes() {
+  renderers.forEach(r => r.setMap(null));
+  renderers = [];
+  analyzedRoutes = [];
+  selectedRoute = null;
+}
+
+// ============================================================
+//  ROUTE ANALYSIS + RENDERING
+// ============================================================
 
 function calculateRoutes() {
   clearRoutes();
-  
+
   const start = document.getElementById("start").value.trim();
   const end = document.getElementById("end").value.trim();
-  
+
   if (!start || !end) {
     document.getElementById("results").innerHTML = "";
     return;
   }
-  
+
   document.getElementById("results").innerHTML = '<div class="loading">Finding best routes...</div>';
-  
+
   directionsService.route({
     origin: start,
     destination: end,
@@ -1992,60 +1725,194 @@ function calculateRoutes() {
       document.getElementById("results").innerHTML = `<div class="error">Could not find route: ${status}</div>`;
       return;
     }
-    
+
     const routes = result.routes;
     if (!routes?.length) {
       document.getElementById("results").innerHTML = '<div class="error">No routes found.</div>';
       return;
     }
-    
+
     currentDirectionsResult = result;
-    
-    // Первый проход: базовые метрики
+
+    // Pass 1: base metrics
     analyzedRoutes = routes.map((route, i) => {
       const leg = route.legs[0];
       const metrics = calculateRouteMetrics(route, leg, route);
-      
-      return {
-        route,
-        index: i,
-        displayIndex: i + 1,
-        ...metrics
-      };
+      return { route, index: i, displayIndex: i + 1, ...metrics };
     });
-    
-    // Второй проход: score и normalized metrics
+
+    // Pass 2: score + stability
     analyzedRoutes = analyzedRoutes.map(r => {
       const scoreData = calculateRouteScore(r, analyzedRoutes);
-      return {
-        ...r,
-        ...scoreData
-      };
+      return { ...r, ...scoreData };
     });
-    
+
+    // Assign roles (uses generateWhy for WHY text downstream)
+    const best = selectBestRoute(analyzedRoutes);
+    const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+    analyzedRoutes.forEach(r => {
+      r.role = getRouteRole(r, best, fastest, analyzedRoutes);
+    });
+
     renderResults();
     drawRoutes(result);
   });
 }
 
-// ===== ROUTE DETAILS MODAL (ТЗ4) =====
+function drawRoutes(result) {
+  const best = selectBestRoute(analyzedRoutes);
+
+  analyzedRoutes.forEach(r => {
+    const isBest = best && r.index === best.index;
+    const renderer = new google.maps.DirectionsRenderer({
+      map: map,
+      directions: result,
+      routeIndex: r.index,
+      suppressMarkers: !isBest,
+      polylineOptions: {
+        strokeColor: isBest ? "#2d6a4f" : "#9ca3af",
+        strokeOpacity: isBest ? 1 : 0.6,
+        strokeWeight: isBest ? 6 : 4
+      }
+    });
+    renderers.push(renderer);
+  });
+
+  if (best) map.fitBounds(best.route.bounds);
+}
+
+function renderResults() {
+  const container = document.getElementById("results");
+  const quickAccess = document.getElementById("quick-access");
+
+  if (!analyzedRoutes.length) {
+    container.innerHTML = "";
+    quickAccess.classList.remove("hidden");
+    return;
+  }
+
+  quickAccess.classList.add("hidden");
+
+  const best = selectBestRoute(analyzedRoutes);
+  const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+  selectedRoute = best;
+
+  analyzedRoutes.forEach(r => {
+    r.role = getRouteRole(r, best, fastest, analyzedRoutes);
+  });
+
+  // --- Best card ---
+  const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
+  const confidence = getConfidenceLevel(best, analyzedRoutes);
+  const confidenceClass = `confidence-${confidence}`;
+
+  let html = `
+    <div class="best-card">
+      <div class="best-label">AI Recommendation</div>
+      <div class="best-badge">
+        <svg viewBox="0 0 24 24"><path fill="white" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      </div>
+      <h2 class="best-title">Best route: ${getRouteSummaryName(best)}</h2>
+      <p class="best-subtitle">${getDisplayMinutes(best)} min &middot; ${getTrafficText(best.traffic)} traffic &middot; ${best.complexity <= 4 ? "minimal stops" : best.complexity + " turns"}</p>
+      <p class="best-reason">${bestWhy.primary}</p>
+      <div class="best-points">
+        ${bestWhy.secondary.map(p => `<div class="best-point">${p}</div>`).join("")}
+      </div>
+      <span class="confidence-badge ${confidenceClass}">${getConfidenceText(confidence)}</span>
+      <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
+      <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
+    </div>
+  `;
+
+  // --- Alternative cards ---
+  analyzedRoutes.forEach(r => {
+    if (r.index === best.index) return;
+
+    const altWhy = generateWhy(r, best, fastest, analyzedRoutes);
+    const roleLabels = {
+      faster_risky: "Faster, but risky",
+      more_relaxed: "More relaxed",
+      balanced: "Alternative",
+      similar: "Similar option"
+    };
+    const icons = {
+      faster_risky: "&#9888;",
+      more_relaxed: "&#128663;",
+      balanced: "&#128736;",
+      similar: "&#128257;"
+    };
+
+    const diff = getDisplayDiff(r, best);
+    let subtitle = `~${getDisplayMinutes(r)} min`;
+    if (r.role === "faster_risky") {
+      if (r.traffic !== "low") subtitle += " · heavier traffic";
+    } else if (r.role === "more_relaxed") {
+      subtitle += " · fewer stops";
+    } else if (diff > 0) {
+      subtitle += ` · +${diff} min`;
+    } else if (diff < 0) {
+      subtitle += ` · ${Math.abs(diff)} min faster`;
+    }
+
+    html += `
+      <div class="alt-card ${r.role}" onclick="openRouteDetails(${r.index})">
+        <div class="alt-icon">${icons[r.role] || "&#128736;"}</div>
+        <div class="alt-content">
+          <div class="alt-title">${roleLabels[r.role] || "Alternative"}</div>
+          <div class="alt-subtitle">${subtitle}</div>
+        </div>
+        <div class="alt-arrow">&#8250;</div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+//  ROUTE DETAILS MODAL
+// ============================================================
 
 function openRouteDetails(index) {
   const r = analyzedRoutes.find(x => x.index === index);
   if (!r) return;
-  
+
   const best = selectBestRoute(analyzedRoutes);
   const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-  
-  const vm = buildRouteDetailsViewModel(r, best, fastest, analyzedRoutes);
-  
+
+  // ALL why text comes from single source: generateWhy()
+  const why = generateWhy(r, best, fastest, analyzedRoutes);
+  const isBest = r.index === best.index;
+  const segments = buildRouteSegments(r);
+
+  let stabilityLabel = "Stable";
+  if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
+  else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
+  else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
+  else stabilityLabel = "Unpredictable";
+
+  let comparisonNote = "";
+  if (!isBest) {
+    const diff = getDisplayDiff(r, best);
+    if (diff < 0) {
+      comparisonNote = `<div class="comparison-note">${Math.abs(diff)} min faster than recommended, but with ${r.traffic === "high" ? "heavier traffic" : "higher risk"}.</div>`;
+    } else if (diff > 0) {
+      comparisonNote = `<div class="comparison-note">${diff} min slower than recommended${r.complexity < best.complexity ? ", but with fewer maneuvers" : ""}.</div>`;
+    }
+  }
+
+  let confidence = isBest ? getConfidenceLevel(best, analyzedRoutes) : null;
+  let confidenceHtml = confidence
+    ? `<span class="confidence-badge confidence-${confidence}" style="margin-left:8px">${getConfidenceText(confidence)}</span>`
+    : "";
+
   let segmentsHtml = "";
-  if (vm.segments.length > 0) {
+  if (segments.length > 0) {
     segmentsHtml = `
       <div class="detail-section">
         <div class="detail-section-title">Route Breakdown</div>
         <div class="segment-list">
-          ${vm.segments.map(seg => `
+          ${segments.map(seg => `
             <div class="segment-item">
               <div class="segment-icon ${seg.type}">${seg.icon}</div>
               <div class="segment-content">
@@ -2058,77 +1925,69 @@ function openRouteDetails(index) {
       </div>
     `;
   }
-  
-  let comparisonHtml = "";
-  if (vm.comparisonNote) {
-    comparisonHtml = `<div class="comparison-note">${vm.comparisonNote}</div>`;
-  }
-  
-  let confidenceHtml = "";
-  if (vm.confidence) {
-    const confClass = `confidence-${vm.confidence}`;
-    confidenceHtml = `<span class="confidence-badge ${confClass}" style="margin-left: 8px">${getConfidenceText(vm.confidence)}</span>`;
-  }
-  
+
+  const distKm = (r.distance / 1000).toFixed(1);
+  const highwayPct = Math.round(r.highwayShare * 100);
+
   document.getElementById("modal-content").innerHTML = `
     <div class="modal-handle"></div>
     <div class="modal-header">
       <div>
-        <h2 class="modal-title">${vm.name}</h2>
+        <h2 class="modal-title">${getRouteSummaryName(r)}</h2>
       </div>
-      <span class="modal-role-badge ${vm.role}">${vm.roleLabel}</span>
+      <span class="modal-role-badge ${isBest ? "recommended" : "alternative"}">${isBest ? "Recommended" : "Alternative"}</span>
     </div>
-    
+
     <div class="detail-section">
       <div class="detail-section-title">Core Metrics</div>
       <div class="detail-grid">
         <div class="detail-item">
           <div class="detail-label">Time</div>
-          <div class="detail-value">${vm.minutes} min</div>
+          <div class="detail-value">${getDisplayMinutes(r)} min</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Distance</div>
-          <div class="detail-value">${vm.distance} km</div>
+          <div class="detail-value">${distKm} km</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Maneuvers</div>
-          <div class="detail-value">${vm.complexity}</div>
+          <div class="detail-value">${r.complexity}</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Traffic</div>
-          <div class="detail-value">${vm.trafficText}</div>
+          <div class="detail-value">${getTrafficText(r.traffic)}</div>
         </div>
-        ${vm.delayMinutes > 0 ? `
+        ${r.delayMinutes > 0 ? `
         <div class="detail-item">
           <div class="detail-label">Est. Delay</div>
-          <div class="detail-value">+${vm.delayMinutes} min</div>
+          <div class="detail-value">+${r.delayMinutes} min</div>
         </div>
         ` : ""}
         <div class="detail-item">
           <div class="detail-label">Highway</div>
-          <div class="detail-value">${vm.highwayShare}%</div>
+          <div class="detail-value">${highwayPct}%</div>
         </div>
         <div class="detail-item full-width">
           <div class="detail-label">Stability</div>
-          <div class="detail-value">${vm.stabilityLabel}${confidenceHtml}</div>
+          <div class="detail-value">${stabilityLabel}${confidenceHtml}</div>
         </div>
       </div>
     </div>
-    
+
     <div class="modal-why">
       <div class="modal-why-title">Why this route?</div>
       <ul class="modal-why-points">
-        <li><strong>${vm.primaryWhy}</strong></li>
-        ${vm.whyPoints.map(p => `<li>${p}</li>`).join("")}
+        <li><strong>${why.primary}</strong></li>
+        ${why.secondary.map(p => `<li>${p}</li>`).join("")}
       </ul>
     </div>
-    
+
     ${segmentsHtml}
-    ${comparisonHtml}
-    
-    <button class="modal-cta" onclick="closeModal(event); startDrive(${vm.index})">Start this route</button>
+    ${comparisonNote}
+
+    <button class="modal-cta" onclick="closeModal(event); startDrive(${r.index})">Start this route</button>
   `;
-  
+
   document.getElementById("modal-overlay").classList.add("visible");
 }
 
@@ -2138,17 +1997,24 @@ function closeModal(event) {
   }
 }
 
-// ===== QUICK ACCESS =====
+// ============================================================
+//  QUICK ACCESS
+// ============================================================
 
 function setDestination(place) {
   document.getElementById("end").value = place;
   calculateRoutes();
 }
 
-// ===== INIT =====
+// ============================================================
+//  ENTRY POINT
+// ============================================================
 
 window.initMap = initMap;
 </script>
+
+
+
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
