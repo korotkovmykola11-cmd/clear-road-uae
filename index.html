@@ -1013,6 +1013,9 @@
 <script>
 // ============================================================
 //  GLOBAL STATE
+//  bestRoute and fastestRoute stored globally so that
+//  openRouteDetails always uses the EXACT same references
+//  as renderResults — guaranteeing WHY consistency.
 // ============================================================
 let map;
 let driveMap;
@@ -1025,6 +1028,10 @@ let driveRenderer = null;
 let driveInterval = null;
 let currentStepIndex = 0;
 let betterRouteIndex = null;
+
+// Single-source-of-truth for the current session's decision
+let _bestRoute = null;
+let _fastestRoute = null;
 
 // ============================================================
 //  HELPERS
@@ -1116,10 +1123,17 @@ function getRouteSummaryName(route) {
   return summary.split("/")[0].trim() || `Route ${route.displayIndex}`;
 }
 
-function getConfidenceText(level) {
-  if (level === "high") return "High confidence";
-  if (level === "medium") return "Good option";
-  return "Close alternatives";
+function getConfidenceText(level, bestRoute, fastestRoute) {
+  // No generic labels — always comparative
+  if (level === "high") return "Clear best choice";
+  if (level === "medium") {
+    if (fastestRoute && bestRoute && bestRoute.index !== fastestRoute.index) {
+      const diff = Math.abs(getDisplayDiff(bestRoute, fastestRoute));
+      return `${diff} min trade-off vs fastest`;
+    }
+    return "Slight edge over alternatives";
+  }
+  return "Routes nearly identical";
 }
 
 // ============================================================
@@ -1692,6 +1706,8 @@ function clearRoutes() {
   renderers = [];
   analyzedRoutes = [];
   selectedRoute = null;
+  _bestRoute = null;
+  _fastestRoute = null;
 }
 
 // ============================================================
@@ -1747,11 +1763,13 @@ function calculateRoutes() {
       return { ...r, ...scoreData };
     });
 
-    // Assign roles (uses generateWhy for WHY text downstream)
-    const best = selectBestRoute(analyzedRoutes);
-    const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+    // Store globally — SINGLE SOURCE OF TRUTH for this session
+    _bestRoute = selectBestRoute(analyzedRoutes);
+    _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+
+    // Assign roles once, using the stored globals
     analyzedRoutes.forEach(r => {
-      r.role = getRouteRole(r, best, fastest, analyzedRoutes);
+      r.role = getRouteRole(r, _bestRoute, _fastestRoute, analyzedRoutes);
     });
 
     renderResults();
@@ -1760,25 +1778,30 @@ function calculateRoutes() {
 }
 
 function drawRoutes(result) {
-  const best = selectBestRoute(analyzedRoutes);
+  // Draw alternatives FIRST (lower z-order), then recommended on top
+  const alts = analyzedRoutes.filter(r => _bestRoute && r.index !== _bestRoute.index);
+  const ordered = [...alts, ...(_bestRoute ? [_bestRoute] : [])];
 
-  analyzedRoutes.forEach(r => {
-    const isBest = best && r.index === best.index;
+  ordered.forEach(r => {
+    const isBest = _bestRoute && r.index === _bestRoute.index;
     const renderer = new google.maps.DirectionsRenderer({
       map: map,
       directions: result,
       routeIndex: r.index,
       suppressMarkers: !isBest,
+      preserveViewport: true,           // don't auto-pan per route
       polylineOptions: {
-        strokeColor: isBest ? "#2d6a4f" : "#9ca3af",
-        strokeOpacity: isBest ? 1 : 0.6,
-        strokeWeight: isBest ? 6 : 4
+        strokeColor: isBest ? "#2d6a4f" : "#e07a28",  // orange alt = clearly distinct
+        strokeOpacity: isBest ? 1 : 0.55,
+        strokeWeight: isBest ? 7 : 4,
+        zIndex: isBest ? 10 : 1         // recommended always visually on top
       }
     });
     renderers.push(renderer);
   });
 
-  if (best) map.fitBounds(best.route.bounds);
+  // Fit bounds once using the recommended route
+  if (_bestRoute) map.fitBounds(_bestRoute.route.bounds);
 }
 
 function renderResults() {
@@ -1793,18 +1816,28 @@ function renderResults() {
 
   quickAccess.classList.add("hidden");
 
-  const best = selectBestRoute(analyzedRoutes);
-  const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+  // Use the globally stored references — no recalculation, guaranteed consistency
+  const best = _bestRoute;
+  const fastest = _fastestRoute;
   selectedRoute = best;
 
-  analyzedRoutes.forEach(r => {
-    r.role = getRouteRole(r, best, fastest, analyzedRoutes);
-  });
+  // Roles already assigned in calculateRoutes; no reassignment here
 
   // --- Best card ---
   const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
   const confidence = getConfidenceLevel(best, analyzedRoutes);
   const confidenceClass = `confidence-${confidence}`;
+
+  // Comparative subtitle — no generic "stable traffic"
+  const bestIsFastest = best.index === fastest.index;
+  const altFastestMins = bestIsFastest ? null : getDisplayMinutes(fastest);
+  let bestSubtitle = `${getDisplayMinutes(best)} min`;
+  if (!bestIsFastest) {
+    bestSubtitle += ` · ${Math.abs(getDisplayDiff(best, fastest))} min slower than fastest`;
+  } else {
+    bestSubtitle += ` · fastest available`;
+  }
+  bestSubtitle += ` · ${best.complexity} maneuver${best.complexity !== 1 ? "s" : ""}`;
 
   let html = `
     <div class="best-card">
@@ -1813,12 +1846,12 @@ function renderResults() {
         <svg viewBox="0 0 24 24"><path fill="white" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
       </div>
       <h2 class="best-title">Best route: ${getRouteSummaryName(best)}</h2>
-      <p class="best-subtitle">${getDisplayMinutes(best)} min &middot; ${getTrafficText(best.traffic)} traffic &middot; ${best.complexity <= 4 ? "minimal stops" : best.complexity + " turns"}</p>
+      <p class="best-subtitle">${bestSubtitle}</p>
       <p class="best-reason">${bestWhy.primary}</p>
       <div class="best-points">
         ${bestWhy.secondary.map(p => `<div class="best-point">${p}</div>`).join("")}
       </div>
-      <span class="confidence-badge ${confidenceClass}">${getConfidenceText(confidence)}</span>
+      <span class="confidence-badge ${confidenceClass}">${getConfidenceText(confidence, best, fastest)}</span>
       <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
       <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
     </div>
@@ -1877,25 +1910,45 @@ function openRouteDetails(index) {
   const r = analyzedRoutes.find(x => x.index === index);
   if (!r) return;
 
-  const best = selectBestRoute(analyzedRoutes);
-  const fastest = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+  // CRITICAL: use the SAME global references used by renderResults
+  // This guarantees WHY is identical between main card and modal
+  const best = _bestRoute;
+  const fastest = _fastestRoute;
+  if (!best || !fastest) return;
 
-  // ALL why text comes from single source: generateWhy()
+  // Single source of truth — same call as in renderResults
   const why = generateWhy(r, best, fastest, analyzedRoutes);
   const isBest = r.index === best.index;
   const segments = buildRouteSegments(r);
 
-  let stabilityLabel = "Stable";
+  let stabilityLabel;
   if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
   else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
   else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
   else stabilityLabel = "Unpredictable";
 
+  // Comparative traffic cell — never generic
+  const trafficVsBest = !isBest ? trafficRank(r.traffic) - trafficRank(best.traffic) : 0;
+  let trafficCellText;
+  if (isBest) {
+    trafficCellText = r.traffic === "low"
+      ? `lower than alternatives`
+      : r.traffic === "high"
+        ? `heavier than alternatives`
+        : `moderate vs alternatives`;
+  } else {
+    trafficCellText = trafficVsBest > 0
+      ? `heavier than recommended`
+      : trafficVsBest < 0
+        ? `lighter than recommended`
+        : `same as recommended`;
+  }
+
   let comparisonNote = "";
   if (!isBest) {
     const diff = getDisplayDiff(r, best);
     if (diff < 0) {
-      comparisonNote = `<div class="comparison-note">${Math.abs(diff)} min faster than recommended, but with ${r.traffic === "high" ? "heavier traffic" : "higher risk"}.</div>`;
+      comparisonNote = `<div class="comparison-note">${Math.abs(diff)} min faster than recommended, but with ${r.traffic === "high" ? "heavier traffic" : "higher delay risk"}.</div>`;
     } else if (diff > 0) {
       comparisonNote = `<div class="comparison-note">${diff} min slower than recommended${r.complexity < best.complexity ? ", but with fewer maneuvers" : ""}.</div>`;
     }
@@ -1903,7 +1956,7 @@ function openRouteDetails(index) {
 
   let confidence = isBest ? getConfidenceLevel(best, analyzedRoutes) : null;
   let confidenceHtml = confidence
-    ? `<span class="confidence-badge confidence-${confidence}" style="margin-left:8px">${getConfidenceText(confidence)}</span>`
+    ? `<span class="confidence-badge confidence-${confidence}" style="margin-left:8px">${getConfidenceText(confidence, best, fastest)}</span>`
     : "";
 
   let segmentsHtml = "";
@@ -1955,7 +2008,7 @@ function openRouteDetails(index) {
         </div>
         <div class="detail-item">
           <div class="detail-label">Traffic</div>
-          <div class="detail-value">${getTrafficText(r.traffic)}</div>
+          <div class="detail-value" style="font-size:14px">${trafficCellText}</div>
         </div>
         ${r.delayMinutes > 0 ? `
         <div class="detail-item">
