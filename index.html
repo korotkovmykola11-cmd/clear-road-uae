@@ -1088,15 +1088,32 @@ function calculateRouteScore(r, allRoutes) {
 }
 
 function getRouteRole(r, bestRoute, fastestRoute, allRoutes) {
+  // ТЗ STEP 4: Assign EXACTLY one role based on comparison
   if (r.index === bestRoute.index) return "recommended";
   
-  const isFaster = r.time < bestRoute.time;
-  const isRiskier = trafficRank(r.traffic) > trafficRank(bestRoute.traffic) || r.delayMinutes > bestRoute.delayMinutes + 2;
-  const isSimpler = r.complexity < bestRoute.complexity - 2;
-  const isSimilar = Math.abs(getDisplayDiff(r, bestRoute)) <= 1 && Math.abs(r.complexity - bestRoute.complexity) <= 2;
+  const diffFromBest = getDisplayDiff(r, bestRoute); // negative = faster
+  const isFaster = diffFromBest < 0;
+  const isSlower = diffFromBest > 0;
   
+  // Check risk factors
+  const hasMoreTraffic = trafficRank(r.traffic) > trafficRank(bestRoute.traffic);
+  const hasMoreDelay = r.delayMinutes > bestRoute.delayMinutes + 2;
+  const isRiskier = hasMoreTraffic || hasMoreDelay;
+  
+  // Check relaxation factors
+  const fewerTurns = r.complexity < bestRoute.complexity - 1;
+  const lighterTraffic = trafficRank(r.traffic) < trafficRank(bestRoute.traffic);
+  const isMoreRelaxed = fewerTurns || lighterTraffic;
+  
+  // Check similarity
+  const timeSimilar = Math.abs(diffFromBest) <= 1;
+  const complexitySimilar = Math.abs(r.complexity - bestRoute.complexity) <= 2;
+  const trafficSimilar = trafficRank(r.traffic) === trafficRank(bestRoute.traffic);
+  const isSimilar = timeSimilar && complexitySimilar && trafficSimilar;
+  
+  // Assign role
   if (isFaster && isRiskier) return "faster_risky";
-  if (!isFaster && isSimpler) return "more_relaxed";
+  if (isSlower && isMoreRelaxed) return "more_relaxed";
   if (isSimilar) return "similar";
   return "balanced";
 }
@@ -1109,102 +1126,136 @@ function buildPrimaryWhy(r, bestRoute, fastestRoute, allRoutes) {
   const diffFromFastest = getDisplayDiff(r, fastestRoute);
   const diffFromBest = getDisplayDiff(r, bestRoute);
   
+  // ТЗ: WHY MUST compare routes. No generic statements.
+  
   if (isBest) {
     if (isFastest) {
-      if (r.traffic === "low") {
+      // Best = Fastest
+      if (r.delayMinutes <= 2) {
         return "Fastest route with stable traffic.";
       }
-      return "Fastest available route.";
+      return "Fastest route available.";
     }
     
-    // Best but not fastest
-    if (r.traffic === "low" && fastestRoute.traffic !== "low") {
-      return `Recommended because traffic is lighter than on the fastest option.`;
+    // Best but NOT fastest - MUST explain why chosen over fastest
+    const absDiff = Math.abs(diffFromFastest);
+    
+    if (r.delayMinutes < fastestRoute.delayMinutes) {
+      const delayDiff = fastestRoute.delayMinutes - r.delayMinutes;
+      return `Only ${absDiff} min slower than fastest, but ${delayDiff} min lower delay risk.`;
     }
+    
+    if (trafficRank(r.traffic) < trafficRank(fastestRoute.traffic)) {
+      return `Only ${absDiff} min slower than fastest, but with lighter traffic.`;
+    }
+    
     if (r.stabilityScore > fastestRoute.stabilityScore + 10) {
-      return `Only ${Math.abs(diffFromFastest)} min slower, but with more stable conditions.`;
+      return `Only ${absDiff} min slower than fastest, but more stable conditions.`;
     }
-    if (r.complexity < fastestRoute.complexity - 2) {
-      return `${Math.abs(diffFromFastest)} min slower, but with fewer turns and easier driving.`;
+    
+    if (r.complexity < fastestRoute.complexity - 1) {
+      const fewerTurns = fastestRoute.complexity - r.complexity;
+      return `${absDiff} min slower than fastest, but ${fewerTurns} fewer turns.`;
     }
-    return `Best balance of speed and comfort.`;
+    
+    return `Same time as alternatives, but lower delay risk.`;
   }
   
-  // Alternative routes
+  // Alternative routes - MUST compare to recommended
   const role = r.role;
+  const absDiffFromBest = Math.abs(diffFromBest);
   
   if (role === "faster_risky") {
-    const faster = Math.abs(diffFromBest);
-    if (r.traffic === "high") {
-      return `${faster} min faster, but heavy traffic expected.`;
+    if (r.traffic === "high" && bestRoute.traffic !== "high") {
+      return `${absDiffFromBest} min faster than recommended, but heavy traffic expected.`;
     }
     if (r.delayMinutes > bestRoute.delayMinutes) {
-      return `${faster} min faster, but delay risk is higher.`;
+      const delayDiff = r.delayMinutes - bestRoute.delayMinutes;
+      return `${absDiffFromBest} min faster than recommended, but +${delayDiff} min delay risk.`;
     }
-    return `${faster} min faster, but less predictable.`;
+    return `${absDiffFromBest} min faster than recommended, but less predictable.`;
   }
   
   if (role === "more_relaxed") {
-    const slower = diffFromBest;
     const fewerTurns = bestRoute.complexity - r.complexity;
     if (fewerTurns > 0) {
-      return `${slower} min slower, but ${fewerTurns} fewer maneuvers.`;
+      return `${diffFromBest} min slower than recommended, but ${fewerTurns} fewer maneuvers.`;
     }
-    return `More relaxed route with easier driving.`;
+    if (trafficRank(r.traffic) < trafficRank(bestRoute.traffic)) {
+      return `${diffFromBest} min slower than recommended, but lighter traffic.`;
+    }
+    return `${diffFromBest} min slower than recommended, but more relaxed driving.`;
   }
   
   if (role === "similar") {
-    return `Similar to recommended route.`;
+    if (diffFromBest === 0) {
+      return "Same time as recommended, similar conditions.";
+    }
+    return `${absDiffFromBest} min ${diffFromBest > 0 ? "slower" : "faster"} than recommended, similar overall.`;
   }
   
-  return `Alternative option.`;
+  // balanced
+  if (diffFromBest > 0) {
+    return `${diffFromBest} min slower than recommended.`;
+  } else if (diffFromBest < 0) {
+    return `${absDiffFromBest} min faster than recommended.`;
+  }
+  return "Similar to recommended route.";
 }
 
 function buildSecondaryWhyPoints(r, bestRoute, fastestRoute, allRoutes) {
   const points = [];
   const isBest = r.index === bestRoute.index;
+  const isFastest = r.index === fastestRoute.index;
   
-  // Traffic status
-  if (r.traffic === "low") {
-    points.push("Traffic is stable — no slowdowns expected.");
-  } else if (r.traffic === "medium") {
-    points.push("Moderate traffic expected.");
+  // ТЗ: Secondary points MUST be comparative when possible (max 2 points)
+  
+  if (isBest) {
+    // Compare to alternatives/fastest
+    if (!isFastest) {
+      const diffFromFastest = Math.abs(getDisplayDiff(r, fastestRoute));
+      if (r.delayMinutes < fastestRoute.delayMinutes) {
+        points.push(`Lower delay than fastest option (+${fastestRoute.delayMinutes - r.delayMinutes} min saved).`);
+      }
+    }
+    
+    // Highway comparison
+    const avgHighway = allRoutes.reduce((sum, x) => sum + x.highwayShare, 0) / allRoutes.length;
+    if (r.highwayShare > avgHighway + 0.1) {
+      points.push(`Higher highway usage than alternatives.`);
+    }
+    
+    // Complexity comparison
+    const avgComplexity = allRoutes.reduce((sum, x) => sum + x.complexity, 0) / allRoutes.length;
+    if (r.complexity < avgComplexity - 1) {
+      points.push(`Fewer turns than alternatives.`);
+    }
+    
   } else {
-    points.push("Heavy traffic on this route.");
-  }
-  
-  // Complexity
-  if (r.complexity <= 4) {
-    points.push("Minimal stops and turns.");
-  } else if (r.complexity <= 7) {
-    points.push("Few turns required.");
-  } else {
-    points.push("More complex route with multiple turns.");
-  }
-  
-  // Highway share
-  if (r.highwayShare > 0.5) {
-    points.push("Mostly highway driving.");
-  } else if (r.highwayShare > 0.25) {
-    points.push("Partial highway route.");
-  }
-  
-  // Delay
-  if (r.delayMinutes > 5) {
-    points.push(`Estimated delay: +${r.delayMinutes} min from traffic.`);
-  }
-  
-  // Comparison with best (for alternatives)
-  if (!isBest) {
+    // Alternative route - compare to recommended
     const diff = getDisplayDiff(r, bestRoute);
-    if (diff > 0) {
-      points.push(`${diff} min slower than recommended.`);
-    } else if (diff < 0) {
-      points.push(`${Math.abs(diff)} min faster than recommended.`);
+    
+    // Traffic comparison
+    if (trafficRank(r.traffic) > trafficRank(bestRoute.traffic)) {
+      points.push("Heavier traffic than recommended.");
+    } else if (trafficRank(r.traffic) < trafficRank(bestRoute.traffic)) {
+      points.push("Lighter traffic than recommended.");
+    }
+    
+    // Complexity comparison
+    if (r.complexity > bestRoute.complexity + 2) {
+      points.push(`More complex route (+${r.complexity - bestRoute.complexity} turns).`);
+    } else if (r.complexity < bestRoute.complexity - 2) {
+      points.push(`Fewer turns (${bestRoute.complexity - r.complexity} less).`);
+    }
+    
+    // Delay comparison
+    if (r.delayMinutes > bestRoute.delayMinutes + 2) {
+      points.push(`Higher delay risk (+${r.delayMinutes - bestRoute.delayMinutes} min).`);
     }
   }
   
-  return points.slice(0, 3); // Max 3 points
+  return points.slice(0, 2); // ТЗ: Max 2 points
 }
 
 // ===== ТЗ3: CONFIDENCE LEVEL =====
@@ -1766,35 +1817,52 @@ function countComplexity(leg, route) {
 }
 
 function selectBestRoute(routes) {
+  // ТЗ: STRICT RULES for selecting recommended route
   if (!routes?.length) return null;
   if (routes.length === 1) return routes[0];
   
+  // STEP 2: Find fastest route
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
-  let best = [...routes].sort((a, b) => a.score - b.score)[0];
   
-  const gap = getDisplayDiff(best, fastest);
-  
-  // Если best сильно медленнее fastest — выбираем fastest
-  if (best.index !== fastest.index && gap > 4) {
+  // STEP 3: Determine recommended route
+  // Rule 1: If fastest has low delay, use fastest
+  if (fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
     return fastest;
   }
   
-  // Проверяем не слишком ли рискован best
-  routes.forEach(r => {
-    if (r.index === best.index) return;
-    const diff = getDisplayDiff(r, best);
+  // Rule 2: Find route within 2-3 min of fastest with better stability
+  let recommended = fastest;
+  
+  for (const r of routes) {
+    if (r.index === fastest.index) continue;
     
-    // Если есть маршрут с похожим временем, но лучшим трафиком
-    if (Math.abs(diff) <= 2) {
-      if (trafficRank(r.traffic) < trafficRank(best.traffic)) {
-        best = r;
-      } else if (trafficRank(r.traffic) === trafficRank(best.traffic) && r.complexity < best.complexity) {
-        best = r;
+    const timeDiff = getDisplayDiff(r, fastest); // positive = r is slower
+    
+    // Within 3 minutes of fastest
+    if (timeDiff >= 0 && timeDiff <= 3) {
+      // Check if this route has lower delay OR higher stability
+      const hasLowerDelay = r.delayMinutes < fastest.delayMinutes - 1;
+      const hasHigherStability = r.stabilityScore > fastest.stabilityScore + 10;
+      const hasLighterTraffic = trafficRank(r.traffic) < trafficRank(fastest.traffic);
+      
+      if (hasLowerDelay || hasHigherStability || hasLighterTraffic) {
+        // This route is better despite being slightly slower
+        if (recommended.index === fastest.index) {
+          recommended = r;
+        } else {
+          // Compare with current recommended
+          const betterThanCurrent = 
+            (r.delayMinutes < recommended.delayMinutes) ||
+            (r.stabilityScore > recommended.stabilityScore);
+          if (betterThanCurrent) {
+            recommended = r;
+          }
+        }
       }
     }
-  });
+  }
   
-  return best;
+  return recommended;
 }
 
 // ===== RENDER FUNCTIONS =====
