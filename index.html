@@ -1146,50 +1146,37 @@ function calculateRouteScore(r, allRoutes) {
 // ============================================================
 
 function generateWhy(route, recommended, fastest, allRoutes) {
-  const rMin   = Math.round(route.time / 60);
-  const recMin = Math.round(recommended.time / 60);
-  const fastMin = Math.round(fastest.time / 60);
-
-  // Raw difference in minutes (not rounded) — used for "same time" guard
+  // Raw difference in minutes — used for sameTimeAsRecommended guard
   const rawTimeVsRec  = (route.time - recommended.time) / 60;
   const rawTimeVsFast = (route.time - fastest.time) / 60;
 
-  // FIX 1: sameTimeAsRecommended — catches < 30 sec difference that rounds to "0 min"
+  // FIX 1: catches < 30 sec difference that rounds to "0 min"
   const sameTimeAsRecommended = Math.abs(rawTimeVsRec) < 0.5;
 
-  // Rounded minutes for display
   const timeVsFast = Math.round(Math.abs(rawTimeVsFast));
   const timeVsRec  = Math.round(Math.abs(rawTimeVsRec));
 
-  const delayVsFast    = fastest.delayMinutes - route.delayMinutes;
-  const turnsDiffVsRec = route.complexity - recommended.complexity;
+  const delayDiffVsFast = route.delayMinutes - fastest.delayMinutes;
+  const turnsDiffVsRec  = route.complexity - recommended.complexity;
 
   let primary = "";
   let secondary = [];
 
-  // ── PRIMARY WHY ──────────────────────────────────────────────
   if (route.index === recommended.index) {
     if (route.index === fastest.index) {
-      const avgComplexity = allRoutes.reduce((s, x) => s + x.complexity, 0) / allRoutes.length;
-      primary = route.complexity <= avgComplexity
-        ? "Fastest route with no time advantage over alternatives, but lower complexity."
-        : "Fastest route with no time advantage over alternatives.";
+      primary = "Fastest route with no additional delay compared to alternatives.";
     } else {
-      if (delayVsFast > 0) {
-        primary = `Only ${timeVsFast} min slower than fastest, but ${delayVsFast} min lower delay risk.`;
-      } else {
-        const complexDiff = fastest.complexity - route.complexity;
-        primary = complexDiff > 0
-          ? `Only ${timeVsFast} min slower than fastest, but ${complexDiff} fewer maneuvers.`
-          : `Only ${timeVsFast} min slower than fastest, but more predictable conditions.`;
-      }
+      const delayAdv = Math.abs(delayDiffVsFast);
+      primary = delayAdv > 0
+        ? `Only ${timeVsFast} min slower than fastest, but ${delayAdv} min lower delay risk.`
+        : `Only ${timeVsFast} min slower than fastest, but more predictable conditions.`;
     }
   } else {
     if (rawTimeVsRec < -0.5) {
       // Clearly faster than recommended
       primary = `${timeVsRec} min faster than recommended, but higher delay risk.`;
     } else if (sameTimeAsRecommended) {
-      // FIX 1 applied: never shows "0 min slower/faster"
+      // FIX 1: never shows "0 min slower/faster"
       const moreStable = route.stabilityScore > recommended.stabilityScore;
       if (Math.abs(turnsDiffVsRec) > 1) {
         primary = turnsDiffVsRec > 0
@@ -1208,26 +1195,23 @@ function generateWhy(route, recommended, fastest, allRoutes) {
         }
       }
     } else {
-      // Clearly slower than recommended — timeVsRec is at least 1 rounded minute
+      // Clearly slower — timeVsRec is guaranteed >= 1
       primary = `${timeVsRec} min slower than recommended, but more stable traffic.`;
     }
   }
 
-  // ── SECONDARY WHY — FIX 2: full sentence, no parens notation ─
+  // FIX 2: secondary — full sentence, no paren notation
   if (turnsDiffVsRec !== 0) {
     const absTurns = Math.abs(turnsDiffVsRec);
-    if (turnsDiffVsRec < 0) {
-      secondary.push(`${absTurns} fewer turns than recommended.`);
-    } else {
-      secondary.push(`${absTurns} more turns than recommended.`);
-    }
+    secondary.push(turnsDiffVsRec < 0
+      ? `${absTurns} fewer turns than recommended.`
+      : `${absTurns} more turns than recommended.`);
   }
 
-  const delayDiffForSec = route.delayMinutes - fastest.delayMinutes;
-  if (delayDiffForSec < -1) {
-    secondary.push(`${Math.abs(delayDiffForSec)} min lower delay than fastest option.`);
-  } else if (delayDiffForSec > 1) {
-    secondary.push(`${delayDiffForSec} min higher delay than fastest option.`);
+  if (delayDiffVsFast < -1) {
+    secondary.push(`${Math.abs(delayDiffVsFast)} min lower delay than fastest option.`);
+  } else if (delayDiffVsFast > 1) {
+    secondary.push(`${delayDiffVsFast} min higher delay than fastest option.`);
   }
 
   secondary = [...new Set(secondary)].slice(0, 2);
@@ -1639,7 +1623,7 @@ function calculateRoutes() {
     return;
   }
 
-  document.getElementById("results").innerHTML = '<div class="loading">Calculating routes...</div>';
+  document.getElementById("results").innerHTML = '<div class="loading">Finding best routes...</div>';
 
   directionsService.route({
     origin: start,
@@ -1732,17 +1716,18 @@ function renderResults() {
   const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
   const bestIsFastest = best.index === fastest.index;
   
-  // Metrics line — raw facts only, no descriptions
+  // Metrics line - comparative
   let metricsLine = `${getDisplayMinutes(best)} min`;
   if (!bestIsFastest) {
     metricsLine += ` · ${Math.abs(getDisplayDiff(best, fastest))} min slower than fastest`;
   } else {
-    metricsLine += ` · ${getDisplayMinutes(best)} min · ${(best.distance/1000).toFixed(1)} km`;
+    // fastest label removed per TZ2 spec
   }
-  metricsLine += ` · ${best.complexity} maneuvers`;
+  metricsLine += ` · ${best.complexity} turns`;
 
   let html = `
     <div class="best-card">
+      <div class="best-label">Recommended</div>
       <div class="best-badge">
         <svg viewBox="0 0 24 24"><path fill="white" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
       </div>
@@ -1753,7 +1738,7 @@ function renderResults() {
         ${bestWhy.secondary.map(p => `<div class="best-point">${p}</div>`).join("")}
       </div>
       <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
-      <div class="why-link" onclick="openRouteDetails(${best.index})">Details &rsaquo;</div>
+      <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
     </div>
   `;
 
@@ -1776,13 +1761,11 @@ function renderResults() {
     };
 
     const diff = getDisplayDiff(r, best);
-    // Raw numbers only — no descriptive text outside generateWhy
+    // Raw numbers only — no descriptive labels outside generateWhy
     let subtitle = `${getDisplayMinutes(r)} min`;
     if (diff < 0) subtitle += ` · ${Math.abs(diff)} min faster than recommended`;
     else if (diff > 0) subtitle += ` · ${diff} min slower than recommended`;
     else subtitle += ` · same time as recommended`;
-
-    const altWhy = generateWhy(r, best, fastest, analyzedRoutes);
 
     html += `
       <div class="alt-card ${r.role}" onclick="openRouteDetails(${r.index})">
@@ -1839,7 +1822,7 @@ function openRouteDetails(index) {
         : `same as recommended`;
   }
 
-  // No comparisonNote — WHY is already shown via generateWhy() in modal-why block
+  // comparisonNote removed — WHY is handled solely by generateWhy()
 
   let segmentsHtml = "";
   if (segments.length > 0) {
