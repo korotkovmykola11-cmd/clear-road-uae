@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1047,6 +1048,18 @@ function getTrafficText(traffic) {
   return "heavy";
 }
 
+function toTitleCaseLabel(value) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function getStabilityLabel(stabilityScore) {
+  if (stabilityScore >= 70) return "Very stable";
+  if (stabilityScore >= 50) return "Stable";
+  if (stabilityScore >= 30) return "Moderate";
+  return "Unpredictable";
+}
+
 function isMeaningfulManeuver(step, route) {
   if (!step) return false;
   const html = stripHtml(step.html_instructions || "").toLowerCase();
@@ -1714,16 +1727,8 @@ function renderResults() {
 
   // --- Best card ---
   const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
-  const bestIsFastest = best.index === fastest.index;
-  
-  // Metrics line - comparative
-  let metricsLine = `${getDisplayMinutes(best)} min`;
-  if (!bestIsFastest) {
-    metricsLine += ` · ${Math.abs(getDisplayDiff(best, fastest))} min slower than fastest`;
-  } else {
-    // fastest label removed per TZ2 spec
-  }
-  metricsLine += ` · ${best.complexity} turns`;
+  // FIX 3: metrics line must stay raw-only. Any comparison belongs only in generateWhy().
+  const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
 
   let html = `
     <div class="best-card">
@@ -1793,28 +1798,10 @@ function openRouteDetails(index) {
   const isBest = r.index === best.index;
   const segments = buildRouteSegments(r);
 
-  let stabilityLabel;
-  if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
-  else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
-  else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
-  else stabilityLabel = "Unpredictable";
+  const stabilityLabel = getStabilityLabel(r.stabilityScore);
 
-  // Comparative traffic cell
-  const trafficVsBest = !isBest ? trafficRank(r.traffic) - trafficRank(best.traffic) : 0;
-  let trafficCellText;
-  if (isBest) {
-    trafficCellText = r.traffic === "low"
-      ? `lower than alternatives`
-      : r.traffic === "high"
-        ? `heavier than alternatives`
-        : `moderate vs alternatives`;
-  } else {
-    trafficCellText = trafficVsBest > 0
-      ? `heavier than recommended`
-      : trafficVsBest < 0
-        ? `lighter than recommended`
-        : `same as recommended`;
-  }
+  // FIX A: modal must not use generateWhy(). Modal uses only neutral facts.
+  const trafficCellText = toTitleCaseLabel(getTrafficText(r.traffic));
 
   let segmentsHtml = "";
   if (segments.length > 0) {
@@ -1920,6 +1907,6 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
