@@ -1047,6 +1047,18 @@ function getTrafficText(traffic) {
   return "heavy";
 }
 
+function toTitleCaseLabel(value) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function getStabilityLabel(stabilityScore) {
+  if (stabilityScore >= 70) return "Very stable";
+  if (stabilityScore >= 50) return "Stable";
+  if (stabilityScore >= 30) return "Moderate";
+  return "Unpredictable";
+}
+
 function isMeaningfulManeuver(step, route) {
   if (!step) return false;
   const html = stripHtml(step.html_instructions || "").toLowerCase();
@@ -1793,17 +1805,10 @@ function openRouteDetails(index) {
   const isBest = r.index === best.index;
   const segments = buildRouteSegments(r);
 
-  let stabilityLabel;
-  if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
-  else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
-  else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
-  else stabilityLabel = "Unpredictable";
+  const stabilityLabel = getStabilityLabel(r.stabilityScore);
 
-  // FIX 1: neutral traffic label only — no comparative WHY logic in modal
-  const trafficCellText = (() => {
-    const rawTraffic = getTrafficText(r.traffic);
-    return rawTraffic.charAt(0).toUpperCase() + rawTraffic.slice(1);
-  })();
+  // FIX 1 + FIX 2: modal detail-grid uses only neutral raw labels.
+  const trafficCellText = toTitleCaseLabel(getTrafficText(r.traffic));
 
   // comparisonNote removed — WHY is handled solely by generateWhy()
 
