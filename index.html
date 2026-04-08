@@ -1760,12 +1760,8 @@ function renderResults() {
       similar: "&#128257;"
     };
 
-    const diff = getDisplayDiff(r, best);
-    // Raw numbers only — no descriptive labels outside generateWhy
-    let subtitle = `${getDisplayMinutes(r)} min`;
-    if (diff < 0) subtitle += ` · ${Math.abs(diff)} min faster than recommended`;
-    else if (diff > 0) subtitle += ` · ${diff} min slower than recommended`;
-    else subtitle += ` · same time as recommended`;
+    // Subtitle must contain only raw time. Any comparison belongs only in generateWhy().
+    const subtitle = `${getDisplayMinutes(r)} min`;
 
     html += `
       <div class="alt-card ${r.role}" onclick="openRouteDetails(${r.index})">
