@@ -1799,22 +1799,11 @@ function openRouteDetails(index) {
   else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
   else stabilityLabel = "Unpredictable";
 
-  // Comparative traffic cell
-  const trafficVsBest = !isBest ? trafficRank(r.traffic) - trafficRank(best.traffic) : 0;
-  let trafficCellText;
-  if (isBest) {
-    trafficCellText = r.traffic === "low"
-      ? `lower than alternatives`
-      : r.traffic === "high"
-        ? `heavier than alternatives`
-        : `moderate vs alternatives`;
-  } else {
-    trafficCellText = trafficVsBest > 0
-      ? `heavier than recommended`
-      : trafficVsBest < 0
-        ? `lighter than recommended`
-        : `same as recommended`;
-  }
+  // FIX 1: neutral traffic label only — no comparative WHY logic in modal
+  const trafficCellText = (() => {
+    const rawTraffic = getTrafficText(r.traffic);
+    return rawTraffic.charAt(0).toUpperCase() + rawTraffic.slice(1);
+  })();
 
   // comparisonNote removed — WHY is handled solely by generateWhy()
 
