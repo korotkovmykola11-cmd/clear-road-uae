@@ -1746,7 +1746,6 @@ function renderResults() {
   analyzedRoutes.forEach(r => {
     if (r.index === best.index) return;
 
-    const altWhy = generateWhy(r, best, fastest, analyzedRoutes);
     const roleLabels = {
       faster_risky: "Faster, but risky",
       more_relaxed: "More relaxed",
@@ -1769,7 +1768,6 @@ function renderResults() {
         <div class="alt-content">
           <div class="alt-title">${roleLabels[r.role] || "Alternative"}</div>
           <div class="alt-subtitle">${subtitle}</div>
-          <div style="font-size:13px;color:#374151;margin-top:4px;line-height:1.4">${altWhy.primary}</div>
         </div>
         <div class="alt-arrow">&#8250;</div>
       </div>
