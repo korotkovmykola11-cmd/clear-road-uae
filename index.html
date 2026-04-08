@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1794,14 +1793,16 @@ function openRouteDetails(index) {
   const fastest = _fastestRoute;
   if (!best || !fastest) return;
 
-  const neutralWhy = generateNeutralWhy(r);
+  const why = generateWhy(r, best, fastest, analyzedRoutes);
   const isBest = r.index === best.index;
   const segments = buildRouteSegments(r);
 
   const stabilityLabel = getStabilityLabel(r.stabilityScore);
 
-  // FIX A: modal must not use generateWhy(). Modal uses only neutral facts.
+  // FIX 1 + FIX 2: modal detail-grid uses only neutral raw labels.
   const trafficCellText = toTitleCaseLabel(getTrafficText(r.traffic));
+
+  // comparisonNote removed — WHY is handled solely by generateWhy()
 
   let segmentsHtml = "";
   if (segments.length > 0) {
@@ -1872,9 +1873,10 @@ function openRouteDetails(index) {
     </div>
 
     <div class="modal-why">
-      <div class="modal-why-title">Route facts</div>
+      <div class="modal-why-title">Why this route?</div>
       <ul class="modal-why-points">
-        ${neutralWhy.map(point => `<li>${point}</li>`).join("")}
+        <li><strong>${why.primary}</strong></li>
+        ${why.secondary.map(p => `<li>${p}</li>`).join("")}
       </ul>
     </div>
 
