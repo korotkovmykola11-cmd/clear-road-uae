@@ -1047,18 +1047,6 @@ function getTrafficText(traffic) {
   return "heavy";
 }
 
-function toTitleCaseLabel(value) {
-  if (!value) return "";
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function getStabilityLabel(stabilityScore) {
-  if (stabilityScore >= 70) return "Very stable";
-  if (stabilityScore >= 50) return "Stable";
-  if (stabilityScore >= 30) return "Moderate";
-  return "Unpredictable";
-}
-
 function isMeaningfulManeuver(step, route) {
   if (!step) return false;
   const html = stripHtml(step.html_instructions || "").toLowerCase();
@@ -1726,8 +1714,16 @@ function renderResults() {
 
   // --- Best card ---
   const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
-  // FIX 3: metrics line must stay raw-only. Any comparison belongs only in generateWhy().
-  const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
+  const bestIsFastest = best.index === fastest.index;
+  
+  // Metrics line - comparative
+  let metricsLine = `${getDisplayMinutes(best)} min`;
+  if (!bestIsFastest) {
+    metricsLine += ` · ${Math.abs(getDisplayDiff(best, fastest))} min slower than fastest`;
+  } else {
+    // fastest label removed per TZ2 spec
+  }
+  metricsLine += ` · ${best.complexity} turns`;
 
   let html = `
     <div class="best-card">
@@ -1793,16 +1789,32 @@ function openRouteDetails(index) {
   const fastest = _fastestRoute;
   if (!best || !fastest) return;
 
-  const why = generateWhy(r, best, fastest, analyzedRoutes);
+  const neutralWhy = generateNeutralWhy(r);
   const isBest = r.index === best.index;
   const segments = buildRouteSegments(r);
 
-  const stabilityLabel = getStabilityLabel(r.stabilityScore);
+  let stabilityLabel;
+  if (r.stabilityScore >= 70) stabilityLabel = "Very stable";
+  else if (r.stabilityScore >= 50) stabilityLabel = "Stable";
+  else if (r.stabilityScore >= 30) stabilityLabel = "Moderate";
+  else stabilityLabel = "Unpredictable";
 
-  // FIX 1 + FIX 2: modal detail-grid uses only neutral raw labels.
-  const trafficCellText = toTitleCaseLabel(getTrafficText(r.traffic));
-
-  // comparisonNote removed — WHY is handled solely by generateWhy()
+  // Comparative traffic cell
+  const trafficVsBest = !isBest ? trafficRank(r.traffic) - trafficRank(best.traffic) : 0;
+  let trafficCellText;
+  if (isBest) {
+    trafficCellText = r.traffic === "low"
+      ? `lower than alternatives`
+      : r.traffic === "high"
+        ? `heavier than alternatives`
+        : `moderate vs alternatives`;
+  } else {
+    trafficCellText = trafficVsBest > 0
+      ? `heavier than recommended`
+      : trafficVsBest < 0
+        ? `lighter than recommended`
+        : `same as recommended`;
+  }
 
   let segmentsHtml = "";
   if (segments.length > 0) {
@@ -1873,10 +1885,9 @@ function openRouteDetails(index) {
     </div>
 
     <div class="modal-why">
-      <div class="modal-why-title">Why this route?</div>
+      <div class="modal-why-title">Route facts</div>
       <ul class="modal-why-points">
-        <li><strong>${why.primary}</strong></li>
-        ${why.secondary.map(p => `<li>${p}</li>`).join("")}
+        ${neutralWhy.map(point => `<li>${point}</li>`).join("")}
       </ul>
     </div>
 
