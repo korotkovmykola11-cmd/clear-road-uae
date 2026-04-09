@@ -1725,7 +1725,6 @@ function renderResults() {
   selectedRoute = best;
 
   // --- Best card ---
-  const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
   const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
 
   let html = `
@@ -1736,10 +1735,6 @@ function renderResults() {
       </div>
       <h2 class="best-title">Recommended: ${getRouteSummaryName(best)}</h2>
       <p class="best-metrics">${metricsLine}</p>
-      <p class="best-reason">${bestWhy.primary}</p>
-      <div class="best-points">
-        ${bestWhy.secondary.map(p => `<div class="best-point">${p}</div>`).join("")}
-      </div>
       <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
       <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
     </div>
