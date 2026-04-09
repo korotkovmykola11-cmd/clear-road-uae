@@ -1726,16 +1726,7 @@ function renderResults() {
 
   // --- Best card ---
   const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
-  const bestIsFastest = best.index === fastest.index;
-  
-  // Metrics line - comparative
-  let metricsLine = `${getDisplayMinutes(best)} min`;
-  if (!bestIsFastest) {
-    metricsLine += ` · ${Math.abs(getDisplayDiff(best, fastest))} min slower than fastest`;
-  } else {
-    // fastest label removed per TZ2 spec
-  }
-  metricsLine += ` · ${best.complexity} turns`;
+  const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
 
   let html = `
     <div class="best-card">
