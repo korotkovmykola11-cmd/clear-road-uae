@@ -147,7 +147,18 @@
     .best-metrics {
       font-size: 15px;
       color: #4b5563;
+      margin-bottom: 8px;
+    }
+
+    .best-toll {
+      font-size: 14px;
+      color: #6b7280;
       margin-bottom: 12px;
+    }
+
+    .best-toll.has-toll {
+      color: #d97706;
+      font-weight: 500;
     }
 
     .best-reason {
@@ -276,6 +287,27 @@
     .alt-subtitle {
       font-size: 14px;
       color: var(--gray);
+    }
+
+    .alt-toll {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    .alt-toll.has-toll {
+      color: #d97706;
+    }
+
+    .ai-insight {
+      font-size: 12px;
+      color: var(--green);
+      font-weight: 500;
+      margin-top: 4px;
+      background: var(--green-bg);
+      padding: 4px 8px;
+      border-radius: 6px;
+      display: inline-block;
     }
 
     .alt-arrow {
@@ -1117,6 +1149,11 @@ function calculateRouteMetrics(route, leg, rawRoute) {
   const highwayShare = calculateHighwayShare(leg, rawRoute);
   const traffic = getTrafficLevel(baseTime, time);
 
+  // ТЗ3 ЭТАП 1: Salik toll data
+  const tollCount = Math.floor(highwayShare * 3); // rough estimate based on highway usage
+  const tollCost = tollCount * 4; // 4 AED per Salik gate
+  const hasToll = tollCost > 0;
+
   return {
     time,
     baseTime,
@@ -1126,7 +1163,10 @@ function calculateRouteMetrics(route, leg, rawRoute) {
     complexity,
     highwayShare,
     traffic,
-    highway: highwayShare >= 0.35
+    highway: highwayShare >= 0.35,
+    tollCount,
+    tollCost,
+    hasToll
   };
 }
 
@@ -1726,6 +1766,10 @@ function renderResults() {
 
   // --- Best card ---
   const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
+  
+  // ТЗ3 ЭТАП 2: Toll line for best card
+  const bestTollLine = best.tollCost > 0 ? `+${best.tollCost} AED` : `No tolls`;
+  const bestTollClass = best.tollCost > 0 ? "best-toll has-toll" : "best-toll";
 
   let html = `
     <div class="best-card">
@@ -1735,6 +1779,7 @@ function renderResults() {
       </div>
       <h2 class="best-title">Recommended: ${getRouteSummaryName(best)}</h2>
       <p class="best-metrics">${metricsLine}</p>
+      <div class="${bestTollClass}">${bestTollLine}</div>
       <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
       <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
     </div>
@@ -1760,12 +1805,22 @@ function renderResults() {
     // Subtitle must contain only raw time. Any comparison belongs only in generateWhy().
     const subtitle = `${getDisplayMinutes(r)} min`;
 
+    // ТЗ3 ЭТАП 2: Toll line for alt cards
+    const altTollLine = r.tollCost > 0 ? `+${r.tollCost} AED` : `No tolls`;
+    const altTollClass = r.tollCost > 0 ? "alt-toll has-toll" : "alt-toll";
+
+    // ТЗ3 ЭТАП 5: AI Decision insight
+    const insight = generateDecisionInsight(r, best);
+    const insightHtml = insight ? `<div class="ai-insight">${insight}</div>` : "";
+
     html += `
       <div class="alt-card ${r.role}" onclick="openRouteDetails(${r.index})">
         <div class="alt-icon">${icons[r.role] || "&#128736;"}</div>
         <div class="alt-content">
           <div class="alt-title">${roleLabels[r.role] || "Alternative"}</div>
           <div class="alt-subtitle">${subtitle}</div>
+          <div class="${altTollClass}">${altTollLine}</div>
+          ${insightHtml}
         </div>
         <div class="alt-arrow">&#8250;</div>
       </div>
@@ -1793,7 +1848,35 @@ function generateNeutralWhy(route) {
   points.push(`${Math.round(route.highwayShare * 100)}% highway`);
   points.push(`${toTitleCaseLabel(getTrafficText(route.traffic))} traffic`);
 
+  // ТЗ3 ЭТАП 3: Add toll info to modal facts
+  if (route.tollCost > 0) {
+    points.push(`Includes ${route.tollCost} AED tolls`);
+  } else {
+    points.push("No tolls");
+  }
+
   return points;
+}
+
+// ТЗ3 ЭТАП 4: Decision insight for alternatives
+function generateDecisionInsight(route, bestRoute) {
+  if (!bestRoute) return null;
+
+  const diff = getDisplayDiff(route, bestRoute);
+
+  if (route.tollCost > 0 && Math.abs(diff) <= 3) {
+    return `Save ${route.tollCost} AED for only ${Math.abs(diff)} min`;
+  }
+
+  if (route.tollCost > 0 && diff < 0) {
+    return `Pay ${route.tollCost} AED to save ${Math.abs(diff)} min`;
+  }
+
+  if (route.tollCost === 0 && diff > 0) {
+    return `No tolls, ${diff} min longer`;
+  }
+
+  return null;
 }
 
 function openRouteDetails(index) {
