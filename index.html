@@ -1863,20 +1863,48 @@ function generateDecisionInsight(route, bestRoute) {
   if (!bestRoute) return null;
 
   const diff = getDisplayDiff(route, bestRoute);
+  const absDiff = Math.abs(diff);
 
-  if (route.tollCost > 0 && Math.abs(diff) <= 3) {
-    return `Save ${route.tollCost} AED for only ${Math.abs(diff)} min`;
+  // === CASE 1: оба платные ===
+  if (route.tollCost > 0 && bestRoute.tollCost > 0) {
+    if (diff === 0) {
+      return `Same toll cost and same time`;
+    }
+    if (diff > 0) {
+      return `${absDiff} min slower, same toll cost`;
+    }
+    return `${absDiff} min faster, same toll cost`;
   }
 
-  if (route.tollCost > 0 && diff < 0) {
-    return `Pay ${route.tollCost} AED to save ${Math.abs(diff)} min`;
+  // === CASE 2: текущий платный, лучший бесплатный ===
+  if (route.tollCost > 0 && bestRoute.tollCost === 0) {
+    if (diff < 0) {
+      return `Pay ${route.tollCost} AED to save ${absDiff} min`;
+    }
+    return `Pay ${route.tollCost} AED but ${absDiff} min slower`;
   }
 
-  if (route.tollCost === 0 && diff > 0) {
-    return `No tolls, ${diff} min longer`;
+  // === CASE 3: текущий бесплатный, лучший платный ===
+  if (route.tollCost === 0 && bestRoute.tollCost > 0) {
+    if (diff > 0) {
+      return `Save ${bestRoute.tollCost} AED for ${absDiff} min more`;
+    }
+    return `No tolls and ${absDiff} min faster`;
   }
 
-  return null;
+  // === CASE 4: оба бесплатные ===
+  if (route.tollCost === 0 && bestRoute.tollCost === 0) {
+    if (diff === 0) {
+      return `Same time, no tolls`;
+    }
+    if (diff > 0) {
+      return `${absDiff} min slower, no tolls`;
+    }
+    return `${absDiff} min faster, no tolls`;
+  }
+
+  // === FALLBACK (никогда не должен быть null) ===
+  return `${absDiff} min difference`;
 }
 
 function openRouteDetails(index) {
