@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1789,42 +1790,31 @@ function renderResults() {
   analyzedRoutes.forEach(r => {
     if (r.index === best.index) return;
 
-    const roleLabels = {
-      faster_risky: "Faster, but risky",
-      more_relaxed: "More relaxed",
-      balanced: "Alternative",
-      similar: "Similar option"
-    };
-    const icons = {
-      faster_risky: "&#9888;",
-      more_relaxed: "&#128663;",
-      balanced: "&#128736;",
-      similar: "&#128257;"
-    };
-
-    // Subtitle must contain only raw time. Any comparison belongs only in generateWhy().
-    const subtitle = `${getDisplayMinutes(r)} min`;
-
-    // ТЗ3 ЭТАП 2: Toll line for alt cards
-    const altTollLine = r.tollCost > 0 ? `+${r.tollCost} AED` : `No tolls`;
-    const altTollClass = r.tollCost > 0 ? "alt-toll has-toll" : "alt-toll";
-
-    // ТЗ3 ЭТАП 5: AI Decision insight
-    const insight = generateDecisionInsight(r, best);
-    const insightHtml = insight ? `<div class="ai-insight">${insight}</div>` : "";
-
-    html += `
-      <div class="alt-card ${r.role}" onclick="openRouteDetails(${r.index})">
-        <div class="alt-icon">${icons[r.role] || "&#128736;"}</div>
-        <div class="alt-content">
-          <div class="alt-title">${roleLabels[r.role] || "Alternative"}</div>
-          <div class="alt-subtitle">${subtitle}</div>
-          <div class="${altTollClass}">${altTollLine}</div>
-          ${insightHtml}
-        </div>
-        <div class="alt-arrow">&#8250;</div>
-      </div>
-    `;
+  // Toll-based subtitle (ТЗ3 финал)
+  let subtitle = "";
+  if (r.tollCost > 0) {
+    subtitle = `+${r.tollCost} AED`;
+  } else {
+    subtitle = "No tolls";
+  }
+  
+  // Add time diff if not best
+  const diff = getDisplayDiff(r, best);
+  if (diff > 0) {
+    subtitle += ` · +${diff} min`;
+  }
+  
+  html += `
+  <div class="alt-card" onclick="openRouteDetails(${r.index})">
+  <div class="alt-icon">&#128736;</div>
+  <div class="alt-content">
+  <div class="alt-title">Alternative</div>
+  <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
+  <div class="alt-toll">${subtitle}</div>
+  </div>
+  <div class="alt-arrow">&#8250;</div>
+  </div>
+  `;
   });
 
   container.innerHTML = html;
@@ -2030,7 +2020,6 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
-
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
