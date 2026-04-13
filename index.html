@@ -1865,45 +1865,45 @@ function generateDecisionInsight(route, bestRoute) {
   const diff = getDisplayDiff(route, bestRoute);
   const absDiff = Math.abs(diff);
 
-  // === CASE 1: оба платные ===
+  // === 1. Оба платные ===
   if (route.tollCost > 0 && bestRoute.tollCost > 0) {
-    if (diff === 0) {
-      return `Same toll cost and same time`;
+    if (route.tollCost === bestRoute.tollCost) {
+      if (diff === 0) return "Same toll cost and time — no advantage";
+      if (diff > 0) return `Same toll cost, but ${absDiff} min slower`;
+      return `Same toll cost, but ${absDiff} min faster`;
     }
-    if (diff > 0) {
-      return `${absDiff} min slower, same toll cost`;
+
+    if (route.tollCost > bestRoute.tollCost) {
+      return `Pay ${route.tollCost - bestRoute.tollCost} AED more for ${absDiff} min`;
     }
-    return `${absDiff} min faster, same toll cost`;
+
+    return `Save ${bestRoute.tollCost - route.tollCost} AED for ${absDiff} min more`;
   }
 
-  // === CASE 2: текущий платный, лучший бесплатный ===
+  // === 2. Этот платный, лучший бесплатный ===
   if (route.tollCost > 0 && bestRoute.tollCost === 0) {
     if (diff < 0) {
       return `Pay ${route.tollCost} AED to save ${absDiff} min`;
     }
-    return `Pay ${route.tollCost} AED but ${absDiff} min slower`;
+    return `Costs ${route.tollCost} AED and slower by ${absDiff} min`;
   }
 
-  // === CASE 3: текущий бесплатный, лучший платный ===
+  // === 3. Этот бесплатный, лучший платный ===
   if (route.tollCost === 0 && bestRoute.tollCost > 0) {
     if (diff > 0) {
-      return `Save ${bestRoute.tollCost} AED for ${absDiff} min more`;
+      return `Avoid tolls, only ${absDiff} min longer`;
     }
     return `No tolls and ${absDiff} min faster`;
   }
 
-  // === CASE 4: оба бесплатные ===
+  // === 4. Оба бесплатные ===
   if (route.tollCost === 0 && bestRoute.tollCost === 0) {
-    if (diff === 0) {
-      return `Same time, no tolls`;
-    }
-    if (diff > 0) {
-      return `${absDiff} min slower, no tolls`;
-    }
-    return `${absDiff} min faster, no tolls`;
+    if (diff === 0) return "Same time, no toll difference";
+    if (diff > 0) return `${absDiff} min slower, no benefit`;
+    return `${absDiff} min faster`;
   }
 
-  // === FALLBACK (никогда не должен быть null) ===
+  // === fallback (никогда не null) ===
   return `${absDiff} min difference`;
 }
 
@@ -2030,6 +2030,7 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
+
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
