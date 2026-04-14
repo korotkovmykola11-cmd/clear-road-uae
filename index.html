@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1831,37 +1832,73 @@ function getRouteInsight(r, best, fastest) {
   if (r.index === best.index) return "";
 
   const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
+  const absTimeDiff = Math.abs(timeDiff);
 
-  // CASE 1: одинаковая цена
-  if (r.tollCost === best.tollCost) {
+  const sameToll = r.tollCost === best.tollCost;
+  const cheaper = r.tollCost < best.tollCost;
+  const moreExpensive = r.tollCost > best.tollCost;
+
+  const trafficBetter = trafficRank(r.traffic) < trafficRank(best.traffic);
+  const trafficWorse = trafficRank(r.traffic) > trafficRank(best.traffic);
+
+  const stabilityBetter = r.stabilityScore > best.stabilityScore + 5;
+  const stabilityWorse = r.stabilityScore < best.stabilityScore - 5;
+
+  const lowerDelay = r.delayMinutes < best.delayMinutes - 1;
+  const higherDelay = r.delayMinutes > best.delayMinutes + 1;
+
+  const moreStable = trafficBetter || stabilityBetter || lowerDelay;
+  const lessStable = trafficWorse || stabilityWorse || higherDelay;
+
+  // CASE 1: same toll cost
+  if (sameToll) {
     if (timeDiff < 0) {
-      return `${Math.abs(timeDiff)} min faster, but less stable`;
+      if (lessStable) return `${absTimeDiff} min faster, but less stable`;
+      return `${absTimeDiff} min faster, same tolls`;
     }
+
     if (timeDiff > 0) {
-      return `${timeDiff} min slower, but more stable`;
+      if (moreStable) return `${absTimeDiff} min slower, but more stable`;
+      return `${absTimeDiff} min slower, same tolls`;
     }
-    return "";
+
+    if (moreStable) return `Same time, but more stable`;
+    if (lessStable) return `Same time, but less stable`;
+    return "Same time and same tolls";
   }
 
   // CASE 2: cheaper route
-  if (r.tollCost < best.tollCost) {
+  if (cheaper) {
     const tollSaved = best.tollCost - r.tollCost;
+
     if (timeDiff > 0) {
+      if (moreStable) return `Save ${tollSaved} AED, +${timeDiff} min, more stable`;
       return `Save ${tollSaved} AED, +${timeDiff} min`;
     }
+
     if (timeDiff < 0) {
-      return `Save ${tollSaved} AED and ${Math.abs(timeDiff)} min faster`;
+      return `Save ${tollSaved} AED and ${absTimeDiff} min faster`;
     }
-    return `Save ${tollSaved} AED`;
+
+    if (moreStable) return `Save ${tollSaved} AED, same time, more stable`;
+    return `Save ${tollSaved} AED, same time`;
   }
 
   // CASE 3: more expensive route
-  if (r.tollCost > best.tollCost) {
+  if (moreExpensive) {
     const tollExtra = r.tollCost - best.tollCost;
+
     if (timeDiff < 0) {
-      return `Pay ${tollExtra} AED more, save ${Math.abs(timeDiff)} min`;
+      if (lessStable) return `Pay ${tollExtra} AED more, ${absTimeDiff} min faster but less stable`;
+      return `Pay ${tollExtra} AED more, save ${absTimeDiff} min`;
     }
-    return "";
+
+    if (timeDiff > 0) {
+      return `Pay ${tollExtra} AED more, +${timeDiff} min`;
+    }
+
+    if (moreStable) return `Pay ${tollExtra} AED more, same time, more stable`;
+    return `Pay ${tollExtra} AED more, same time`;
   }
 
   return "";
