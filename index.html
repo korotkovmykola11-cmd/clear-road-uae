@@ -300,6 +300,13 @@
       color: #d97706;
     }
 
+    .route-insight {
+      font-size: 12px;
+      color: #059669;
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
     .ai-insight {
       font-size: 12px;
       color: var(--green);
@@ -1790,27 +1797,21 @@ function renderResults() {
   analyzedRoutes.forEach(r => {
     if (r.index === best.index) return;
 
-  // Toll-based subtitle (ТЗ3 финал)
-  let subtitle = "";
-  if (r.tollCost > 0) {
-    subtitle = `+${r.tollCost} AED`;
-  } else {
-    subtitle = "No tolls";
-  }
-  
-  // Add time diff if not best
-  const diff = getDisplayDiff(r, best);
-  if (diff > 0) {
-    subtitle += ` · +${diff} min`;
-  }
-  
+  // ТЗ4: Get insight for this route
+  const insight = getRouteInsight(r, best, fastest);
+  const insightHtml = insight ? `<div class="route-insight">${insight}</div>` : "";
+
+  // Toll line
+  const tollLine = r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls";
+
   html += `
   <div class="alt-card" onclick="openRouteDetails(${r.index})">
   <div class="alt-icon">&#128736;</div>
   <div class="alt-content">
   <div class="alt-title">Alternative</div>
   <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
-  <div class="alt-toll">${subtitle}</div>
+  ${insightHtml}
+  <div class="alt-toll">${tollLine}</div>
   </div>
   <div class="alt-arrow">&#8250;</div>
   </div>
@@ -1824,6 +1825,47 @@ function renderResults() {
 //  ROUTE DETAILS MODAL
 // ============================================================
 
+
+// ТЗ4: Decision insight по stability / risk
+function getRouteInsight(r, best, fastest) {
+  if (r.index === best.index) return "";
+
+  const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
+
+  // CASE 1: одинаковая цена
+  if (r.tollCost === best.tollCost) {
+    if (timeDiff < 0) {
+      return `${Math.abs(timeDiff)} min faster, but less stable`;
+    }
+    if (timeDiff > 0) {
+      return `${timeDiff} min slower, but more stable`;
+    }
+    return "";
+  }
+
+  // CASE 2: cheaper route
+  if (r.tollCost < best.tollCost) {
+    const tollSaved = best.tollCost - r.tollCost;
+    if (timeDiff > 0) {
+      return `Save ${tollSaved} AED, +${timeDiff} min`;
+    }
+    if (timeDiff < 0) {
+      return `Save ${tollSaved} AED and ${Math.abs(timeDiff)} min faster`;
+    }
+    return `Save ${tollSaved} AED`;
+  }
+
+  // CASE 3: more expensive route
+  if (r.tollCost > best.tollCost) {
+    const tollExtra = r.tollCost - best.tollCost;
+    if (timeDiff < 0) {
+      return `Pay ${tollExtra} AED more, save ${Math.abs(timeDiff)} min`;
+    }
+    return "";
+  }
+
+  return "";
+}
 
 function generateNeutralWhy(route) {
   const points = [];
@@ -2020,6 +2062,7 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
+
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
