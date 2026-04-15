@@ -1,6 +1,4 @@
 
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1851,21 +1849,28 @@ function getRouteInsight(r, best, fastest) {
   const moreStable = trafficBetter || stabilityBetter || lowerDelay;
   const lessStable = trafficWorse || stabilityWorse || higherDelay;
 
+  const fewerTurns = r.complexity < best.complexity - 1;
+  const moreTurns = r.complexity > best.complexity + 1;
+  
   // CASE 1: same toll cost
   if (sameToll) {
-    if (timeDiff < 0) {
-      if (lessStable) return `${absTimeDiff} min faster, but less stable`;
-      return `${absTimeDiff} min faster, same tolls`;
-    }
-
-    if (timeDiff > 0) {
-      if (moreStable) return `${absTimeDiff} min slower, but more stable`;
-      return `${absTimeDiff} min slower, same tolls`;
-    }
-
-    if (moreStable) return `Same time, but more stable`;
-    if (lessStable) return `Same time, but less stable`;
-    return "Same time and same tolls";
+  if (timeDiff < 0) {
+  if (fewerTurns) return `${absTimeDiff} min faster, fewer turns`;
+  if (moreTurns) return `${absTimeDiff} min faster, more turns`;
+  return `${absTimeDiff} min faster, same tolls`;
+  }
+  
+  if (timeDiff > 0) {
+  if (moreStable) return `${absTimeDiff} min slower, more stable`;
+  if (fewerTurns) return `${absTimeDiff} min slower, fewer turns`;
+  if (moreTurns) return `${absTimeDiff} min slower, more turns`;
+  return `${absTimeDiff} min slower, same tolls`;
+  }
+  
+  // timeDiff === 0
+  if (fewerTurns) return `Same time, fewer turns`;
+  if (moreTurns) return `Same time, more turns`;
+  return "Same time and same tolls";
   }
 
   // CASE 2: cheaper route
@@ -2112,7 +2117,6 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
-
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
