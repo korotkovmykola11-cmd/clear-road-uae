@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1871,10 +1872,22 @@ function getRouteInsight(r, best, fastest) {
   if (cheaper) {
     const tollSaved = best.tollCost - r.tollCost;
 
-    if (timeDiff > 0) {
-      if (moreStable) return `Save ${tollSaved} AED, +${timeDiff} min, more stable`;
-      return `Save ${tollSaved} AED, +${timeDiff} min`;
+  if (timeDiff > 0) {
+  if (moreStable) return `Save ${tollSaved} AED, +${timeDiff} min, more stable`;
+  if (lessStable) return `Save ${tollSaved} AED, +${timeDiff} min, less predictable`;
+  
+  // === FALLBACK LOGIC (when stability is same) ===
+  if (!moreStable && !lessStable) {
+    if (r.highwayShare < best.highwayShare - 0.2) {
+      return `Save ${tollSaved} AED, +${timeDiff} min, less highway`;
     }
+    if (r.complexity > best.complexity + 2) {
+      return `Save ${tollSaved} AED, +${timeDiff} min, more turns`;
+    }
+  }
+  
+  return `Save ${tollSaved} AED, +${timeDiff} min`;
+  }
 
     if (timeDiff < 0) {
       return `Save ${tollSaved} AED and ${absTimeDiff} min faster`;
