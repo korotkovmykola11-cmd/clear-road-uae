@@ -1833,38 +1833,39 @@ function getRouteInsight(r, best, fastest) {
   const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
   const timeStr = timeDiff > 0 ? `+${timeDiff} min` : timeDiff < 0 ? `-${Math.abs(timeDiff)} min` : "";
 
-  // Priority factors
+  // Priority: TOLLS > TRAFFIC > HIGHWAY > MANEUVERS
   const tollDiff = r.tollCost - best.tollCost;
-  const hasTollDiff = tollDiff !== 0;
-  const highwayDiff = r.highwayShare - best.highwayShare;
-  const hasHighwayDiff = Math.abs(highwayDiff) > 0.15;
   const trafficDiff = trafficRank(r.traffic) - trafficRank(best.traffic);
-  const hasTrafficDiff = trafficDiff !== 0;
+  const highwayDiff = r.highwayShare - best.highwayShare;
   const turnsDiff = r.complexity - best.complexity;
-  const hasTurnsDiff = Math.abs(turnsDiff) > 1;
 
-  // Build second factor by priority: TOLLS > HIGHWAY > TRAFFIC > MANEUVERS
+  // Build second factor by strict priority
   let secondFactor = "";
 
-  if (hasTollDiff) {
-    if (tollDiff < 0) {
-      secondFactor = `Save ${Math.abs(tollDiff)} AED`;
-    } else {
-      secondFactor = `+${tollDiff} AED`;
-    }
-  } else if (hasHighwayDiff) {
-    secondFactor = highwayDiff > 0 ? "more highway" : "less highway";
-  } else if (hasTrafficDiff) {
+  // 1. TOLLS (most important)
+  if (tollDiff < 0) {
+    secondFactor = `Save ${Math.abs(tollDiff)} AED`;
+  } else if (tollDiff > 0) {
+    secondFactor = `+${tollDiff} AED`;
+  }
+  // 2. TRAFFIC (if no toll diff)
+  else if (trafficDiff !== 0) {
     if (trafficDiff > 0) {
       secondFactor = r.traffic === "high" ? "heavy traffic" : "moderate traffic";
     } else {
-      secondFactor = "stable traffic";
+      secondFactor = "lighter traffic";
     }
-  } else if (hasTurnsDiff) {
+  }
+  // 3. HIGHWAY (if no traffic diff)
+  else if (Math.abs(highwayDiff) > 0.15) {
+    secondFactor = highwayDiff > 0 ? "more highway" : "less highway";
+  }
+  // 4. MANEUVERS (last priority)
+  else if (Math.abs(turnsDiff) > 1) {
     secondFactor = turnsDiff > 0 ? "more turns" : "fewer turns";
   }
 
-  // Combine TIME + second factor (max 2)
+  // Combine: TIME first (if exists), then second factor (max 2 parts)
   if (timeStr && secondFactor) {
     return `${timeStr}, ${secondFactor}`;
   }
