@@ -1831,92 +1831,48 @@ function getRouteInsight(r, best, fastest) {
   if (r.index === best.index) return "";
 
   const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
-  const absTimeDiff = Math.abs(timeDiff);
+  const timeStr = timeDiff > 0 ? `+${timeDiff} min` : timeDiff < 0 ? `-${Math.abs(timeDiff)} min` : "";
 
-  const sameToll = r.tollCost === best.tollCost;
-  const cheaper = r.tollCost < best.tollCost;
-  const moreExpensive = r.tollCost > best.tollCost;
+  // Priority factors
+  const tollDiff = r.tollCost - best.tollCost;
+  const hasTollDiff = tollDiff !== 0;
+  const highwayDiff = r.highwayShare - best.highwayShare;
+  const hasHighwayDiff = Math.abs(highwayDiff) > 0.15;
+  const trafficDiff = trafficRank(r.traffic) - trafficRank(best.traffic);
+  const hasTrafficDiff = trafficDiff !== 0;
+  const turnsDiff = r.complexity - best.complexity;
+  const hasTurnsDiff = Math.abs(turnsDiff) > 1;
 
-  const trafficBetter = trafficRank(r.traffic) < trafficRank(best.traffic);
-  const trafficWorse = trafficRank(r.traffic) > trafficRank(best.traffic);
+  // Build second factor by priority: TOLLS > HIGHWAY > TRAFFIC > MANEUVERS
+  let secondFactor = "";
 
-  const stabilityBetter = r.stabilityScore > best.stabilityScore + 5;
-  const stabilityWorse = r.stabilityScore < best.stabilityScore - 5;
-
-  const lowerDelay = r.delayMinutes < best.delayMinutes - 1;
-  const higherDelay = r.delayMinutes > best.delayMinutes + 1;
-
-  const moreStable = trafficBetter || stabilityBetter || lowerDelay;
-  const lessStable = trafficWorse || stabilityWorse || higherDelay;
-
-  const fewerTurns = r.complexity < best.complexity - 1;
-  const moreTurns = r.complexity > best.complexity + 1;
-  
-  // CASE 1: same toll cost
-  if (sameToll) {
-  if (timeDiff < 0) {
-  if (fewerTurns) return `${absTimeDiff} min faster, fewer turns`;
-  if (moreTurns) return `${absTimeDiff} min faster, more turns`;
-  return `${absTimeDiff} min faster, same tolls`;
-  }
-  
-  if (timeDiff > 0) {
-  if (moreStable) return `${absTimeDiff} min slower, more stable`;
-  if (fewerTurns) return `${absTimeDiff} min slower, fewer turns`;
-  if (moreTurns) return `${absTimeDiff} min slower, more turns`;
-  return `${absTimeDiff} min slower, same tolls`;
-  }
-  
-  // timeDiff === 0
-  if (fewerTurns) return `Same time, fewer turns`;
-  if (moreTurns) return `Same time, more turns`;
-  return "Same time and same tolls";
-  }
-
-  // CASE 2: cheaper route
-  if (cheaper) {
-    const tollSaved = best.tollCost - r.tollCost;
-
-  if (timeDiff > 0) {
-  if (moreStable) return `Save ${tollSaved} AED, +${timeDiff} min, more stable`;
-  if (lessStable) return `Save ${tollSaved} AED, +${timeDiff} min, less predictable`;
-  
-  // === FALLBACK LOGIC (when stability is same) ===
-  if (!moreStable && !lessStable) {
-    if (r.highwayShare < best.highwayShare - 0.2) {
-      return `Save ${tollSaved} AED, +${timeDiff} min, less highway`;
+  if (hasTollDiff) {
+    if (tollDiff < 0) {
+      secondFactor = `Save ${Math.abs(tollDiff)} AED`;
+    } else {
+      secondFactor = `+${tollDiff} AED`;
     }
-    if (r.complexity > best.complexity + 2) {
-      return `Save ${tollSaved} AED, +${timeDiff} min, more turns`;
+  } else if (hasHighwayDiff) {
+    secondFactor = highwayDiff > 0 ? "more highway" : "less highway";
+  } else if (hasTrafficDiff) {
+    if (trafficDiff > 0) {
+      secondFactor = r.traffic === "high" ? "heavy traffic" : "moderate traffic";
+    } else {
+      secondFactor = "stable traffic";
     }
-  }
-  
-  return `Save ${tollSaved} AED, +${timeDiff} min`;
-  }
-
-    if (timeDiff < 0) {
-      return `Save ${tollSaved} AED and ${absTimeDiff} min faster`;
-    }
-
-    if (moreStable) return `Save ${tollSaved} AED, same time, more stable`;
-    return `Save ${tollSaved} AED, same time`;
+  } else if (hasTurnsDiff) {
+    secondFactor = turnsDiff > 0 ? "more turns" : "fewer turns";
   }
 
-  // CASE 3: more expensive route
-  if (moreExpensive) {
-    const tollExtra = r.tollCost - best.tollCost;
-
-    if (timeDiff < 0) {
-      if (lessStable) return `Pay ${tollExtra} AED more, ${absTimeDiff} min faster but less stable`;
-      return `Pay ${tollExtra} AED more, save ${absTimeDiff} min`;
-    }
-
-    if (timeDiff > 0) {
-      return `Pay ${tollExtra} AED more, +${timeDiff} min`;
-    }
-
-    if (moreStable) return `Pay ${tollExtra} AED more, same time, more stable`;
-    return `Pay ${tollExtra} AED more, same time`;
+  // Combine TIME + second factor (max 2)
+  if (timeStr && secondFactor) {
+    return `${timeStr}, ${secondFactor}`;
+  }
+  if (timeStr) {
+    return timeStr;
+  }
+  if (secondFactor) {
+    return secondFactor;
   }
 
   return "";
@@ -2117,6 +2073,7 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
+
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
