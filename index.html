@@ -1,4 +1,5 @@
 
+  <
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1319,6 +1320,37 @@ function selectBestRoute(routes) {
 
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
 
+  // Prefer a meaningfully cheaper route when it is almost as fast
+  // and not materially worse in traffic stability.
+  const nearFreeAlternatives = routes
+    .filter(r => r.index !== fastest.index)
+    .filter(r => r.tollCost < fastest.tollCost)
+    .filter(r => {
+      const timeDiff = getDisplayDiff(r, fastest);
+      const trafficNotMuchWorse = trafficRank(r.traffic) <= trafficRank(fastest.traffic);
+      const delayNotMuchWorse = r.delayMinutes <= fastest.delayMinutes + 1;
+      const stabilityCloseEnough = r.stabilityScore >= fastest.stabilityScore - 15;
+
+      return (
+        timeDiff >= 0 &&
+        timeDiff <= 2 &&
+        trafficNotMuchWorse &&
+        delayNotMuchWorse &&
+        stabilityCloseEnough
+      );
+    })
+    .sort((a, b) =>
+      (a.tollCost - b.tollCost) ||
+      (a.time - b.time) ||
+      (trafficRank(a.traffic) - trafficRank(b.traffic)) ||
+      (b.stabilityScore - a.stabilityScore) ||
+      (a.complexity - b.complexity)
+    );
+
+  if (nearFreeAlternatives.length) {
+    return nearFreeAlternatives[0];
+  }
+
   if (fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
     return fastest;
   }
@@ -2074,7 +2106,6 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
-
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
+script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
