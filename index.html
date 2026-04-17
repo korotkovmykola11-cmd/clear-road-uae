@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1775,9 +1776,12 @@ function renderResults() {
   // --- Best card ---
   const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
   
-  // ТЗ3 ЭТАП 2: Toll line for best card
+  // ТЗ3: Toll line for best card
   const bestTollLine = best.tollCost > 0 ? `+${best.tollCost} AED` : `No tolls`;
   const bestTollClass = best.tollCost > 0 ? "best-toll has-toll" : "best-toll";
+
+  // ТЗ2 FIX: Add WHY to best card
+  const bestWhy = generateWhy(best, best, fastest, analyzedRoutes);
 
   let html = `
     <div class="best-card">
@@ -1788,6 +1792,12 @@ function renderResults() {
       <h2 class="best-title">Recommended: ${getRouteSummaryName(best)}</h2>
       <p class="best-metrics">${metricsLine}</p>
       <div class="${bestTollClass}">${bestTollLine}</div>
+      <p class="best-reason">${bestWhy.primary}</p>
+      ${bestWhy.secondary.length > 0 ? `
+      <div class="best-points">
+        ${bestWhy.secondary.map(p => `<div class="best-point">${p}</div>`).join("")}
+      </div>
+      ` : ""}
       <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
       <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
     </div>
