@@ -1799,10 +1799,20 @@ function renderResults() {
 
   // ТЗ4: Get insight for this route
   const insight = getRouteInsight(r, best, fastest);
-  const insightHtml = insight ? `<div class="route-insight">${insight}</div>` : "";
 
-  // Toll line
-  const tollLine = r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls";
+  // проверяем содержит ли insight уже деньги
+  const insightHasMoney =
+    insight &&
+    (insight.includes("Save") || insight.includes("AED"));
+
+  const insightHtml = insight
+    ? `<div class="route-insight">${insight}</div>`
+    : "";
+
+  // если деньги уже есть в insight → не показываем alt-toll
+  const tollLine = insightHasMoney
+    ? ""
+    : (r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls");
 
   html += `
   <div class="alt-card" onclick="openRouteDetails(${r.index})">
@@ -1811,7 +1821,7 @@ function renderResults() {
   <div class="alt-title">Alternative</div>
   <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
   ${insightHtml}
-  <div class="alt-toll">${tollLine}</div>
+  ${tollLine ? `<div class="alt-toll">${tollLine}</div>` : ""}
   </div>
   <div class="alt-arrow">&#8250;</div>
   </div>
@@ -2074,7 +2084,6 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>
-
 script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap" async defer></script>
 </body>
 </html>
