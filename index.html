@@ -1800,16 +1800,15 @@ function renderResults() {
   // ТЗ4: Get insight for this route
   const insight = getRouteInsight(r, best, fastest);
 
-  // проверяем содержит ли insight уже деньги
-  const insightHasMoney =
-    insight &&
-    (insight.includes("Save") || insight.includes("AED"));
+  const insightSafe = typeof insight === "string" ? insight : "";
 
-  const insightHtml = insight
-    ? `<div class="route-insight">${insight}</div>`
+  const insightHasMoney =
+    insightSafe.includes("Save") || insightSafe.includes("AED");
+
+  const insightHtml = insightSafe
+    ? `<div class="route-insight">${insightSafe}</div>`
     : "";
 
-  // если деньги уже есть в insight → не показываем alt-toll
   const tollLine = insightHasMoney
     ? ""
     : (r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls");
