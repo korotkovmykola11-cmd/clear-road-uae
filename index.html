@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1225,12 +1226,23 @@ function generateWhy(route, recommended, fastest, allRoutes) {
 
   if (route.index === recommended.index) {
     if (route.index === fastest.index) {
-      primary = "Fastest route with no additional delay compared to alternatives.";
+      // FIX 3: mention if this is a free route
+      if (route.tollCost === 0) {
+        primary = "Fastest route with no tolls.";
+      } else {
+        primary = "Fastest route with no additional delay compared to alternatives.";
+      }
     } else {
-      const delayAdv = Math.abs(delayDiffVsFast);
-      primary = delayAdv > 0
-        ? `Only ${timeVsFast} min slower than fastest, but ${delayAdv} min lower delay risk.`
-        : `Only ${timeVsFast} min slower than fastest, but more predictable conditions.`;
+      // Not fastest - explain why chosen
+      // FIX 3: prioritize toll savings in explanation
+      if (route.tollCost === 0 && fastest.tollCost > 0) {
+        primary = `Save ${fastest.tollCost} AED — only ${timeVsFast} min slower than paid option.`;
+      } else {
+        const delayAdv = Math.abs(delayDiffVsFast);
+        primary = delayAdv > 0
+          ? `Only ${timeVsFast} min slower than fastest, but ${delayAdv} min lower delay risk.`
+          : `Only ${timeVsFast} min slower than fastest, but more predictable conditions.`;
+      }
     }
   } else {
     if (rawTimeVsRec < -0.5) {
@@ -1320,7 +1332,27 @@ function selectBestRoute(routes) {
 
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
 
+  // FIX 1: Prefer FREE route if it's only slightly slower (<=3 min)
+  // This is the main UX fix - users prefer saving money over 2-3 min
+  const freeRoutes = routes.filter(r => r.tollCost === 0);
+  if (freeRoutes.length > 0 && fastest.tollCost > 0) {
+    const bestFree = [...freeRoutes].sort((a, b) => a.time - b.time)[0];
+    const timeDiffFromFastest = getDisplayDiff(bestFree, fastest);
+    
+    // If free route is only <=3 min slower than paid fastest, prefer free
+    if (timeDiffFromFastest <= 3) {
+      return bestFree;
+    }
+  }
+
+  // If fastest is free and has low delay, use it
+  if (fastest.tollCost === 0 && fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
+    return fastest;
+  }
+
+  // If fastest is paid but has very low delay, check if there's a comparable free option
   if (fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
+    // Already handled above - if we're here, there's no good free alternative
     return fastest;
   }
 
@@ -1335,14 +1367,17 @@ function selectBestRoute(routes) {
       const hasLowerDelay = r.delayMinutes < fastest.delayMinutes - 1;
       const hasHigherStability = r.stabilityScore > fastest.stabilityScore + 10;
       const hasLighterTraffic = trafficRank(r.traffic) < trafficRank(fastest.traffic);
+      const isCheaper = r.tollCost < fastest.tollCost;
 
-      if (hasLowerDelay || hasHigherStability || hasLighterTraffic) {
+      if (hasLowerDelay || hasHigherStability || hasLighterTraffic || isCheaper) {
         if (recommended.index === fastest.index) {
           recommended = r;
         } else {
+          // Compare with current recommended
           const betterThanCurrent =
-            (r.delayMinutes < recommended.delayMinutes) ||
-            (r.stabilityScore > recommended.stabilityScore);
+            (r.tollCost < recommended.tollCost) ||
+            (r.tollCost === recommended.tollCost && r.delayMinutes < recommended.delayMinutes) ||
+            (r.tollCost === recommended.tollCost && r.stabilityScore > recommended.stabilityScore);
           if (betterThanCurrent) {
             recommended = r;
           }
@@ -1809,10 +1844,14 @@ function renderResults() {
 
   // ТЗ4: Get insight for this route
   const insight = getRouteInsight(r, best, fastest);
+  
+  // FIX 4: Don't duplicate toll info - if insight mentions AED, skip tollLine
+  const insightHasMoney = insight && (insight.includes("AED") || insight.includes("Save"));
   const insightHtml = insight ? `<div class="route-insight">${insight}</div>` : "";
-
-  // Toll line
-  const tollLine = r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls";
+  
+  // Only show toll line if insight doesn't already mention money
+  const tollLine = insightHasMoney ? "" : (r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls");
+  const tollHtml = tollLine ? `<div class="alt-toll">${tollLine}</div>` : "";
 
   html += `
   <div class="alt-card" onclick="openRouteDetails(${r.index})">
@@ -1821,7 +1860,7 @@ function renderResults() {
   <div class="alt-title">Alternative</div>
   <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
   ${insightHtml}
-  <div class="alt-toll">${tollLine}</div>
+  ${tollHtml}
   </div>
   <div class="alt-arrow">&#8250;</div>
   </div>
@@ -1841,7 +1880,8 @@ function getRouteInsight(r, best, fastest) {
   if (r.index === best.index) return "";
 
   const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
-  const timeStr = timeDiff > 0 ? `+${timeDiff} min` : timeDiff < 0 ? `-${Math.abs(timeDiff)} min` : "";
+  const absTimeDiff = Math.abs(timeDiff);
+  const timeStr = timeDiff > 0 ? `+${timeDiff} min` : timeDiff < 0 ? `${absTimeDiff} min faster` : "";
 
   // Priority: TOLLS > TRAFFIC > HIGHWAY > MANEUVERS
   const tollDiff = r.tollCost - best.tollCost;
@@ -1849,33 +1889,45 @@ function getRouteInsight(r, best, fastest) {
   const highwayDiff = r.highwayShare - best.highwayShare;
   const turnsDiff = r.complexity - best.complexity;
 
-  // Build second factor by strict priority
-  let secondFactor = "";
+  // FIX 2: Money factor FIRST, then time
+  // This is better UX - users see the value proposition first
 
-  // 1. TOLLS (most important)
+  // 1. TOLLS (most important) - show FIRST
   if (tollDiff < 0) {
-    secondFactor = `Save ${Math.abs(tollDiff)} AED`;
-  } else if (tollDiff > 0) {
-    secondFactor = `+${tollDiff} AED`;
+    // Cheaper route - lead with savings
+    const savings = Math.abs(tollDiff);
+    if (timeDiff > 0) {
+      return `Save ${savings} AED, only +${timeDiff} min`;
+    } else if (timeDiff < 0) {
+      return `Save ${savings} AED and ${absTimeDiff} min faster`;
+    }
+    return `Save ${savings} AED`;
   }
-  // 2. TRAFFIC (if no toll diff)
-  else if (trafficDiff !== 0) {
+  
+  if (tollDiff > 0) {
+    // More expensive route
+    if (timeDiff < 0) {
+      return `Pay ${tollDiff} AED to save ${absTimeDiff} min`;
+    }
+    return `+${tollDiff} AED, ${timeStr || "same time"}`;
+  }
+
+  // 2. No toll difference - show other factors
+  let secondFactor = "";
+  
+  if (trafficDiff !== 0) {
     if (trafficDiff > 0) {
       secondFactor = r.traffic === "high" ? "heavy traffic" : "moderate traffic";
     } else {
       secondFactor = "lighter traffic";
     }
-  }
-  // 3. HIGHWAY (if no traffic diff)
-  else if (Math.abs(highwayDiff) > 0.15) {
+  } else if (Math.abs(highwayDiff) > 0.15) {
     secondFactor = highwayDiff > 0 ? "more highway" : "less highway";
-  }
-  // 4. MANEUVERS (last priority)
-  else if (Math.abs(turnsDiff) > 1) {
+  } else if (Math.abs(turnsDiff) > 1) {
     secondFactor = turnsDiff > 0 ? "more turns" : "fewer turns";
   }
 
-  // Combine: TIME first (if exists), then second factor (max 2 parts)
+  // Combine: TIME + second factor
   if (timeStr && secondFactor) {
     return `${timeStr}, ${secondFactor}`;
   }
@@ -2015,76 +2067,7 @@ function openRouteDetails(index) {
     <div class="detail-section">
       <div class="detail-section-title">Core Metrics</div>
       <div class="detail-grid">
-        <div class="detail-item">
-          <div class="detail-label">Time</div>
-          <div class="detail-value">${getDisplayMinutes(r)} min</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Distance</div>
-          <div class="detail-value">${distKm} km</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Maneuvers</div>
-          <div class="detail-value">${r.complexity}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Traffic</div>
-          <div class="detail-value" style="font-size:14px">${trafficCellText}</div>
-        </div>
-        ${r.delayMinutes > 0 ? `
-        <div class="detail-item">
-          <div class="detail-label">Est. Delay</div>
-          <div class="detail-value">+${r.delayMinutes} min</div>
-        </div>
-        ` : ""}
-        <div class="detail-item">
-          <div class="detail-label">Highway</div>
-          <div class="detail-value">${highwayPct}%</div>
-        </div>
-        <div class="detail-item full-width">
-          <div class="detail-label">Stability</div>
-          <div class="detail-value">${stabilityLabel}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-why">
-      <div class="modal-why-title">Route facts</div>
-      <ul class="modal-why-points">
-        ${neutralWhy.map(point => `<li>${point}</li>`).join("")}
-      </ul>
-    </div>
-
-    ${segmentsHtml}
-
-    <button class="modal-cta" onclick="closeModal(event); startDrive(${r.index})">Start this route</button>
-  `;
-
-  document.getElementById("modal-overlay").classList.add("visible");
-}
-
-function closeModal(event) {
-  if (event.target.id === "modal-overlay" || event.target.classList.contains("modal-cta")) {
-    document.getElementById("modal-overlay").classList.remove("visible");
-  }
-}
-
-// ============================================================
-//  QUICK ACCESS
-// ============================================================
-
-function setDestination(place) {
-  document.getElementById("end").value = place;
-  calculateRoutes();
-}
-
-// ============================================================
-//  ENTRY POINT
-// ============================================================
-
-window.initMap = initMap;
-</script>
-
+ </script>       
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
