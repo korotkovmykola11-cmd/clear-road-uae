@@ -180,7 +180,8 @@
     .ai-hero-time { font-size: 52px; font-weight: 800; color: var(--dark); line-height: 1; margin-bottom: 4px; letter-spacing: -1px; }
     .ai-hero-time span { font-size: 22px; font-weight: 600; color: var(--gray); margin-left: 2px; }
     .ai-distance { font-size: 14px; color: var(--gray); margin-bottom: 14px; }
-    .ai-why { font-size: 16px; color: #1f2937; font-weight: 600; line-height: 1.4; margin-bottom: 16px; }
+    .ai-why { font-size: 16px; color: #1f2937; font-weight: 600; line-height: 1.4; margin-bottom: 6px; }
+    .ai-secondary { font-size: 13px; color: var(--gray); font-weight: 500; margin-bottom: 16px; }
 
     .start-btn {
       width: 100%;
@@ -1892,6 +1893,8 @@ function renderResults() {
   const whyText = generateAIDecision(best, analyzedRoutes);
   const distKm = (best.distance / 1000).toFixed(1);
   const tollTag = best.tollCost > 0 ? `+${best.tollCost} AED Salik` : "No tolls";
+  const trafficLabel = best.traffic === "low" ? "Low delay" : best.traffic === "high" ? "High traffic" : "Moderate traffic";
+  const secondaryText = `${trafficLabel} · ${best.complexity} turns`;
 
   let html = `
     <div class="best-card">
@@ -1904,6 +1907,7 @@ function renderResults() {
       <div class="ai-hero-time">${getDisplayMinutes(best)}<span>min</span></div>
       <div class="ai-distance">${distKm} km · ${tollTag}</div>
       <div class="ai-why">${whyText}</div>
+      <div class="ai-secondary">${secondaryText}</div>
       <div class="predict-tip" id="predict-tip" style="display:none"></div>
       ${getParkingInsight() ? `<div class="best-parking">${getParkingInsight()}</div>` : ""}
       <button class="start-btn" onclick="startDrive(${best.index})">Go via ${getRouteSummaryName(best)}</button>
@@ -2048,27 +2052,34 @@ function generateTimeInsight(best) {
   return "Conditions are stable";
 }
 
-// One-line AI decision shown in Recommended card — natural, human-readable
+// One-line AI decision: [FACT] + [REASON] + [SPECIFICS] — no marketing language
 function generateAIDecision(best, allRoutes) {
   const others = (allRoutes || []).filter(r => r.index !== best.index);
   const bestMin = getDisplayMinutes(best);
   const road = getRouteSummaryName(best);
   const via = (road && !road.startsWith("Route ")) ? ` via ${road}` : "";
+  const delay = best.delayMinutes || 0;
+
+  // Gap to nearest alternative
+  const nextFastest = others.length
+    ? others.reduce((a, b) => getDisplayMinutes(a) < getDisplayMinutes(b) ? a : b)
+    : null;
+  const gapToNext = nextFastest ? Math.round(getDisplayMinutes(nextFastest) - bestMin) : 0;
 
   // ── Filter-aware phrases ──
   if (userFilters.avoid_highways && !best.highway) {
     const fasterHwy = others.find(r => r.highway && getDisplayMinutes(r) < bestMin);
     if (fasterHwy) {
-      const gap = Math.round(getDisplayMinutes(fasterHwy) - bestMin);
-      return `${Math.abs(gap)} min more — but no highway${via}`;
+      const gap = Math.abs(Math.round(getDisplayMinutes(fasterHwy) - bestMin));
+      return `${gap} min more — avoids all highways${via}`;
     }
-    return `No highways — best available${via}`;
+    return `No highways used${via} — best option available`;
   }
   if (userFilters.fewer_turns) {
     const simplerThanAll = others.every(r => r.complexity >= best.complexity);
     return simplerThanAll
-      ? `Fewest turns${via}`
-      : `Simpler route, slightly longer${via}`;
+      ? `Fewest turns${via} — easiest to navigate`
+      : `Simpler route${via} — fewer intersections`;
   }
 
   const fasterPaid = others.find(r =>
@@ -2078,35 +2089,46 @@ function generateAIDecision(best, allRoutes) {
     best.tollCost > 0 && r.tollCost === 0 && getDisplayMinutes(r) >= bestMin
   );
 
-  // Free route, but a paid alt is faster
+  // Free, but a paid alt is faster
   if (best.tollCost === 0 && fasterPaid) {
     const gap = Math.abs(bestMin - getDisplayMinutes(fasterPaid));
     return gap <= 2
-      ? `${gap} min more — saves ${fasterPaid.tollCost} AED${via}`
-      : `Best balance — no tolls${via}`;
+      ? `${gap} min more${via} — saves ${fasterPaid.tollCost} AED in tolls`
+      : `Saves ${fasterPaid.tollCost} AED${via} with minimal time trade-off`;
   }
-  // Paid route, a free alt exists but is slower
+  // Paid, free alt is slower
   if (best.tollCost > 0 && slowerFree) {
     const gap = Math.round(getDisplayMinutes(slowerFree) - bestMin);
     return `${gap} min faster than free route${via}`;
   }
-  // Heavy traffic warning
+  // Heavy traffic — factual
   if (best.traffic === "high") {
-    return `Fastest option${via} — expect heavy traffic`;
+    return delay > 0
+      ? `Fastest despite ${delay} min delay${via}`
+      : `Fastest available${via} — heavy traffic ahead`;
   }
-  // Significant delay
-  if ((best.delayMinutes || 0) >= 4) {
-    return `${best.delayMinutes} min delay expected${via}`;
+  // Significant delay — show gap to justify
+  if (delay >= 4) {
+    return gapToNext > 0
+      ? `${delay} min delay${via} — still ${gapToNext} min ahead of next route`
+      : `${delay} min delay${via} — still the fastest option`;
   }
-  // Clean road, low delay
-  if (best.traffic === "low" && (best.delayMinutes || 0) <= 2) {
-    return `Clear road${via} — best pick right now`;
+  // Clear road — use gap to quantify advantage
+  if (best.traffic === "low" && delay <= 2) {
+    return gapToNext >= 2
+      ? `${gapToNext} min faster${via} with stable traffic`
+      : `Stable traffic${via} — least delay right now`;
   }
-  // Free, normal conditions
+  // Free, normal conditions — gap or flow
   if (best.tollCost === 0) {
-    return `No tolls, smooth flow${via}`;
+    return gapToNext >= 2
+      ? `${gapToNext} min ahead of alternatives${via} — no tolls`
+      : `No tolls${via} — smooth flow right now`;
   }
-  return `Best option right now${via}`;
+  // Generic with gap
+  return gapToNext >= 2
+    ? `${gapToNext} min faster than next option${via}`
+    : `Least delay of all routes${via}`;
 }
 
 // ТЗ5: Decision insight — only 3 types (paid / fast / no tolls)
@@ -2440,7 +2462,7 @@ document.querySelectorAll(".filter-btn").forEach(b =>
 // ============================================================
 
 window.initMap = initMap;
-</script>   
+</script>    
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
