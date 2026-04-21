@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1771,46 +1771,38 @@ function renderResults() {
   `;
 
   // --- Alternative cards ---
-  // ТЗ4.5: Filter weak/duplicate alternatives
+  // ТЗ5: Strict alternative filter — no dupes, no worthless routes
   const alternatives = analyzedRoutes.filter(r => {
     if (r.index === best.index) return false;
 
-    // Filter almost identical routes (same toll, time diff <= 1 min)
+    // Rule A (ТЗ5 §4): Skip if slower-or-same time AND same toll → no value
+    if (r.time >= best.time && r.tollCost === best.tollCost) return false;
+
+    // Rule B (ТЗ5 §1): Filter near-identical routes — within 2 min AND same toll
     const timeDiffMin = Math.abs(getDisplayMinutes(r) - getDisplayMinutes(best));
-    if (timeDiffMin <= 1 && r.tollCost === best.tollCost) {
-      return false;
-    }
-
-    // Skip if worse in ALL metrics (no value)
-    const isSlowerOrSame = r.time >= best.time;
-    const isMoreExpensiveOrSame = r.tollCost >= best.tollCost;
-    const isMoreComplexOrSame = r.complexity >= best.complexity;
-    const isWorseTrafficOrSame = trafficRank(r.traffic) >= trafficRank(best.traffic);
-
-    if (isSlowerOrSame && isMoreExpensiveOrSame && isMoreComplexOrSame && isWorseTrafficOrSame) {
-      return false;
-    }
+    if (timeDiffMin <= 2 && r.tollCost === best.tollCost) return false;
 
     return true;
   });
 
-  // ТЗ4.5: Dedupe alternatives with same value proposition
+  // ТЗ5: Dedupe by insight key + sort by time, drop alts with no insight
   const seenInsights = new Set();
   const uniqueAlternatives = [];
 
   alternatives
-    .sort((a, b) => a.time - b.time || a.complexity - b.complexity)
+    .sort((a, b) => a.time - b.time || a.tollCost - b.tollCost)
     .forEach(r => {
       const insight = getRouteInsight(r, best, fastest);
-      const key = `${insight}_${r.tollCost}_${r.traffic}`;
-
+      if (!insight) return; // weak alternatives produce empty insight → drop them
+      const key = `${insight}_${r.tollCost}`;
       if (!seenInsights.has(key)) {
         seenInsights.add(key);
         uniqueAlternatives.push(r);
       }
     });
 
-  uniqueAlternatives.forEach(r => {
+  // ТЗ5 §2: Hard cap — never show more than 2 alternatives
+  uniqueAlternatives.slice(0, 2).forEach(r => {
   // ТЗ4: Get insight for this route
   const insight = getRouteInsight(r, best, fastest);
   
@@ -1844,70 +1836,38 @@ function renderResults() {
 // ============================================================
 
 
-// ТЗ4: Decision insight для alternative cards
+// ТЗ5: Decision insight — only 3 types (paid / fast / no tolls)
 function getRouteInsight(r, best, fastest) {
   if (r.index === best.index) return "";
 
   const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
   const absTimeDiff = Math.abs(timeDiff);
-
   const tollDiff = r.tollCost - best.tollCost;
-  const trafficDiff = trafficRank(r.traffic) - trafficRank(best.traffic);
-  const highwayDiff = r.highwayShare - best.highwayShare;
-  const turnsDiff = r.complexity - best.complexity;
 
-  // 1. Cheaper route - show savings
+  // Type 1 — PAID: route is more expensive AND faster → show value trade-off
+  if (tollDiff > 0 && timeDiff < 0) {
+    return `+${tollDiff} AED → save ${absTimeDiff} min`;
+  }
+
+  // Type 2 — CHEAPER: route saves money AND is not too slow
   if (tollDiff < 0) {
     const savings = Math.abs(tollDiff);
-    if (timeDiff > 0) {
-      return `Save ${savings} AED, only +${timeDiff} min`;
-    } else if (timeDiff < 0) {
-      return `Save ${savings} AED and ${absTimeDiff} min faster`;
-    }
-    return `Save ${savings} AED`;
-  }
-  
-  // 2. More expensive route - only show if FASTER
-  if (tollDiff > 0) {
-    if (timeDiff < 0) {
-      // ТЗ4: format "X min faster, +Y AED" instead of "Pay Y AED to save X min"
-      return `${absTimeDiff} min faster, +${tollDiff} AED`;
-    }
-    // More expensive AND not faster = no value = return ""
-    return "";
+    if (timeDiff <= 0) return `Save ${savings} AED`;
+    if (timeDiff <= 5) return `Save ${savings} AED, +${timeDiff} min`;
+    return ""; // saves money but way too slow → no value
   }
 
-  // 3. Same toll - check other factors
-  // If slower and no other benefit = return ""
-  if (timeDiff > 0 && trafficDiff >= 0 && turnsDiff >= 0) {
-    return "";
+  // Type 3 — FAST: clearly faster (≥ 2 min) at same toll level
+  if (tollDiff === 0 && timeDiff < 0 && absTimeDiff >= 2) {
+    return `${absTimeDiff} min faster`;
   }
 
-  // Build insight for routes with some advantage
-  let secondFactor = "";
-  
-  if (trafficDiff < 0) {
-    secondFactor = "lighter traffic";
-  } else if (trafficDiff > 0) {
-    secondFactor = r.traffic === "high" ? "heavy traffic" : "moderate traffic";
-  } else if (Math.abs(highwayDiff) > 0.15) {
-    secondFactor = highwayDiff > 0 ? "more highway" : "less highway";
-  } else if (Math.abs(turnsDiff) > 1) {
-    secondFactor = turnsDiff > 0 ? "more turns" : "fewer turns";
+  // Type 4 — NO TOLLS: this route is free while best is paid
+  if (r.tollCost === 0 && best.tollCost > 0) {
+    return "No tolls";
   }
 
-  const timeStr = timeDiff > 0 ? `+${timeDiff} min` : timeDiff < 0 ? `${absTimeDiff} min faster` : "";
-
-  if (timeStr && secondFactor) {
-    return `${timeStr}, ${secondFactor}`;
-  }
-  if (timeStr) {
-    return timeStr;
-  }
-  if (secondFactor) {
-    return secondFactor;
-  }
-
+  // Everything else (fewer turns, lighter traffic, weak diffs) → drop
   return "";
 }
 
@@ -2106,6 +2066,8 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>  
+
+
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
