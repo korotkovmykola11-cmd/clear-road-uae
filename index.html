@@ -170,35 +170,17 @@
       margin-bottom: 10px;
     }
 
-    .best-reason {
-      font-size: 15px;
-      color: #374151;
-      line-height: 1.5;
-      margin-bottom: 12px;
-      font-weight: 500;
-    }
-
-    .best-points {
-      margin-bottom: 16px;
-    }
-
-    .best-point {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      color: #374151;
-      margin-bottom: 6px;
-    }
-
-    .best-point::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      background: var(--green);
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
+    /* ── Day 4.5: AI Decision UX ── */
+    .decision-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .ai-confidence-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .ai-confidence-badge .conf-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .confidence-high   { background: #d1fae5; color: #065f46; }
+    .confidence-medium { background: #fef3c7; color: #92400e; }
+    .confidence-low    { background: #f3f4f6; color: #6b7280; }
+    .ai-hero-time { font-size: 52px; font-weight: 800; color: var(--dark); line-height: 1; margin-bottom: 4px; letter-spacing: -1px; }
+    .ai-hero-time span { font-size: 22px; font-weight: 600; color: var(--gray); margin-left: 2px; }
+    .ai-distance { font-size: 14px; color: var(--gray); margin-bottom: 14px; }
+    .ai-why { font-size: 16px; color: #1f2937; font-weight: 600; line-height: 1.4; margin-bottom: 16px; }
 
     .start-btn {
       width: 100%;
@@ -1905,31 +1887,27 @@ function renderResults() {
   selectedRoute = best;
 
   // --- Best card (ТЗ2: clean UI, no comparative text) ---
-  const metricsLine = `${getDisplayMinutes(best)} min · ${best.complexity} turns`;
-  
-  // ТЗ3: Toll line for best card
-  const bestTollLine = best.tollCost > 0 ? `+${best.tollCost} AED` : `No tolls`;
-  const bestTollClass = best.tollCost > 0 ? "best-toll has-toll" : "best-toll";
-
-  // ТЗ4.5 FINAL: AI decision text — one-line "why this route"
-  const aiDecision = generateAIDecision(best, analyzedRoutes);
+  // Day 4.5: AI Decision UX — confidence badge + hero time + one why-line
+  const conf = calculateConfidence(best, analyzedRoutes);
+  const whyText = generateAIDecision(best, analyzedRoutes);
+  const distKm = (best.distance / 1000).toFixed(1);
+  const tollTag = best.tollCost > 0 ? `+${best.tollCost} AED Salik` : "No tolls";
 
   let html = `
     <div class="best-card">
-      <div class="best-label">Recommended</div>
-      <div class="best-badge">
-        <svg viewBox="0 0 24 24"><path fill="white" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      <div class="decision-header">
+        <span class="best-label">Best route right now</span>
+        <span class="ai-confidence-badge confidence-${conf.toLowerCase()}">
+          <span class="conf-dot"></span>${conf}
+        </span>
       </div>
-      <h2 class="best-title">Recommended: ${getRouteSummaryName(best)}</h2>
-      <div class="ai-decision">${aiDecision}</div>
-      <div class="ai-timing">${generateTimeInsight(best)}</div>
-      <div class="ai-personality">${generateRoutePersonality(best)}</div>
+      <div class="ai-hero-time">${getDisplayMinutes(best)}<span>min</span></div>
+      <div class="ai-distance">${distKm} km · ${tollTag}</div>
+      <div class="ai-why">${whyText}</div>
       <div class="predict-tip" id="predict-tip" style="display:none"></div>
-      <p class="best-metrics">${metricsLine}</p>
-      <div class="${bestTollClass}">${bestTollLine}</div>
       ${getParkingInsight() ? `<div class="best-parking">${getParkingInsight()}</div>` : ""}
-      <button class="start-btn" onclick="startDrive(${best.index})">Start via ${getRouteSummaryName(best)}</button>
-      <div class="why-link" onclick="openRouteDetails(${best.index})">Why this route? &rsaquo;</div>
+      <button class="start-btn" onclick="startDrive(${best.index})">Go via ${getRouteSummaryName(best)}</button>
+      <div class="why-link" onclick="openRouteDetails(${best.index})">Route details &rsaquo;</div>
     </div>
   `;
 
@@ -2074,18 +2052,23 @@ function generateTimeInsight(best) {
 function generateAIDecision(best, allRoutes) {
   const others = (allRoutes || []).filter(r => r.index !== best.index);
   const bestMin = getDisplayMinutes(best);
+  const road = getRouteSummaryName(best);
+  const via = (road && !road.startsWith("Route ")) ? ` via ${road}` : "";
 
-  // ── Filter-aware phrases (checked before general logic) ──
+  // ── Filter-aware phrases ──
   if (userFilters.avoid_highways && !best.highway) {
     const fasterHwy = others.find(r => r.highway && getDisplayMinutes(r) < bestMin);
-    const s = fasterHwy ? "Avoids highways with minimal delay" : "Best route without highways";
-    return `${s} · ${calculateConfidence(best, allRoutes)} confidence`;
-  }
-  if (userFilters.fewer_turns && others.every(r => r.complexity >= best.complexity)) {
-    return `Simpler route with fewer turns · ${calculateConfidence(best, allRoutes)} confidence`;
+    if (fasterHwy) {
+      const gap = Math.round(getDisplayMinutes(fasterHwy) - bestMin);
+      return `${Math.abs(gap)} min more — but no highway${via}`;
+    }
+    return `No highways — best available${via}`;
   }
   if (userFilters.fewer_turns) {
-    return `Less complex route, slightly longer · ${calculateConfidence(best, allRoutes)} confidence`;
+    const simplerThanAll = others.every(r => r.complexity >= best.complexity);
+    return simplerThanAll
+      ? `Fewest turns${via}`
+      : `Simpler route, slightly longer${via}`;
   }
 
   const fasterPaid = others.find(r =>
@@ -2095,38 +2078,35 @@ function generateAIDecision(best, allRoutes) {
     best.tollCost > 0 && r.tollCost === 0 && getDisplayMinutes(r) >= bestMin
   );
 
-  let sentence;
-
-  // Best is free + a paid alt is faster → only claim what data supports
+  // Free route, but a paid alt is faster
   if (best.tollCost === 0 && fasterPaid) {
-    const gap = bestMin - getDisplayMinutes(fasterPaid);
-    sentence = gap <= 3
-      ? "Slightly slower, but avoids tolls"
-      : "Best balance of time and no tolls";
+    const gap = Math.abs(bestMin - getDisplayMinutes(fasterPaid));
+    return gap <= 2
+      ? `${gap} min more — saves ${fasterPaid.tollCost} AED${via}`
+      : `Best balance — no tolls${via}`;
   }
-  // Best has high traffic → honest warning
-  else if (best.traffic === "high") {
-    sentence = "Fastest route, but with higher traffic risk";
+  // Paid route, a free alt exists but is slower
+  if (best.tollCost > 0 && slowerFree) {
+    const gap = Math.round(getDisplayMinutes(slowerFree) - bestMin);
+    return `${gap} min faster than free route${via}`;
   }
-  // Best is paid + a slower free alt exists → toll is justified
-  else if (best.tollCost > 0 && slowerFree) {
-    sentence = "Faster than the free route — worth the toll";
+  // Heavy traffic warning
+  if (best.traffic === "high") {
+    return `Fastest option${via} — expect heavy traffic`;
   }
-  // Best has low traffic + low delay → trustworthy current pick
-  else if (best.traffic === "low" && (best.delayMinutes || 0) <= 2) {
-    sentence = "Best current option with stable traffic";
+  // Significant delay
+  if ((best.delayMinutes || 0) >= 4) {
+    return `${best.delayMinutes} min delay expected${via}`;
   }
-  // Free + clean conditions, no faster paid alt
-  else if (best.tollCost === 0 && best.traffic !== "high") {
-    sentence = "Best balance of time and no tolls";
+  // Clean road, low delay
+  if (best.traffic === "low" && (best.delayMinutes || 0) <= 2) {
+    return `Clear road${via} — best pick right now`;
   }
-  // Generic fallback
-  else {
-    sentence = "Best balance of speed and stability";
+  // Free, normal conditions
+  if (best.tollCost === 0) {
+    return `No tolls, smooth flow${via}`;
   }
-
-  const confidence = calculateConfidence(best, allRoutes);
-  return `${sentence} · ${confidence} confidence`;
+  return `Best option right now${via}`;
 }
 
 // ТЗ5: Decision insight — only 3 types (paid / fast / no tolls)
@@ -2460,7 +2440,7 @@ document.querySelectorAll(".filter-btn").forEach(b =>
 // ============================================================
 
 window.initMap = initMap;
-</script>  
+</script>   
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
