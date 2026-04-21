@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1310,23 +1310,51 @@ function selectBestRoute(routes) {
   )[0];
 }
 
-// ── Confidence helper: how decisive is the recommendation? ──
-// Compares score gap between best route and closest alternative.
+// ── Confidence helper: practical, decision-aligned (matches selectBestRoute logic) ──
+// HIGH   = obvious human choice (free vs slightly faster paid, lower traffic, lower delay, or dominant)
+// MEDIUM = real trade-off (faster alt exists but worse on cost/stability)
+// LOW    = routes are genuinely interchangeable on all dimensions
 function calculateConfidence(best, allRoutes) {
   if (!allRoutes || allRoutes.length < 2) return "High";
-  const scored = allRoutes.map(r => ({
-    index: r.index,
-    score: calculateRouteScore(r, allRoutes).score
-  })).sort((a, b) => a.score - b.score);
+  const others = allRoutes.filter(r => r.index !== best.index);
+  if (others.length === 0) return "High";
 
-  const bestScored = scored.find(x => x.index === best.index);
-  const others = scored.filter(x => x.index !== best.index);
-  if (!bestScored || others.length === 0) return "High";
+  const bestMin = getDisplayMinutes(best);
+  const fasterAlts = others.filter(r => getDisplayMinutes(r) < bestMin);
+  const fastestAlt = fasterAlts.length
+    ? fasterAlts.reduce((a, b) => getDisplayMinutes(a) < getDisplayMinutes(b) ? a : b)
+    : null;
 
-  const gap = others[0].score - bestScored.score;
-  if (gap >= 8) return "High";
-  if (gap >= 3) return "Medium";
-  return "Low";
+  // Case A: nothing is faster — best is dominant on time
+  if (!fastestAlt) return "High";
+
+  const timeGap = bestMin - getDisplayMinutes(fastestAlt); // min that alt saves
+
+  // Case B: best is free, faster alt is paid, small gap → clear human win
+  if (best.tollCost === 0 && fastestAlt.tollCost > 0 && timeGap <= 3) {
+    return "High";
+  }
+  // Case C: best clearly avoids worse traffic of the faster alt
+  if (trafficRank(best.traffic) < trafficRank(fastestAlt.traffic) && timeGap <= 5) {
+    return "High";
+  }
+  // Case D: best clearly avoids higher delay of the faster alt
+  if ((fastestAlt.delayMinutes || 0) - (best.delayMinutes || 0) >= 3 && timeGap <= 5) {
+    return "High";
+  }
+
+  // Truly similar across the board → LOW (rare)
+  const trulySimilar = others.every(r => {
+    const dt = Math.abs(getDisplayMinutes(r) - bestMin);
+    return dt <= 2
+      && r.tollCost === best.tollCost
+      && trafficRank(r.traffic) === trafficRank(best.traffic)
+      && Math.abs((r.complexity || 0) - (best.complexity || 0)) <= 2;
+  });
+  if (trulySimilar) return "Low";
+
+  // Otherwise: meaningful trade-off
+  return "Medium";
 }
 
 // ============================================================
@@ -1930,29 +1958,32 @@ function generateAIDecision(best, allRoutes) {
 
   let sentence;
 
-  // Best is free + a paid alt is faster → "calmer and toll-free"
+  // Best is free + a paid alt is faster → only claim what data supports
   if (best.tollCost === 0 && fasterPaid) {
-    sentence = "Slightly slower, but calmer and toll-free";
+    const gap = bestMin - getDisplayMinutes(fasterPaid);
+    sentence = gap <= 3
+      ? "Slightly slower, but avoids tolls"
+      : "Best balance of time and no tolls";
   }
   // Best has high traffic → honest warning
   else if (best.traffic === "high") {
     sentence = "Fastest route, but with higher traffic risk";
   }
-  // Best is paid but the smarter pick (faster + free alt is much slower or no free alt)
+  // Best is paid + a slower free alt exists → toll is justified
   else if (best.tollCost > 0 && slowerFree) {
-    sentence = "Fastest route with stable traffic — worth the toll";
+    sentence = "Faster than the free route — worth the toll";
   }
-  // Best has low traffic + low delay → ideal
+  // Best has low traffic + low delay → trustworthy current pick
   else if (best.traffic === "low" && (best.delayMinutes || 0) <= 2) {
     sentence = "Best current option with stable traffic";
   }
-  // Free + clean conditions
+  // Free + clean conditions, no faster paid alt
   else if (best.tollCost === 0 && best.traffic !== "high") {
-    sentence = "Best balance of time, traffic, and no tolls";
+    sentence = "Best balance of time and no tolls";
   }
   // Generic fallback
   else {
-    sentence = "Best balance of time and traffic conditions";
+    sentence = "Best balance of speed and stability";
   }
 
   const confidence = calculateConfidence(best, allRoutes);
