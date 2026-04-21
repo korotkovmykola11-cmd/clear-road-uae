@@ -1269,61 +1269,64 @@ function selectBestRoute(routes) {
 
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
 
-  // FIX 1: Prefer FREE route if it's only slightly slower (<=3 min)
-  // This is the main UX fix - users prefer saving money over 2-3 min
-  const freeRoutes = routes.filter(r => r.tollCost === 0);
-  if (freeRoutes.length > 0 && fastest.tollCost > 0) {
-    const bestFree = [...freeRoutes].sort((a, b) => a.time - b.time)[0];
-    const timeDiffFromFastest = getDisplayDiff(bestFree, fastest);
-    
-    // If free route is only <=3 min slower than paid fastest, prefer free
-    if (timeDiffFromFastest <= 3) {
-      return bestFree;
+  // ── Step 1: Build "competitive pool" — routes within 5 min of fastest ──
+  // Anything further is too slow to be considered, regardless of other merits.
+  let pool = routes.filter(r => (r.time - fastest.time) / 60 <= 5);
+  if (pool.length === 0) pool = [fastest];
+
+  // ── Step 2: Strong free-route preference ──
+  // If fastest is paid AND there's a free route within 4 min → prefer free.
+  if (fastest.tollCost > 0) {
+    const competitiveFree = pool.filter(r =>
+      r.tollCost === 0 && (r.time - fastest.time) / 60 <= 4
+    );
+    if (competitiveFree.length > 0) {
+      return competitiveFree.sort((a, b) =>
+        trafficRank(a.traffic) - trafficRank(b.traffic) ||
+        a.delayMinutes - b.delayMinutes ||
+        a.complexity - b.complexity ||
+        a.time - b.time
+      )[0];
     }
   }
 
-  // If fastest is free and has low delay, use it
-  if (fastest.tollCost === 0 && fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
-    return fastest;
-  }
+  // ── Step 3: Drop high-traffic routes if any non-high alternative exists ──
+  // Fastest with unstable traffic should NOT auto-win.
+  const nonHigh = pool.filter(r => r.traffic !== "high");
+  if (nonHigh.length > 0) pool = nonHigh;
 
-  // If fastest is paid but has very low delay, check if there's a comparable free option
-  if (fastest.delayMinutes <= 2 && fastest.traffic !== "high") {
-    // Already handled above - if we're here, there's no good free alternative
-    return fastest;
-  }
+  // ── Step 4: Final ranking by human-logical priority ──
+  // 1. lower traffic risk
+  // 2. lower delay
+  // 3. lower toll cost
+  // 4. lower maneuver complexity
+  // 5. faster total time
+  return pool.sort((a, b) =>
+    trafficRank(a.traffic) - trafficRank(b.traffic) ||
+    a.delayMinutes - b.delayMinutes ||
+    a.tollCost - b.tollCost ||
+    a.complexity - b.complexity ||
+    a.time - b.time
+  )[0];
+}
 
-  let recommended = fastest;
+// ── Confidence helper: how decisive is the recommendation? ──
+// Compares score gap between best route and closest alternative.
+function calculateConfidence(best, allRoutes) {
+  if (!allRoutes || allRoutes.length < 2) return "High";
+  const scored = allRoutes.map(r => ({
+    index: r.index,
+    score: calculateRouteScore(r, allRoutes).score
+  })).sort((a, b) => a.score - b.score);
 
-  for (const r of routes) {
-    if (r.index === fastest.index) continue;
+  const bestScored = scored.find(x => x.index === best.index);
+  const others = scored.filter(x => x.index !== best.index);
+  if (!bestScored || others.length === 0) return "High";
 
-    const timeDiff = getDisplayDiff(r, fastest);
-
-    if (timeDiff >= 0 && timeDiff <= 3) {
-      const hasLowerDelay = r.delayMinutes < fastest.delayMinutes - 1;
-      const hasHigherStability = r.stabilityScore > fastest.stabilityScore + 10;
-      const hasLighterTraffic = trafficRank(r.traffic) < trafficRank(fastest.traffic);
-      const isCheaper = r.tollCost < fastest.tollCost;
-
-      if (hasLowerDelay || hasHigherStability || hasLighterTraffic || isCheaper) {
-        if (recommended.index === fastest.index) {
-          recommended = r;
-        } else {
-          // Compare with current recommended
-          const betterThanCurrent =
-            (r.tollCost < recommended.tollCost) ||
-            (r.tollCost === recommended.tollCost && r.delayMinutes < recommended.delayMinutes) ||
-            (r.tollCost === recommended.tollCost && r.stabilityScore > recommended.stabilityScore);
-          if (betterThanCurrent) {
-            recommended = r;
-          }
-        }
-      }
-    }
-  }
-
-  return recommended;
+  const gap = others[0].score - bestScored.score;
+  if (gap >= 8) return "High";
+  if (gap >= 3) return "Medium";
+  return "Low";
 }
 
 // ============================================================
@@ -1913,44 +1916,47 @@ function generateTimeInsight(best) {
   return "Conditions are stable";
 }
 
-// ТЗ4.5 FINAL: One-line AI decision shown in Recommended card
+// One-line AI decision shown in Recommended card — natural, human-readable
 function generateAIDecision(best, allRoutes) {
   const others = (allRoutes || []).filter(r => r.index !== best.index);
   const bestMin = getDisplayMinutes(best);
 
-  // Scenario 1: best is paid AND there is a free alternative that is slower
-  if (best.tollCost > 0) {
-    const slowerFree = others.filter(r => r.tollCost === 0 && getDisplayMinutes(r) > bestMin);
-    if (slowerFree.length > 0) {
-      const slowest = slowerFree.reduce((a, b) =>
-        getDisplayMinutes(a) > getDisplayMinutes(b) ? a : b
-      );
-      const diff = getDisplayMinutes(slowest) - bestMin;
-      return `Fastest option — saves ${diff} min vs free route`;
-    }
+  const fasterPaid = others.find(r =>
+    r.tollCost > best.tollCost && getDisplayMinutes(r) < bestMin
+  );
+  const slowerFree = others.find(r =>
+    best.tollCost > 0 && r.tollCost === 0 && getDisplayMinutes(r) >= bestMin
+  );
+
+  let sentence;
+
+  // Best is free + a paid alt is faster → "calmer and toll-free"
+  if (best.tollCost === 0 && fasterPaid) {
+    sentence = "Slightly slower, but calmer and toll-free";
+  }
+  // Best has high traffic → honest warning
+  else if (best.traffic === "high") {
+    sentence = "Fastest route, but with higher traffic risk";
+  }
+  // Best is paid but the smarter pick (faster + free alt is much slower or no free alt)
+  else if (best.tollCost > 0 && slowerFree) {
+    sentence = "Fastest route with stable traffic — worth the toll";
+  }
+  // Best has low traffic + low delay → ideal
+  else if (best.traffic === "low" && (best.delayMinutes || 0) <= 2) {
+    sentence = "Best current option with stable traffic";
+  }
+  // Free + clean conditions
+  else if (best.tollCost === 0 && best.traffic !== "high") {
+    sentence = "Best balance of time, traffic, and no tolls";
+  }
+  // Generic fallback
+  else {
+    sentence = "Best balance of time and traffic conditions";
   }
 
-  // Scenario 2: best is free AND there is a paid alternative that is faster
-  if (best.tollCost === 0) {
-    const fasterPaid = others.filter(r => r.tollCost > 0 && getDisplayMinutes(r) < bestMin);
-    if (fasterPaid.length > 0) {
-      const fastest = fasterPaid.reduce((a, b) =>
-        getDisplayMinutes(a) < getDisplayMinutes(b) ? a : b
-      );
-      const diff = bestMin - getDisplayMinutes(fastest);
-      return `No tolls — only ${diff} min slower than fastest`;
-    }
-  }
-
-  // Scenario 3: everything within ~2 min — balanced choice
-  const allClose = others.length > 0 &&
-    others.every(r => Math.abs(getDisplayMinutes(r) - bestMin) <= 2);
-  if (allClose) {
-    return "Best balanced route";
-  }
-
-  // Scenario 4: fallback — paid best with no meaningful alternatives
-  return "Fastest available route";
+  const confidence = calculateConfidence(best, allRoutes);
+  return `${sentence} · ${confidence} confidence`;
 }
 
 // ТЗ5: Decision insight — only 3 types (paid / fast / no tolls)
