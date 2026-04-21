@@ -1290,23 +1290,13 @@ function selectBestRoute(routes) {
   // ── User preference override (minimal injection) ──
   const pref = getUserPreference();
 
-  // ── Filter: avoid_highways ──
-  if (userFilters.avoid_highways) {
-    const noHwy = routes.filter(r => !r.highway);
-    if (noHwy.length > 0) {
-      const fastestNoHwy = [...noHwy].sort((a, b) => a.time - b.time)[0];
-      if ((fastestNoHwy.time - fastest.time) / 60 <= 7) {
-        return noHwy.sort((a, b) =>
-          trafficRank(a.traffic) - trafficRank(b.traffic) ||
-          a.delayMinutes - b.delayMinutes ||
-          a.complexity - b.complexity ||
-          a.time - b.time
-        )[0];
-      }
-    }
-  }
-
   if (pref === "fastest") {
+    // avoid_highways modifier: if fastest is highway, accept a non-highway route within 3 min
+    if (userFilters.avoid_highways && fastest.highway) {
+      const closeNoHwy = routes.filter(r => !r.highway && (r.time - fastest.time) / 60 <= 3);
+      if (closeNoHwy.length > 0)
+        return closeNoHwy.sort((a, b) => a.time - b.time || a.complexity - b.complexity)[0];
+    }
     // Always prefer shortest time; only switch if a peer is essentially the same time
     // AND has cheaper toll cost (very small difference).
     const peers = routes.filter(r =>
@@ -1322,9 +1312,12 @@ function selectBestRoute(routes) {
       r.tollCost === 0 && (r.time - fastest.time) / 60 <= 5
     );
     if (free.length > 0) {
+      // fewer_turns modifier: elevate complexity in sort among toll-free candidates
       return free.sort((a, b) =>
         trafficRank(a.traffic) - trafficRank(b.traffic) ||
         a.delayMinutes - b.delayMinutes ||
+        (userFilters.fewer_turns ? a.complexity - b.complexity : 0) ||
+        a.tollCost - b.tollCost ||
         a.complexity - b.complexity ||
         a.time - b.time
       )[0];
@@ -1358,26 +1351,14 @@ function selectBestRoute(routes) {
   const nonHigh = pool.filter(r => r.traffic !== "high");
   if (nonHigh.length > 0) pool = nonHigh;
 
-  // ── Filter: fewer_turns — elevate complexity to #1 priority ──
-  if (userFilters.fewer_turns) {
-    return pool.sort((a, b) =>
-      a.complexity - b.complexity ||
-      trafficRank(a.traffic) - trafficRank(b.traffic) ||
-      a.delayMinutes - b.delayMinutes ||
-      a.tollCost - b.tollCost ||
-      a.time - b.time
-    )[0];
-  }
-
-  // ── Step 4: Final ranking by human-logical priority ──
-  // 1. lower traffic risk
-  // 2. lower delay
-  // 3. lower toll cost
-  // 4. lower maneuver complexity
-  // 5. faster total time
+  // ── Step 4: Final ranking — filters act as sort modifiers, not overrides ──
+  // avoid_highways: highway routes sorted last (penalty as first comparator)
+  // fewer_turns:    complexity elevated before toll cost
   return pool.sort((a, b) =>
+    (userFilters.avoid_highways ? (a.highway ? 1 : 0) - (b.highway ? 1 : 0) : 0) ||
     trafficRank(a.traffic) - trafficRank(b.traffic) ||
     a.delayMinutes - b.delayMinutes ||
+    (userFilters.fewer_turns ? a.complexity - b.complexity : 0) ||
     a.tollCost - b.tollCost ||
     a.complexity - b.complexity ||
     a.time - b.time
