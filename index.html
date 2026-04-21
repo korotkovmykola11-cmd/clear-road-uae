@@ -389,9 +389,9 @@
       font-size: 18px;
     }
 
-    .pref-bar { display: flex; gap: 8px; margin: 0 16px 12px; }
-    .pref-btn { flex: 1; padding: 8px 10px; font-size: 13px; color: var(--gray); background: var(--white); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font-family: inherit; }
-    .pref-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+    .pref-bar{display:flex;gap:8px;margin:0 16px 12px}
+    .pref-btn{flex:1;padding:8px 10px;font-size:13px;background:var(--white);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:inherit;color:var(--gray)}
+    .pref-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
 
     /* ===== MAP PREVIEW ===== */
     .map-preview {
@@ -2331,10 +2331,9 @@ function setUserPreference(value) {
   calculateRoutes();
 }
 
-document.addEventListener("DOMContentLoaded", () =>
-  document.querySelectorAll(".pref-btn").forEach(btn =>
-    btn.classList.toggle("active", btn.dataset.pref === getUserPreference())
-  )
+// sync active button on script load (DOM already built at this point)
+document.querySelectorAll(".pref-btn").forEach(b =>
+  b.classList.toggle("active", b.dataset.pref === getUserPreference())
 );
 
 // ============================================================
