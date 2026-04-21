@@ -389,6 +389,30 @@
       font-size: 18px;
     }
 
+    /* ===== PREFERENCE BAR (minimal, scoped) ===== */
+    .pref-bar {
+      display: flex;
+      gap: 8px;
+      margin: 0 16px 12px;
+    }
+    .pref-btn {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--gray);
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .pref-btn.active {
+      color: var(--white);
+      background: var(--green);
+      border-color: var(--green);
+    }
+
     /* ===== MAP PREVIEW ===== */
     .map-preview {
       margin: 0 16px;
@@ -927,6 +951,13 @@
   </div>
 </div>
 
+<!-- PREFERENCE BAR (minimal) -->
+<div class="pref-bar" id="pref-bar">
+  <button type="button" class="pref-btn" data-pref="balanced" onclick="setUserPreference('balanced')">Balanced</button>
+  <button type="button" class="pref-btn" data-pref="fastest"  onclick="setUserPreference('fastest')">Fastest</button>
+  <button type="button" class="pref-btn" data-pref="no_tolls" onclick="setUserPreference('no_tolls')">No tolls</button>
+</div>
+
 <!-- RESULTS CONTAINER -->
 <div id="results"></div>
 
@@ -1268,6 +1299,35 @@ function selectBestRoute(routes) {
   if (routes.length === 1) return routes[0];
 
   const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
+
+  // ── User preference override (minimal injection) ──
+  const pref = getUserPreference();
+
+  if (pref === "fastest") {
+    // Always prefer shortest time; only switch if a peer is essentially the same time
+    // AND has cheaper toll cost (very small difference).
+    const peers = routes.filter(r =>
+      Math.abs(r.time - fastest.time) / 60 <= 1 && r.tollCost < fastest.tollCost
+    );
+    if (peers.length === 0) return fastest;
+    return peers.sort((a, b) => a.tollCost - b.tollCost || a.time - b.time)[0];
+  }
+
+  if (pref === "no_tolls") {
+    // Strongly prefer toll-free, even if up to ~5 min slower than fastest
+    const free = routes.filter(r =>
+      r.tollCost === 0 && (r.time - fastest.time) / 60 <= 5
+    );
+    if (free.length > 0) {
+      return free.sort((a, b) =>
+        trafficRank(a.traffic) - trafficRank(b.traffic) ||
+        a.delayMinutes - b.delayMinutes ||
+        a.complexity - b.complexity ||
+        a.time - b.time
+      )[0];
+    }
+    // Otherwise fall through to balanced logic below
+  }
 
   // ── Step 1: Build "competitive pool" — routes within 5 min of fastest ──
   // Anything further is too slow to be considered, regardless of other merits.
@@ -1949,6 +2009,18 @@ function generateAIDecision(best, allRoutes) {
   const others = (allRoutes || []).filter(r => r.index !== best.index);
   const bestMin = getDisplayMinutes(best);
 
+  // ── Preference-aware short phrasing (overrides generic sentence) ──
+  const pref = getUserPreference();
+  if (pref === "fastest") {
+    const conf = calculateConfidence(best, allRoutes);
+    return `Fastest route right now · ${conf} confidence`;
+  }
+  if (pref === "no_tolls" && best.tollCost === 0) {
+    const conf = calculateConfidence(best, allRoutes);
+    return `Avoids tolls with minimal delay · ${conf} confidence`;
+  }
+  // Otherwise fall through to existing balanced phrasing below
+
   const fasterPaid = others.find(r =>
     r.tollCost > best.tollCost && getDisplayMinutes(r) < bestMin
   );
@@ -2272,6 +2344,52 @@ function updateSavedPlace(place) {
   if (endField) endField.value = trimmed;
   if (typeof calculateRoutes === "function") calculateRoutes();
 }
+
+// ============================================================
+//  USER PREFERENCE — Balanced / Fastest / No tolls (localStorage)
+// ============================================================
+
+const USER_PREF_KEY = "clearRoadUAE.userPreference.v1";
+const VALID_PREFS = ["balanced", "fastest", "no_tolls"];
+let userPreference = "balanced";
+
+function getUserPreference() {
+  return VALID_PREFS.includes(userPreference) ? userPreference : "balanced";
+}
+
+function loadUserPreference() {
+  try {
+    const v = localStorage.getItem(USER_PREF_KEY);
+    if (v && VALID_PREFS.includes(v)) userPreference = v;
+  } catch (e) { /* fallback silently */ }
+}
+
+function saveUserPreferenceToStorage() {
+  try { localStorage.setItem(USER_PREF_KEY, userPreference); }
+  catch (e) { /* fallback silently */ }
+}
+
+function syncPrefBarUI() {
+  const bar = document.getElementById("pref-bar");
+  if (!bar) return;
+  bar.querySelectorAll(".pref-btn").forEach(btn => {
+    if (btn.dataset.pref === userPreference) btn.classList.add("active");
+    else btn.classList.remove("active");
+  });
+}
+
+function setUserPreference(pref) {
+  if (!VALID_PREFS.includes(pref)) pref = "balanced";
+  if (pref === userPreference) return;
+  userPreference = pref;
+  saveUserPreferenceToStorage();
+  syncPrefBarUI();
+  if (typeof calculateRoutes === "function") calculateRoutes();
+}
+
+// Initialize preference bar on script load (before initMap fires)
+loadUserPreference();
+document.addEventListener("DOMContentLoaded", syncPrefBarUI);
 
 // ============================================================
 //  ENTRY POINT
