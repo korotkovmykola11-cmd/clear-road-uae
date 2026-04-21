@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1767,6 +1767,7 @@ function renderResults() {
       <h2 class="best-title">Recommended: ${getRouteSummaryName(best)}</h2>
       <div class="ai-decision">${aiDecision}</div>
       <div class="ai-timing">${generateTimeInsight(best)}</div>
+      <div class="ai-personality">${generateRoutePersonality(best)}</div>
       <p class="best-metrics">${metricsLine}</p>
       <div class="${bestTollClass}">${bestTollLine}</div>
       ${getParkingInsight() ? `<div class="best-parking">${getParkingInsight()}</div>` : ""}
@@ -1864,6 +1865,32 @@ function renderResults() {
 //  ROUTE DETAILS MODAL
 // ============================================================
 
+
+// ТЗ7: One-line route "personality" — how the drive will feel
+function generateRoutePersonality(best) {
+  const hwy = best.highwayShare || 0;
+  const turns = best.complexity || 0;
+  const traffic = best.traffic;
+
+  // Scenario 4 (priority): busy / complex → stressful drive
+  if (turns >= 12 || traffic === "high") {
+    return "Busy route — expect frequent actions";
+  }
+  // Scenario 1: smooth highway
+  if (hwy >= 0.7 && turns <= 8) {
+    return "Smooth highway drive";
+  }
+  // Scenario 3: city driving
+  if (hwy < 0.3) {
+    return "City driving with turns";
+  }
+  // Scenario 2: mixed (0.3 ≤ hwy < 0.7)
+  if (hwy >= 0.3 && hwy < 0.7) {
+    return "Mixed city and highway";
+  }
+  // Fallback
+  return "Standard route";
+}
 
 // ТЗ6: One-line "when to go" timing insight for best route
 function generateTimeInsight(best) {
