@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -389,29 +389,9 @@
       font-size: 18px;
     }
 
-    /* ===== PREFERENCE BAR (minimal, scoped) ===== */
-    .pref-bar {
-      display: flex;
-      gap: 8px;
-      margin: 0 16px 12px;
-    }
-    .pref-btn {
-      flex: 1;
-      padding: 8px 10px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--gray);
-      background: var(--white);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      cursor: pointer;
-      font-family: inherit;
-    }
-    .pref-btn.active {
-      color: var(--white);
-      background: var(--green);
-      border-color: var(--green);
-    }
+    .pref-bar { display: flex; gap: 8px; margin: 0 16px 12px; }
+    .pref-btn { flex: 1; padding: 8px 10px; font-size: 13px; color: var(--gray); background: var(--white); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font-family: inherit; }
+    .pref-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
 
     /* ===== MAP PREVIEW ===== */
     .map-preview {
@@ -2009,18 +1989,6 @@ function generateAIDecision(best, allRoutes) {
   const others = (allRoutes || []).filter(r => r.index !== best.index);
   const bestMin = getDisplayMinutes(best);
 
-  // ── Preference-aware short phrasing (overrides generic sentence) ──
-  const pref = getUserPreference();
-  if (pref === "fastest") {
-    const conf = calculateConfidence(best, allRoutes);
-    return `Fastest route right now · ${conf} confidence`;
-  }
-  if (pref === "no_tolls" && best.tollCost === 0) {
-    const conf = calculateConfidence(best, allRoutes);
-    return `Avoids tolls with minimal delay · ${conf} confidence`;
-  }
-  // Otherwise fall through to existing balanced phrasing below
-
   const fasterPaid = others.find(r =>
     r.tollCost > best.tollCost && getDisplayMinutes(r) < bestMin
   );
@@ -2357,18 +2325,17 @@ function getUserPreference() {
 function setUserPreference(value) {
   if (!["balanced","fastest","no_tolls"].includes(value)) return;
   localStorage.setItem("clearRoadUAE.pref", value);
-  syncPrefUI();
+  document.querySelectorAll(".pref-btn").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.pref === value)
+  );
   calculateRoutes();
 }
 
-function syncPrefUI() {
-  const p = getUserPreference();
+document.addEventListener("DOMContentLoaded", () =>
   document.querySelectorAll(".pref-btn").forEach(btn =>
-    btn.classList.toggle("active", btn.dataset.pref === p)
-  );
-}
-
-document.addEventListener("DOMContentLoaded", syncPrefUI);
+    btn.classList.toggle("active", btn.dataset.pref === getUserPreference())
+  )
+);
 
 // ============================================================
 //  ENTRY POINT
