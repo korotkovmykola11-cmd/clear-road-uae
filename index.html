@@ -392,6 +392,9 @@
     .pref-bar{display:flex;gap:8px;margin:0 16px 12px}
     .pref-btn{flex:1;padding:8px 10px;font-size:13px;background:var(--white);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:inherit;color:var(--gray)}
     .pref-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
+    .filter-bar{display:flex;gap:8px;margin:0 16px 12px}
+    .filter-btn{flex:1;padding:6px 8px;font-size:12px;background:var(--white);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-family:inherit;color:var(--gray)}
+    .filter-btn.active{background:var(--yellow-bg);color:#92400e;border-color:var(--yellow)}
 
     /* ===== MAP PREVIEW ===== */
     .map-preview {
@@ -937,6 +940,10 @@
   <button type="button" class="pref-btn" data-pref="fastest"  onclick="setUserPreference('fastest')">Fastest</button>
   <button type="button" class="pref-btn" data-pref="no_tolls" onclick="setUserPreference('no_tolls')">No tolls</button>
 </div>
+<div class="filter-bar" id="filter-bar">
+  <button type="button" class="filter-btn" data-filter="avoid_highways" onclick="toggleFilter('avoid_highways')">🛣 Avoid highways</button>
+  <button type="button" class="filter-btn" data-filter="fewer_turns"    onclick="toggleFilter('fewer_turns')">↩ Fewer turns</button>
+</div>
 
 <!-- RESULTS CONTAINER -->
 <div id="results"></div>
@@ -1283,6 +1290,22 @@ function selectBestRoute(routes) {
   // ── User preference override (minimal injection) ──
   const pref = getUserPreference();
 
+  // ── Filter: avoid_highways ──
+  if (userFilters.avoid_highways) {
+    const noHwy = routes.filter(r => !r.highway);
+    if (noHwy.length > 0) {
+      const fastestNoHwy = [...noHwy].sort((a, b) => a.time - b.time)[0];
+      if ((fastestNoHwy.time - fastest.time) / 60 <= 7) {
+        return noHwy.sort((a, b) =>
+          trafficRank(a.traffic) - trafficRank(b.traffic) ||
+          a.delayMinutes - b.delayMinutes ||
+          a.complexity - b.complexity ||
+          a.time - b.time
+        )[0];
+      }
+    }
+  }
+
   if (pref === "fastest") {
     // Always prefer shortest time; only switch if a peer is essentially the same time
     // AND has cheaper toll cost (very small difference).
@@ -1334,6 +1357,17 @@ function selectBestRoute(routes) {
   // Fastest with unstable traffic should NOT auto-win.
   const nonHigh = pool.filter(r => r.traffic !== "high");
   if (nonHigh.length > 0) pool = nonHigh;
+
+  // ── Filter: fewer_turns — elevate complexity to #1 priority ──
+  if (userFilters.fewer_turns) {
+    return pool.sort((a, b) =>
+      a.complexity - b.complexity ||
+      trafficRank(a.traffic) - trafficRank(b.traffic) ||
+      a.delayMinutes - b.delayMinutes ||
+      a.tollCost - b.tollCost ||
+      a.time - b.time
+    )[0];
+  }
 
   // ── Step 4: Final ranking by human-logical priority ──
   // 1. lower traffic risk
@@ -1989,6 +2023,19 @@ function generateAIDecision(best, allRoutes) {
   const others = (allRoutes || []).filter(r => r.index !== best.index);
   const bestMin = getDisplayMinutes(best);
 
+  // ── Filter-aware phrases (checked before general logic) ──
+  if (userFilters.avoid_highways && !best.highway) {
+    const fasterHwy = others.find(r => r.highway && getDisplayMinutes(r) < bestMin);
+    const s = fasterHwy ? "Avoids highways with minimal delay" : "Best route without highways";
+    return `${s} · ${calculateConfidence(best, allRoutes)} confidence`;
+  }
+  if (userFilters.fewer_turns && others.every(r => r.complexity >= best.complexity)) {
+    return `Simpler route with fewer turns · ${calculateConfidence(best, allRoutes)} confidence`;
+  }
+  if (userFilters.fewer_turns) {
+    return `Less complex route, slightly longer · ${calculateConfidence(best, allRoutes)} confidence`;
+  }
+
   const fasterPaid = others.find(r =>
     r.tollCost > best.tollCost && getDisplayMinutes(r) < bestMin
   );
@@ -2249,6 +2296,23 @@ function closeModal(event) {
 //  QUICK ACCESS — Saved Places (Home / Work) via localStorage
 // ============================================================
 
+// ── Route Filters ──
+const FILTERS_KEY = "clearRoadUAE.filters.v1";
+let userFilters = (() => {
+  try { return Object.assign({ avoid_highways: false, fewer_turns: false }, JSON.parse(localStorage.getItem(FILTERS_KEY))); }
+  catch { return { avoid_highways: false, fewer_turns: false }; }
+})();
+
+function toggleFilter(key) {
+  if (!(key in userFilters)) return;
+  userFilters[key] = !userFilters[key];
+  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(userFilters)); } catch {}
+  document.querySelectorAll(".filter-btn").forEach(b =>
+    b.classList.toggle("active", !!userFilters[b.dataset.filter])
+  );
+  calculateRoutes();
+}
+
 const SAVED_PLACES_KEY = "clearRoadUAE.savedPlaces.v1";
 
 function getSavedPlaces() {
@@ -2334,6 +2398,9 @@ function setUserPreference(value) {
 // sync active button on script load (DOM already built at this point)
 document.querySelectorAll(".pref-btn").forEach(b =>
   b.classList.toggle("active", b.dataset.pref === getUserPreference())
+);
+document.querySelectorAll(".filter-btn").forEach(b =>
+  b.classList.toggle("active", !!userFilters[b.dataset.filter])
 );
 
 // ============================================================
