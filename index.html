@@ -2349,47 +2349,26 @@ function updateSavedPlace(place) {
 //  USER PREFERENCE — Balanced / Fastest / No tolls (localStorage)
 // ============================================================
 
-const USER_PREF_KEY = "clearRoadUAE.userPreference.v1";
-const VALID_PREFS = ["balanced", "fastest", "no_tolls"];
-let userPreference = "balanced";
-
 function getUserPreference() {
-  return VALID_PREFS.includes(userPreference) ? userPreference : "balanced";
+  const v = localStorage.getItem("clearRoadUAE.pref") || "balanced";
+  return ["balanced","fastest","no_tolls"].includes(v) ? v : "balanced";
 }
 
-function loadUserPreference() {
-  try {
-    const v = localStorage.getItem(USER_PREF_KEY);
-    if (v && VALID_PREFS.includes(v)) userPreference = v;
-  } catch (e) { /* fallback silently */ }
+function setUserPreference(value) {
+  if (!["balanced","fastest","no_tolls"].includes(value)) return;
+  localStorage.setItem("clearRoadUAE.pref", value);
+  syncPrefUI();
+  calculateRoutes();
 }
 
-function saveUserPreference() {
-  try { localStorage.setItem(USER_PREF_KEY, userPreference); }
-  catch (e) { /* fallback silently */ }
+function syncPrefUI() {
+  const p = getUserPreference();
+  document.querySelectorAll(".pref-btn").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.pref === p)
+  );
 }
 
-function updatePreferenceUI() {
-  const bar = document.getElementById("pref-bar");
-  if (!bar) return;
-  bar.querySelectorAll(".pref-btn").forEach(btn => {
-    if (btn.dataset.pref === userPreference) btn.classList.add("active");
-    else btn.classList.remove("active");
-  });
-}
-
-function setUserPreference(pref) {
-  if (!VALID_PREFS.includes(pref)) pref = "balanced";
-  if (pref === userPreference) return;
-  userPreference = pref;
-  saveUserPreference();
-  updatePreferenceUI();
-  if (typeof calculateRoutes === "function") calculateRoutes();
-}
-
-// Initialize: load saved preference, then sync button states once DOM is ready
-loadUserPreference();
-document.addEventListener("DOMContentLoaded", updatePreferenceUI);
+document.addEventListener("DOMContentLoaded", syncPrefUI);
 
 // ============================================================
 //  ENTRY POINT
