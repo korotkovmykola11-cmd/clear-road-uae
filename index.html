@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1916,85 +1916,63 @@ function renderResults() {
   `;
 
   // --- Alternative cards ---
-  // ТЗ5: Strict alternative filter — no dupes, no worthless routes
-  const alternatives = analyzedRoutes.filter(r => {
-    if (r.index === best.index) return false;
-
-    // Rule A (ТЗ5 §4): Skip if slower-or-same time AND same toll → no value
-    if (r.time >= best.time && r.tollCost === best.tollCost) return false;
-
-    // Rule B (ТЗ5 §1): Filter near-identical routes — within 2 min AND same toll
-    const timeDiffMin = Math.abs(getDisplayMinutes(r) - getDisplayMinutes(best));
-    if (timeDiffMin <= 2 && r.tollCost === best.tollCost) return false;
-
-    return true;
-  });
-
-  // ТЗ5: Dedupe by insight key + sort by time, drop alts with no insight
-  const seenInsights = new Set();
-  const uniqueAlternatives = [];
-
-  alternatives
-    .sort((a, b) => a.time - b.time || a.tollCost - b.tollCost)
-    .forEach(r => {
-      const insight = getRouteInsight(r, best, fastest);
-      if (!insight) return; // weak alternatives produce empty insight → drop them
-      const key = `${insight}_${r.tollCost}`;
-      if (!seenInsights.has(key)) {
-        seenInsights.add(key);
-        uniqueAlternatives.push(r);
-      }
+  const alternatives = analyzedRoutes
+    .filter(r => r.index !== best.index)
+    .sort((a, b) => {
+      const timeDiff = Math.abs(getDisplayMinutes(a) - getDisplayMinutes(best))
+                     - Math.abs(getDisplayMinutes(b) - getDisplayMinutes(best));
+      return (
+        timeDiff ||
+        trafficRank(a.traffic) - trafficRank(b.traffic) ||
+        a.complexity - b.complexity ||
+        a.tollCost - b.tollCost ||
+        a.time - b.time
+      );
     });
 
-  // ТЗ5 FINAL: pairwise dedup BETWEEN alternatives
-  // If two alts have same tollCost AND |time diff| <= 2 min → keep only the better one
-  // Better = lower time → lower complexity → higher stabilityScore
+  // Soft dedupe: drop only truly identical routes (time ±1 min, same toll, traffic, complexity)
   const dedupedAlternatives = [];
-  for (const cand of uniqueAlternatives) {
-    const dupIdx = dedupedAlternatives.findIndex(existing =>
-      existing.tollCost === cand.tollCost &&
-      Math.abs(getDisplayMinutes(existing) - getDisplayMinutes(cand)) <= 2
-    );
+  for (const cand of alternatives) {
+    const dupIdx = dedupedAlternatives.findIndex(existing => {
+      const sameTime = Math.abs(getDisplayMinutes(existing) - getDisplayMinutes(cand)) <= 1;
+      const sameToll = existing.tollCost === cand.tollCost;
+      const sameTraffic = existing.traffic === cand.traffic;
+      const sameComplexity = Math.abs(existing.complexity - cand.complexity) <= 1;
+      return sameTime && sameToll && sameTraffic && sameComplexity;
+    });
     if (dupIdx === -1) {
       dedupedAlternatives.push(cand);
       continue;
     }
     const existing = dedupedAlternatives[dupIdx];
-    const candTime     = getDisplayMinutes(cand);
-    const existingTime = getDisplayMinutes(existing);
-    let candWins = false;
-    if (candTime < existingTime) candWins = true;
-    else if (candTime === existingTime && cand.complexity < existing.complexity) candWins = true;
-    else if (candTime === existingTime && cand.complexity === existing.complexity &&
-             (cand.stabilityScore || 0) > (existing.stabilityScore || 0)) candWins = true;
-    if (candWins) dedupedAlternatives[dupIdx] = cand;
+    const candBetter =
+      trafficRank(cand.traffic) < trafficRank(existing.traffic) ||
+      (trafficRank(cand.traffic) === trafficRank(existing.traffic) && cand.complexity < existing.complexity) ||
+      (trafficRank(cand.traffic) === trafficRank(existing.traffic) &&
+       cand.complexity === existing.complexity && cand.time < existing.time);
+    if (candBetter) dedupedAlternatives[dupIdx] = cand;
   }
 
-  // ТЗ5 §2: Hard cap — never show more than 2 alternatives
+  // Show up to 2 real alternatives
   dedupedAlternatives.slice(0, 2).forEach(r => {
-  // ТЗ4: Get insight for this route
-  const insight = getRouteInsight(r, best, fastest);
-  
-  // FIX 4: Don't duplicate toll info - if insight mentions AED, skip tollLine
-  const insightHasMoney = insight && (insight.includes("AED") || insight.includes("Save"));
-  const insightHtml = insight ? `<div class="route-insight">${insight}</div>` : "";
-  
-  // Only show toll line if insight doesn't already mention money
-  const tollLine = insightHasMoney ? "" : (r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls");
-  const tollHtml = tollLine ? `<div class="alt-toll">${tollLine}</div>` : "";
+    const insight = getRouteInsight(r, best, fastest) || getFallbackAlternativeInsight(r, best);
+    const insightHasMoney = insight && (insight.includes("AED") || insight.includes("Save"));
+    const insightHtml = `<div class="route-insight">${insight}</div>`;
+    const tollLine = insightHasMoney ? "" : (r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls");
+    const tollHtml = tollLine ? `<div class="alt-toll">${tollLine}</div>` : "";
 
-  html += `
-  <div class="alt-card" onclick="openRouteDetails(${r.index})">
-  <div class="alt-icon">&#128736;</div>
-  <div class="alt-content">
-  <div class="alt-title">Alternative</div>
-  <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
-  ${insightHtml}
-  ${tollHtml}
-  </div>
-  <div class="alt-arrow">&#8250;</div>
-  </div>
-  `;
+    html += `
+      <div class="alt-card ${r.role || "balanced"}" onclick="openRouteDetails(${r.index})">
+        <div class="alt-icon">&#128736;</div>
+        <div class="alt-content">
+          <div class="alt-title">${getAlternativeTitle(r, best, fastest)}</div>
+          <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
+          ${insightHtml}
+          ${tollHtml}
+        </div>
+        <div class="alt-arrow">&#8250;</div>
+      </div>
+    `;
   });
 
   container.innerHTML = html;
@@ -2164,6 +2142,24 @@ function getRouteInsight(r, best, fastest) {
 
   // Everything else (fewer turns, lighter traffic, weak diffs) → drop
   return "";
+}
+
+function getAlternativeTitle(r, best, fastest) {
+  if (r.index === fastest.index && r.index !== best.index) return "Fastest option";
+  if (r.tollCost === 0 && best.tollCost > 0) return "No tolls route";
+  if (trafficRank(r.traffic) < trafficRank(best.traffic)) return "Calmer option";
+  if (r.complexity < best.complexity) return "Simpler route";
+  return `Via ${getRouteSummaryName(r)}`;
+}
+
+function getFallbackAlternativeInsight(r, best) {
+  const timeDiff = getDisplayMinutes(r) - getDisplayMinutes(best);
+  if (timeDiff < 0) return `${Math.abs(timeDiff)} min faster, but different route`;
+  if (timeDiff > 0 && trafficRank(r.traffic) < trafficRank(best.traffic)) return `${timeDiff} min slower, but calmer traffic`;
+  if (timeDiff > 0 && r.complexity < best.complexity) return `${timeDiff} min slower, but fewer turns`;
+  if (r.tollCost < best.tollCost) return `Lower toll cost with similar time`;
+  if (r.tollCost === 0) return `No tolls alternative`;
+  return `Alternative via ${getRouteSummaryName(r)}`;
 }
 
 function generateNeutralWhy(route) {
