@@ -2364,12 +2364,12 @@ function loadUserPreference() {
   } catch (e) { /* fallback silently */ }
 }
 
-function saveUserPreferenceToStorage() {
+function saveUserPreference() {
   try { localStorage.setItem(USER_PREF_KEY, userPreference); }
   catch (e) { /* fallback silently */ }
 }
 
-function syncPrefBarUI() {
+function updatePreferenceUI() {
   const bar = document.getElementById("pref-bar");
   if (!bar) return;
   bar.querySelectorAll(".pref-btn").forEach(btn => {
@@ -2382,14 +2382,14 @@ function setUserPreference(pref) {
   if (!VALID_PREFS.includes(pref)) pref = "balanced";
   if (pref === userPreference) return;
   userPreference = pref;
-  saveUserPreferenceToStorage();
-  syncPrefBarUI();
+  saveUserPreference();
+  updatePreferenceUI();
   if (typeof calculateRoutes === "function") calculateRoutes();
 }
 
-// Initialize preference bar on script load (before initMap fires)
+// Initialize: load saved preference, then sync button states once DOM is ready
 loadUserPreference();
-document.addEventListener("DOMContentLoaded", syncPrefBarUI);
+document.addEventListener("DOMContentLoaded", updatePreferenceUI);
 
 // ============================================================
 //  ENTRY POINT
