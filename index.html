@@ -1766,6 +1766,7 @@ function renderResults() {
       </div>
       <h2 class="best-title">Recommended: ${getRouteSummaryName(best)}</h2>
       <div class="ai-decision">${aiDecision}</div>
+      <div class="ai-timing">${generateTimeInsight(best)}</div>
       <p class="best-metrics">${metricsLine}</p>
       <div class="${bestTollClass}">${bestTollLine}</div>
       ${getParkingInsight() ? `<div class="best-parking">${getParkingInsight()}</div>` : ""}
@@ -1863,6 +1864,27 @@ function renderResults() {
 //  ROUTE DETAILS MODAL
 // ============================================================
 
+
+// ТЗ6: One-line "when to go" timing insight for best route
+function generateTimeInsight(best) {
+  const delay = best.delayMinutes || 0;
+  const traffic = best.traffic;
+
+  // Scenario 3: bad — wait
+  if (delay > 5 || traffic === "high") {
+    return "Consider waiting — traffic building up";
+  }
+  // Scenario 1: ideal — go now
+  if (delay <= 2 && traffic === "low") {
+    return "Best time to go now";
+  }
+  // Scenario 2: ok — light delays
+  if (delay <= 5 && traffic === "medium") {
+    return "Good time — light delays";
+  }
+  // Fallback
+  return "Conditions are stable";
+}
 
 // ТЗ4.5 FINAL: One-line AI decision shown in Recommended card
 function generateAIDecision(best, allRoutes) {
