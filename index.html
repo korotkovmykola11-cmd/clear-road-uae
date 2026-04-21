@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1801,8 +1801,32 @@ function renderResults() {
       }
     });
 
+  // ТЗ5 FINAL: pairwise dedup BETWEEN alternatives
+  // If two alts have same tollCost AND |time diff| <= 2 min → keep only the better one
+  // Better = lower time → lower complexity → higher stabilityScore
+  const dedupedAlternatives = [];
+  for (const cand of uniqueAlternatives) {
+    const dupIdx = dedupedAlternatives.findIndex(existing =>
+      existing.tollCost === cand.tollCost &&
+      Math.abs(getDisplayMinutes(existing) - getDisplayMinutes(cand)) <= 2
+    );
+    if (dupIdx === -1) {
+      dedupedAlternatives.push(cand);
+      continue;
+    }
+    const existing = dedupedAlternatives[dupIdx];
+    const candTime     = getDisplayMinutes(cand);
+    const existingTime = getDisplayMinutes(existing);
+    let candWins = false;
+    if (candTime < existingTime) candWins = true;
+    else if (candTime === existingTime && cand.complexity < existing.complexity) candWins = true;
+    else if (candTime === existingTime && cand.complexity === existing.complexity &&
+             (cand.stabilityScore || 0) > (existing.stabilityScore || 0)) candWins = true;
+    if (candWins) dedupedAlternatives[dupIdx] = cand;
+  }
+
   // ТЗ5 §2: Hard cap — never show more than 2 alternatives
-  uniqueAlternatives.slice(0, 2).forEach(r => {
+  dedupedAlternatives.slice(0, 2).forEach(r => {
   // ТЗ4: Get insight for this route
   const insight = getRouteInsight(r, best, fastest);
   
@@ -2066,8 +2090,6 @@ function setDestination(place) {
 
 window.initMap = initMap;
 </script>  
-
-
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
