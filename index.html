@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -934,12 +934,12 @@
 <div class="quick-section" id="quick-access">
   <div class="quick-title">Quick Access</div>
   <div class="quick-list">
-    <div class="quick-item" onclick="setDestination('Home')">
+    <div class="quick-item" onclick="setDestination('Home')" ondblclick="updateSavedPlace('Home')">
       <div class="quick-icon">&#127968;</div>
       <div class="quick-label">Home</div>
       <div class="quick-arrow">&#8250;</div>
     </div>
-    <div class="quick-item" onclick="setDestination('Work')">
+    <div class="quick-item" onclick="setDestination('Work')" ondblclick="updateSavedPlace('Work')">
       <div class="quick-icon">&#128188;</div>
       <div class="quick-label">Work</div>
       <div class="quick-arrow">&#8250;</div>
@@ -2206,12 +2206,71 @@ function closeModal(event) {
 }
 
 // ============================================================
-//  QUICK ACCESS
+//  QUICK ACCESS — Saved Places (Home / Work) via localStorage
 // ============================================================
 
+const SAVED_PLACES_KEY = "clearRoadUAE.savedPlaces.v1";
+
+function getSavedPlaces() {
+  try {
+    const raw = localStorage.getItem(SAVED_PLACES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function getSavedPlace(type) {
+  const places = getSavedPlaces();
+  const v = places[type];
+  return (typeof v === "string" && v.trim()) ? v.trim() : null;
+}
+
+function savePlace(type, value) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const places = getSavedPlaces();
+    places[type] = value.trim();
+    localStorage.setItem(SAVED_PLACES_KEY, JSON.stringify(places));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Triggered by single-click on Home/Work quick-item
 function setDestination(place) {
-  document.getElementById("end").value = place;
-  calculateRoutes();
+  let address = getSavedPlace(place);
+
+  if (!address) {
+    // First-time: ask for address
+    const input = window.prompt(`Enter your ${place} address:`);
+    if (input === null) return;          // user cancelled
+    const trimmed = input.trim();
+    if (!trimmed) return;                // don't overwrite with empty
+    if (!savePlace(place, trimmed)) return;
+    address = trimmed;
+  }
+
+  const endField = document.getElementById("end");
+  if (!endField) return;
+  endField.value = address;
+  if (typeof calculateRoutes === "function") {
+    calculateRoutes();
+  }
+}
+
+// Triggered by double-click — lets the user update a saved place without UI change
+function updateSavedPlace(place) {
+  const current = getSavedPlace(place) || "";
+  const input = window.prompt(`Update your ${place} address:`, current);
+  if (input === null) return;
+  const trimmed = input.trim();
+  if (!trimmed) return;                  // don't overwrite with empty
+  if (!savePlace(place, trimmed)) return;
+  const endField = document.getElementById("end");
+  if (endField) endField.value = trimmed;
+  if (typeof calculateRoutes === "function") calculateRoutes();
 }
 
 // ============================================================
