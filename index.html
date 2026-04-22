@@ -1012,7 +1012,7 @@
   </div>
   <div class="input-row">
     <span class="input-label">To:</span>
-    <input type="text" class="input-value" id="end" placeholder="Where to?" value="Dubai International Airport">
+    <input type="text" class="input-value" id="end" placeholder="Where to?" value="">
   </div>
 </div>
 
@@ -1054,7 +1054,7 @@
 
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav">
-  <div class="nav-item active">
+  <div class="nav-item active" onclick="handleStartNavTap()">
     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
     <span class="nav-label">Start</span>
   </div>
@@ -2752,6 +2752,22 @@ function exitDriveMode() {
   lastPhaseChangeAt = 0;
   lastStableTimedPhase = "";
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+function handleStartNavTap() {
+  if (_bestRoute) {
+    startDrive(_bestRoute.index);
+    return;
+  }
+  const startVal = (document.getElementById("start")?.value || "").trim();
+  const endVal   = (document.getElementById("end")?.value   || "").trim();
+  if (startVal && endVal) {
+    calculateRoutes();
+  } else if (!endVal) {
+    document.getElementById("end")?.focus();
+  } else {
+    requestGPS();
+  }
 }
 
 function startDrive(index) {
