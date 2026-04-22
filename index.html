@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1988,24 +1988,48 @@ function isComplexInterchangeAhead(steps, currentStepIndex, route) {
 
 function getDrivePriorityWarning(r, stepIndex, userLatLng) {
   const steps = r.route.legs[0].steps;
-  const currentStep = steps[stepIndex];
   const ulng = userLatLng || lastKnownUserLatLng;
+  const currentStep = steps[stepIndex];
 
   if (!currentStep) return null;
 
-  const currentMeta  = getStepWarningMeta(currentStep, r.route);
-  const currentDist  = getDistanceToStepEndMeters(currentStep, ulng);
+  const currentMeta = getStepWarningMeta(currentStep, r.route);
+  const currentDist = getDistanceToStepEndMeters(currentStep, ulng);
   const currentPhase = getWarningPhaseForType(currentDist, currentMeta?.type || "");
 
-  if (currentMeta && currentPhase !== "none") return currentMeta;
-
-  if ((currentDist ?? 999999) <= NEXT_STEP_PREPARE_RADIUS_M) {
-    const upcoming = getUpcomingMeaningfulStep(steps, stepIndex, r);
-    if (upcoming?.step) return getStepWarningMeta(upcoming.step, r.route);
+  // 1. Если текущий шаг уже активен — он главный
+  if (currentMeta && currentPhase !== "none") {
+    return currentMeta;
   }
 
+  // 2. Ищем следующий meaningful step
+  const upcoming = getUpcomingMeaningfulStep(steps, stepIndex, r);
+  if (upcoming?.step) {
+    const upcomingMeta = getStepWarningMeta(upcoming.step, r.route);
+
+    if (upcomingMeta) {
+      const distCurrent  = getDistanceToStepEndMeters(currentStep, ulng) ?? 999999;
+      const distUpcoming = getDistanceToStepEndMeters(upcoming.step, ulng) ?? 999999;
+      const effectiveDist = Math.min(distCurrent + 120, distUpcoming);
+
+      const upcomingPhase = getWarningPhaseForType(effectiveDist, upcomingMeta.type);
+
+      if (upcomingPhase !== "none") {
+        if (upcomingMeta.type === "exit" || upcomingMeta.type === "ramp") return upcomingMeta;
+        if (upcomingMeta.type === "lane" || upcomingMeta.type === "merge") return upcomingMeta;
+        if (upcomingMeta.type === "uturn") return upcomingMeta;
+      }
+    }
+  }
+
+  // 3. Separate advisory for complex interchange
   if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
-    return { type: "interchange", icon: "⚠", shortText: "Complex interchange ahead", longText: "Complex interchange ahead — stay focused for lane choice" };
+    return {
+      type: "interchange",
+      icon: "⚠",
+      shortText: "Complex interchange ahead",
+      longText: "Complex interchange ahead — stay focused for lane choice"
+    };
   }
 
   return null;
@@ -2032,47 +2056,77 @@ function buildTimedWarning(priorityWarning, step, userLatLng) {
   if (!priorityWarning || !step) return null;
 
   const meters = getDistanceToStepEndMeters(step, userLatLng);
-  const phase  = getWarningPhaseForType(meters, priorityWarning.type);
+  const phase = getWarningPhaseForType(meters, priorityWarning.type);
 
   if (phase === "none") return null;
 
   let distanceText = "Ahead";
   if (meters != null) {
-    if (meters <= 80)       distanceText = "Now";
-    else if (meters < 1000) distanceText = `${Math.round(meters / 10) * 10} m`;
-    else                    distanceText = `${(meters / 1000).toFixed(1)} km`;
+    if (meters <= 60) {
+      distanceText = "Now";
+    } else if (meters < 1000) {
+      distanceText = `${Math.round(meters / 10) * 10} m`;
+    } else {
+      distanceText = `${(meters / 1000).toFixed(1)} km`;
+    }
   }
 
-  const { type, icon, longText } = priorityWarning;
+  let shortText = priorityWarning.shortText;
 
-  if (type === "exit" || type === "ramp") {
-    const label = type === "exit" ? "exit" : "ramp";
-    if (phase === "prepare") return { ...priorityWarning, phase, shortText: `Prepare for ${label} ahead`, longText, distanceText };
-    if (phase === "soon")    return { ...priorityWarning, phase, shortText: `Keep right — ${label} ahead`, longText, distanceText };
-    return { ...priorityWarning, phase: "now", shortText: `Take the ${label} now`, longText, distanceText: "Now" };
+  if (phase === "prepare") {
+    if (priorityWarning.type === "exit" || priorityWarning.type === "ramp") {
+      shortText = `Prepare: ${priorityWarning.shortText}`;
+    } else if (priorityWarning.type === "lane" || priorityWarning.type === "merge") {
+      shortText = `Lane: ${priorityWarning.shortText}`;
+    } else if (priorityWarning.type === "uturn") {
+      shortText = `Prepare: ${priorityWarning.shortText}`;
+    }
   }
 
-  if (type === "lane") {
-    if (phase === "prepare") return { ...priorityWarning, phase, shortText: `Prepare: ${priorityWarning.shortText}`, longText, distanceText };
-    if (phase === "soon")    return { ...priorityWarning, phase, shortText: priorityWarning.shortText, longText, distanceText };
-    return { ...priorityWarning, phase: "now", shortText: priorityWarning.shortText.replace(/\bahead\b/i, "now").replace(/\bfor\b.*/, "now"), longText, distanceText: "Now" };
+  if (phase === "now") {
+    if (priorityWarning.type === "exit")  shortText = "Take the exit now";
+    if (priorityWarning.type === "ramp")  shortText = "Take the ramp now";
+    if (priorityWarning.type === "lane")  shortText = priorityWarning.shortText.replace("ahead", "now");
+    if (priorityWarning.type === "merge") shortText = "Merge now";
+    if (priorityWarning.type === "uturn") shortText = "Make a U-turn now";
   }
 
-  if (type === "merge") {
-    if (phase === "prepare") return { ...priorityWarning, phase, shortText: "Prepare to merge", longText, distanceText };
-    if (phase === "soon")    return { ...priorityWarning, phase, shortText: "Merge ahead", longText, distanceText };
-    return { ...priorityWarning, phase: "now", shortText: "Merge now", longText, distanceText: "Now" };
+  return {
+    ...priorityWarning,
+    phase,
+    shortText,
+    distanceText
+  };
+}
+
+function getHeldLaneGuidance(nextGuidance) {
+  const now = Date.now();
+
+  if (!nextGuidance) {
+    if (_laneGuidanceHeld && now < _laneGuidanceHeldUntil) {
+      return _laneGuidanceHeld;
+    }
+    _laneGuidanceHeld = null;
+    _laneGuidanceHeldUntil = 0;
+    return null;
   }
 
-  if (type === "uturn") {
-    if (phase === "prepare") return { ...priorityWarning, phase, shortText: "Prepare for U-turn", longText, distanceText };
-    if (phase === "soon")    return { ...priorityWarning, phase, shortText: "U-turn ahead", longText, distanceText };
-    return { ...priorityWarning, phase: "now", shortText: "Make a U-turn now", longText, distanceText: "Now" };
+  const sameText  = _laneGuidanceHeld?.shortText === nextGuidance.shortText;
+  const samePhase = _laneGuidanceHeld?.phase === nextGuidance.phase;
+
+  if (sameText && samePhase) {
+    _laneGuidanceHeld = nextGuidance;
+    _laneGuidanceHeldUntil = now + 2500;
+    return nextGuidance;
   }
 
-  if (phase === "prepare") return { ...priorityWarning, phase, shortText: `Prepare: ${priorityWarning.shortText}`, longText, distanceText };
-  if (phase === "soon")    return { ...priorityWarning, phase, shortText: priorityWarning.shortText, longText, distanceText };
-  return { ...priorityWarning, phase: "now", shortText: `NOW: ${priorityWarning.shortText}`, longText, distanceText: "Now" };
+  if (_laneGuidanceHeld && now < _laneGuidanceHeldUntil) {
+    return _laneGuidanceHeld;
+  }
+
+  _laneGuidanceHeld = nextGuidance;
+  _laneGuidanceHeldUntil = now + 2500;
+  return nextGuidance;
 }
 
 function normalizeVoiceText(text) {
@@ -2117,44 +2171,47 @@ function buildContextAwareVoicePrompt(step, phase) {
   const isUTurn     = maneuver.includes("uturn") || text.includes("u-turn");
   const isKeepLeft  = text.includes("keep left");
   const isKeepRight = text.includes("keep right");
-  const isLeft      = text.includes("left");
-  const isRight     = text.includes("right");
   const isExit      = text.includes("exit");
   const isRamp      = text.includes("ramp");
   const isMerge     = text.includes("merge");
+  const isLeft      = text.includes("left") && !isKeepLeft;
+  const isRight     = text.includes("right") && !isKeepRight;
 
   if (phase === "prepare") {
-    if (isUTurn)     return "Prepare for U-turn";
-    if (isKeepLeft)  return "Prepare to keep left";
-    if (isKeepRight) return "Prepare to keep right";
     if (isExit)      return "Prepare for exit";
     if (isRamp)      return "Prepare to take the ramp";
+    if (isKeepLeft)  return "Prepare to keep left";
+    if (isKeepRight) return "Prepare to keep right";
+    if (isUTurn)     return "Prepare for U-turn";
+    if (isMerge)     return "Prepare to merge";
     if (isLeft)      return "Prepare to turn left";
     if (isRight)     return "Prepare to turn right";
-    if (isMerge)     return "Prepare to merge";
-    return "Stay on the current road";
+    return "Stay on current road";
   }
+
   if (phase === "soon") {
-    if (isUTurn)     return "U-turn ahead";
-    if (isKeepLeft)  return "Keep left ahead";
-    if (isKeepRight) return "Keep right ahead";
     if (isExit)      return "Exit ahead";
     if (isRamp)      return "Ramp ahead";
+    if (isKeepLeft)  return "Keep left ahead";
+    if (isKeepRight) return "Keep right ahead";
+    if (isUTurn)     return "U-turn ahead";
+    if (isMerge)     return "Merge ahead";
     if (isLeft)      return "Left turn ahead";
     if (isRight)     return "Right turn ahead";
-    if (isMerge)     return "Merge ahead";
     return "Continue straight";
   }
+
   if (phase === "now") {
-    if (isUTurn)     return "Make a U-turn now";
-    if (isKeepLeft)  return "Keep left now";
-    if (isKeepRight) return "Keep right now";
     if (isExit)      return "Take the exit now";
     if (isRamp)      return "Take the ramp now";
+    if (isKeepLeft)  return "Keep left now";
+    if (isKeepRight) return "Keep right now";
+    if (isUTurn)     return "Make a U-turn now";
+    if (isMerge)     return "Merge now";
     if (isLeft)      return "Turn left now";
     if (isRight)     return "Turn right now";
-    if (isMerge)     return "Merge now";
   }
+
   return "Continue straight";
 }
 
@@ -2163,6 +2220,7 @@ function speakDriveInstruction(step, phase) {
   const text = buildContextAwareVoicePrompt(step, phase);
   if (!text || text === "Continue straight") return;
   const now = Date.now();
+  if (Date.now() - lastSpokenAt < 3500 && lastSpokenText === text) return;
   if (text === lastSpokenText && now - lastSpokenAt < 4500) return;
   try {
     window.speechSynthesis.cancel();
@@ -2880,26 +2938,39 @@ function updateDriveUI() {
 
   document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
 
-  // Lane guidance block
-  const laneGuidance = getDriveLaneGuidance(r, currentStepIndex);
-  const laneBlock    = document.getElementById("drive-lane-block");
-  if (laneBlock) {
-    if (laneGuidance) {
-      document.getElementById("drive-lane-icon").textContent = laneGuidance.icon;
-      document.getElementById("drive-lane-instruction").textContent = laneGuidance.text;
-      document.getElementById("drive-lane-distance").textContent = laneGuidance.distanceText;
-      laneBlock.className = "drive-lane-block" +
-        (laneGuidance.phase === "now" ? " lane-alert" : laneGuidance.phase === "soon" ? " lane-warn" : "");
-      laneBlock.style.display = "flex";
+  // Lane guidance block — priority: timedWarning (lane/exit/ramp/interchange) → hold → hide
+  const laneBlock        = document.getElementById("drive-lane-block");
+  const laneIcon         = document.getElementById("drive-lane-icon");
+  const laneInstruction  = document.getElementById("drive-lane-instruction");
+  const laneDistance     = document.getElementById("drive-lane-distance");
 
-      // Voice lane guidance on phase change
-      const laneKey = laneGuidance.text + "|" + laneGuidance.phase;
+  let laneGuidance = null;
+  if (timedWarning && ["lane", "exit", "ramp", "merge", "interchange"].includes(timedWarning.type)) {
+    laneGuidance = timedWarning;
+  }
+
+  laneGuidance = getHeldLaneGuidance(laneGuidance);
+
+  if (laneBlock && laneIcon && laneInstruction && laneDistance) {
+    if (laneGuidance) {
+      laneBlock.style.display = "flex";
+      laneBlock.className = "drive-lane-block";
+
+      if (laneGuidance.phase === "soon") laneBlock.classList.add("lane-warn");
+      if (laneGuidance.phase === "now")  laneBlock.classList.add("lane-alert");
+
+      laneIcon.textContent        = laneGuidance.icon || "⇢";
+      laneInstruction.textContent = laneGuidance.shortText || "";
+      laneDistance.textContent    = laneGuidance.distanceText || "";
+
+      // Voice on phase change with 5s cooldown
+      const laneKey = (laneGuidance.shortText || "") + "|" + (laneGuidance.phase || "");
       if (laneKey !== _lastLaneGuidanceText && Date.now() - _lastLaneGuidanceAt > 5000) {
         _lastLaneGuidanceText = laneKey;
         _lastLaneGuidanceAt   = Date.now();
         if (voiceEnabled) {
           setTimeout(() => {
-            const u = new SpeechSynthesisUtterance(normalizeVoiceText(laneGuidance.text));
+            const u = new SpeechSynthesisUtterance(normalizeVoiceText(laneGuidance.shortText || ""));
             u.lang = "en-US"; u.rate = 0.95; u.pitch = 1.0;
             window.speechSynthesis.speak(u);
           }, 400);
@@ -2907,6 +2978,9 @@ function updateDriveUI() {
       }
     } else {
       laneBlock.style.display = "none";
+      laneBlock.className = "drive-lane-block";
+      laneInstruction.textContent = "";
+      laneDistance.textContent    = "";
     }
   }
 
@@ -3346,32 +3420,38 @@ function getUpcomingMeaningfulStep(steps, currentIndex, routeObj) {
   return null;
 }
 
-function getWarningPhaseForType(distanceMeters, type) {
+function getWarningPhaseForType(distanceMeters, type = "") {
   if (distanceMeters == null) return "none";
-  switch (type) {
-    case "exit":
-    case "ramp":
-      if (distanceMeters <= 80)   return "now";
-      if (distanceMeters <= 450)  return "soon";
-      if (distanceMeters <= 1100) return "prepare";
-      return "none";
-    case "lane":
-    case "merge":
-      if (distanceMeters <= 60)  return "now";
-      if (distanceMeters <= 280) return "soon";
-      if (distanceMeters <= 650) return "prepare";
-      return "none";
-    case "uturn":
-      if (distanceMeters <= 45)  return "now";
-      if (distanceMeters <= 130) return "soon";
-      if (distanceMeters <= 300) return "prepare";
-      return "none";
-    default:
-      if (distanceMeters <= 50)  return "now";
-      if (distanceMeters <= 150) return "soon";
-      if (distanceMeters <= 300) return "prepare";
-      return "none";
+
+  // EXIT / RAMP — предупреждать раньше всех
+  if (type === "exit" || type === "ramp") {
+    if (distanceMeters <= 100) return "now";
+    if (distanceMeters <= 500) return "soon";
+    if (distanceMeters <= 1200) return "prepare";
+    return "none";
   }
+
+  // LANE / MERGE — ближе, чем exit
+  if (type === "lane" || type === "merge") {
+    if (distanceMeters <= 80) return "now";
+    if (distanceMeters <= 300) return "soon";
+    if (distanceMeters <= 700) return "prepare";
+    return "none";
+  }
+
+  // U-TURN — отдельные более консервативные пороги
+  if (type === "uturn") {
+    if (distanceMeters <= 60) return "now";
+    if (distanceMeters <= 180) return "soon";
+    if (distanceMeters <= 350) return "prepare";
+    return "none";
+  }
+
+  // default
+  if (distanceMeters <= 50) return "now";
+  if (distanceMeters <= 150) return "soon";
+  if (distanceMeters <= 300) return "prepare";
+  return "none";
 }
 
 // ============================================================
