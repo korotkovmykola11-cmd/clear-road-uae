@@ -5,1132 +5,612 @@
   <title>Clear Road UAE</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#f5f5f0">
+  <meta name="theme-color" content="#090e1a">
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --green: #2d6a4f;
-      --green-light: #40916c;
-      --green-bg: #d8f3dc;
-      --yellow: #f59e0b;
-      --yellow-bg: #fef3c7;
-      --beige: #a8a29e;
-      --beige-bg: #f5f5f0;
-      --gray: #6b7280;
-      --dark: #1f2937;
-      --white: #ffffff;
-      --border: #e5e5e5;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      background: var(--beige-bg);
-      color: var(--dark);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      padding-bottom: 80px;
-    }
-
-    /* ===== INPUT PANEL ===== */
-    .input-panel {
-      background: var(--white);
-      margin: 16px;
-      border-radius: 20px;
-      padding: 16px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    }
-
-    .input-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 0;
-    }
-
-    .input-row:first-child {
-      border-bottom: 1px solid var(--border);
-    }
-
-    .input-label {
-      font-size: 14px;
-      color: var(--gray);
-      min-width: 40px;
-    }
-
-    .input-value {
-      flex: 1;
-      font-size: 16px;
-      font-weight: 500;
-      color: var(--dark);
-      border: none;
-      background: transparent;
-      outline: none;
-    }
-
-    .input-value::placeholder {
-      color: var(--gray);
-      font-weight: 400;
-    }
-
-    .voice-btn {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: var(--green);
-      border: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-
-    .voice-btn svg {
-      width: 20px;
-      height: 20px;
-      fill: white;
-    }
-
-    .voice-btn.gps-loading { opacity: 0.5; pointer-events: none; }
-    .predict-tip { font-size: 12px; color: #059669; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 6px 10px; margin: 8px 0 0; font-weight: 500; }
-
-    /* ===== BEST ROUTE CARD ===== */
-    .best-card {
-      background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-      margin: 0 16px 12px;
-      border-radius: 20px;
-      padding: 20px;
-      position: relative;
-    }
-
-    .best-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--green);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-    }
-
-    .best-badge {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      width: 32px;
-      height: 32px;
-      background: var(--green);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .best-badge svg {
-      width: 18px;
-      height: 18px;
-      fill: white;
-    }
-
-    .best-title {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--dark);
-      margin-bottom: 4px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .best-title .check {
-      color: var(--green);
-    }
-
-    .best-metrics {
-      font-size: 15px;
-      color: #4b5563;
-      margin-bottom: 8px;
-    }
-
-    .best-toll {
-      font-size: 14px;
-      color: #6b7280;
-      margin-bottom: 12px;
-    }
-
-    .best-toll.has-toll {
-      color: #d97706;
-      font-weight: 500;
-    }
-
-    .best-parking {
-      font-size: 13px;
-      color: #6b7280;
-      margin-bottom: 10px;
-    }
-
-    /* ── Day 4.5: AI Decision UX ── */
-    .decision-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .ai-confidence-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.4px; }
-    .ai-confidence-badge .conf-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-    .confidence-high   { background: #d1fae5; color: #065f46; }
-    .confidence-medium { background: #fef3c7; color: #92400e; }
-    .confidence-low    { background: #f3f4f6; color: #6b7280; }
-    .ai-hero-time { font-size: 52px; font-weight: 800; color: var(--dark); line-height: 1; margin-bottom: 4px; letter-spacing: -1px; }
-    .ai-hero-time span { font-size: 22px; font-weight: 600; color: var(--gray); margin-left: 2px; }
-    .ai-distance { font-size: 14px; color: var(--gray); margin-bottom: 14px; }
-    .ai-why { font-size: 16px; color: #1f2937; font-weight: 600; line-height: 1.4; margin-bottom: 6px; }
-    .ai-secondary { font-size: 13px; color: var(--gray); font-weight: 500; margin-bottom: 10px; }
-
-    .ai-stress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-    .ai-stress-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.35px; }
-    .ai-stress-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-    .ai-stress-badge.low { background: rgba(16, 185, 129, 0.14); color: #047857; }
-    .ai-stress-badge.medium { background: rgba(245, 158, 11, 0.16); color: #b45309; }
-    .ai-stress-badge.high { background: rgba(239, 68, 68, 0.14); color: #b91c1c; }
-    .ai-personality { font-size: 13px; color: var(--gray); font-weight: 600; }
-
-    .start-btn {
-      width: 100%;
-      padding: 16px;
-      background: var(--green);
-      color: white;
-      border: none;
-      border-radius: 14px;
-      font-size: 17px;
-      font-weight: 600;
-      cursor: pointer;
-      margin-bottom: 12px;
-    }
-
-    .start-btn:hover {
-      background: var(--green-light);
-    }
-
-    .why-link {
-      text-align: center;
-      font-size: 14px;
-      color: var(--gray);
-      cursor: pointer;
-    }
-
-    .why-link:hover {
-      color: var(--dark);
-    }
-
-    /* ===== ALTERNATIVE CARDS ===== */
-    .alt-card {
-      margin: 0 16px 12px;
-      border-radius: 16px;
-      padding: 16px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      cursor: pointer;
-      transition: transform 0.15s;
-    }
-
-    .alt-card:hover {
-      transform: translateY(-2px);
-    }
-
-    .alt-card.faster_risky {
-      background: var(--yellow-bg);
-    }
-
-    .alt-card.more_relaxed {
-      background: #f5f5f0;
-      border: 1px solid var(--border);
-    }
-
-    .alt-card.balanced, .alt-card.similar {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-    }
-
-    .alt-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      flex-shrink: 0;
-    }
-
-    .alt-card.faster_risky .alt-icon {
-      background: #fcd34d;
-    }
-
-    .alt-card.more_relaxed .alt-icon {
-      background: #d6d3d1;
-    }
-
-    .alt-card.balanced .alt-icon,
-    .alt-card.similar .alt-icon {
-      background: #e2e8f0;
-    }
-
-    .alt-content {
-      flex: 1;
-    }
-
-    .alt-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--dark);
-      margin-bottom: 2px;
-    }
-
-    .alt-subtitle {
-      font-size: 14px;
-      color: var(--gray);
-    }
-
-    .alt-toll {
-      font-size: 12px;
-      color: #6b7280;
-      margin-top: 2px;
-    }
-
-    .alt-toll.has-toll {
-      color: #d97706;
-    }
-
-    .route-insight {
-      font-size: 12px;
-      color: #059669;
-      font-weight: 500;
-      margin-top: 2px;
-    }
-
-    .ai-insight {
-      font-size: 12px;
-      color: var(--green);
-      font-weight: 500;
-      margin-top: 4px;
-      background: var(--green-bg);
-      padding: 4px 8px;
-      border-radius: 6px;
-      display: inline-block;
-    }
-
-    .alt-arrow {
-      color: var(--gray);
-      font-size: 18px;
-    }
-
-    /* ===== QUICK ACCESS ===== */
-    .quick-section {
-      margin: 20px 16px 12px;
-    }
-
-    .quick-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--gray);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 10px;
-    }
-
-    .quick-list {
-      background: var(--white);
-      border-radius: 16px;
-      overflow: hidden;
-    }
-
-    .quick-item {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 16px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-    }
-
-    .quick-item:last-child {
-      border-bottom: none;
-    }
-
-    .quick-item:hover {
-      background: #fafafa;
-    }
-
-    .quick-icon {
-      width: 40px;
-      height: 40px;
-      background: #f3f4f6;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--gray);
-      font-size: 18px;
-    }
-
-    .quick-label {
-      flex: 1;
-      font-size: 16px;
-      font-weight: 500;
-      color: var(--dark);
-    }
-
-    .quick-arrow {
-      color: #d1d5db;
-      font-size: 18px;
-    }
-
-    .pref-bar{display:flex;gap:8px;margin:0 16px 12px}
-    .pref-btn{flex:1;padding:8px 10px;font-size:13px;background:var(--white);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:inherit;color:var(--gray)}
-    .pref-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
-    .filter-bar{display:flex;gap:8px;margin:0 16px 12px}
-    .filter-btn{flex:1;padding:6px 8px;font-size:12px;background:var(--white);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-family:inherit;color:var(--gray)}
-    .filter-btn.active{background:var(--yellow-bg);color:#92400e;border-color:var(--yellow)}
-
-    /* ===== MAP PREVIEW ===== */
-    .map-preview {
-      margin: 0 16px;
-      height: 180px;
-      border-radius: 16px;
-      overflow: hidden;
-      background: #e5e5e5;
-    }
-
-    #map {
-      width: 100%;
-      height: 100%;
-    }
-
-    /* ===== BOTTOM NAV ===== */
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: var(--white);
-      border-top: 1px solid var(--border);
-      display: flex;
-      justify-content: space-around;
-      padding: 10px 0 20px;
-      z-index: 100;
-    }
-
-    .nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      padding: 6px 16px;
-    }
-
-    .nav-item.active {
-      color: var(--green);
-    }
-
-    .nav-item svg {
-      width: 24px;
-      height: 24px;
-    }
-
-    .nav-label {
-      font-size: 11px;
-      font-weight: 500;
-    }
-
-    /* ===== ROUTE DETAILS MODAL ===== */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.5);
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      z-index: 1000;
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.2s, visibility 0.2s;
-    }
-
-    .modal-overlay.visible {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .modal-content {
-      background: white;
-      border-radius: 24px 24px 0 0;
-      padding: 24px;
-      width: 100%;
-      max-width: 500px;
-      max-height: 85vh;
-      overflow-y: auto;
-      transform: translateY(100%);
-      transition: transform 0.3s ease;
-    }
-
-    .modal-overlay.visible .modal-content {
-      transform: translateY(0);
-    }
-
-    .modal-handle {
-      width: 40px;
-      height: 4px;
-      background: #d1d5db;
-      border-radius: 2px;
-      margin: 0 auto 20px;
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 20px;
-    }
-
-    .modal-title {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--dark);
-    }
-
-    .modal-role-badge {
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .modal-role-badge.recommended {
-      background: var(--green);
-      color: white;
-    }
-
-    .modal-role-badge.alternative {
-      background: #e5e7eb;
-      color: #374151;
-    }
-
-    .detail-section {
-      margin-bottom: 20px;
-    }
-
-    .detail-section-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--gray);
-      text-transform: uppercase;
-      margin-bottom: 10px;
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .detail-item {
-      background: #f9fafb;
-      padding: 14px;
-      border-radius: 12px;
-    }
-
-    .detail-label {
-      font-size: 12px;
-      color: var(--gray);
-      margin-bottom: 4px;
-    }
-
-    .detail-value {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--dark);
-    }
-
-    .detail-item.full-width {
-      grid-column: 1 / -1;
-    }
-
-    .modal-why {
-      background: #f0fdf4;
-      padding: 16px;
-      border-radius: 12px;
-      margin-bottom: 16px;
-    }
-
-    .modal-why-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--green);
-      margin-bottom: 8px;
-    }
-
-    .modal-why-points {
-      list-style: none;
-    }
-
-    .modal-why-points li {
-      font-size: 14px;
-      color: #166534;
-      line-height: 1.5;
-      padding-left: 20px;
-      position: relative;
-      margin-bottom: 6px;
-    }
-
-    .modal-why-points li::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 8px;
-      width: 8px;
-      height: 8px;
-      background: var(--green);
-      border-radius: 50%;
-    }
-
-    .segment-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .segment-item {
-      background: #f9fafb;
-      padding: 14px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .segment-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-
-    .segment-icon.highway { background: #dbeafe; }
-    .segment-icon.city { background: #fef3c7; }
-    .segment-icon.traffic { background: #fee2e2; }
-    .segment-icon.turns { background: #f3e8ff; }
-
-    .segment-content {
-      flex: 1;
-    }
-
-    .segment-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--dark);
-    }
-
-    .segment-details {
-      font-size: 13px;
-      color: var(--gray);
-    }
-
-    .comparison-note {
-      background: #fef3c7;
-      padding: 14px;
-      border-radius: 12px;
-      font-size: 14px;
-      color: #92400e;
-      margin-bottom: 16px;
-    }
-
-    .modal-cta {
-      width: 100%;
-      padding: 16px;
-      background: var(--green);
-      color: white;
-      border: none;
-      border-radius: 14px;
-      font-size: 17px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .modal-cta:hover {
-      background: var(--green-light);
-    }
-
-    /* ===== DRIVE MODE ===== */
-    .drive-mode {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #0f172a;
-      z-index: 2000;
-      flex-direction: column;
-    }
-
-    .drive-mode.active {
-      display: flex;
-    }
-
-    .drive-header {
-      padding: 16px 20px;
-      background: #1e293b;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .drive-status {
-      color: #94a3b8;
-      font-size: 14px;
-    }
-
-    .drive-exit {
-      padding: 10px 20px;
-      background: #ef4444;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .drive-map-container {
-      flex: 1;
-      min-height: 0;
-      position: relative;
-    }
-
-    #drive-map {
-      width: 100%;
-      height: 100%;
-    }
-
-    .drive-ahead {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      right: 16px;
-      background: rgba(30, 41, 59, 0.95);
-      border-radius: 14px;
-      padding: 14px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .drive-ahead-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      flex-shrink: 0;
-    }
-
-    .drive-ahead-icon.stable { background: #166534; }
-    .drive-ahead-icon.warning { background: #f59e0b; }
-    .drive-ahead-icon.alert { background: #ef4444; }
-
-    .drive-ahead-text {
-      flex: 1;
-      color: white;
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .drive-alert {
-      position: absolute;
-      bottom: 16px;
-      left: 16px;
-      right: 16px;
-      background: rgba(15, 23, 42, 0.96);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      border-radius: 18px;
-      padding: 16px;
-      display: none;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.28);
-      backdrop-filter: blur(8px);
-    }
-
-    .drive-alert.visible {
-      display: block;
-    }
-
-    .drive-alert-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .drive-alert-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-    }
-
-    .drive-alert-badge .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: currentColor;
-      flex-shrink: 0;
-    }
-
-    .drive-alert-badge.high {
-      background: rgba(16, 185, 129, 0.18);
-      color: #6ee7b7;
-    }
-
-    .drive-alert-badge.medium {
-      background: rgba(245, 158, 11, 0.18);
-      color: #fcd34d;
-    }
-
-    .drive-alert-badge.low {
-      background: rgba(148, 163, 184, 0.18);
-      color: #cbd5e1;
-    }
-
-    .drive-alert-state {
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-
-    .drive-alert-state.switch {
-      color: #86efac;
-    }
-
-    .drive-alert-state.suggest {
-      color: #fcd34d;
-    }
-
-    .drive-alert-message {
-      color: white;
-      margin-bottom: 12px;
-    }
-
-    .drive-alert-title {
-      font-size: 18px;
-      font-weight: 700;
-      line-height: 1.2;
-      margin-bottom: 4px;
-    }
-
-    .drive-alert-detail {
-      font-size: 14px;
-      color: #cbd5e1;
-      line-height: 1.4;
-      margin-bottom: 6px;
-    }
-
-    .drive-alert-meta {
-      font-size: 12px;
-      color: #94a3b8;
-      line-height: 1.3;
-    }
-
-    .drive-alert-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    .drive-alert-btn {
-      flex: 1;
-      padding: 12px 14px;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 700;
-      border: none;
-      cursor: pointer;
-      transition: transform 0.15s ease, opacity 0.15s ease;
-    }
-
-    .drive-alert-btn:hover {
-      transform: translateY(-1px);
-    }
-
-    .drive-alert-btn.primary {
-      background: #2d6a4f;
-      color: white;
-    }
-
-    .drive-alert-btn.primary.suggest {
-      background: #b45309;
-    }
-
-    .drive-alert-btn.secondary {
-      background: #334155;
-      color: white;
-    }
-
-    .drive-panel {
-      background: #1e293b;
-      padding: 24px 20px;
-      border-radius: 28px 28px 0 0;
-    }
-
-    .drive-eta {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-
-    .drive-eta-time {
-      font-size: 56px;
-      font-weight: 700;
-      color: white;
-      line-height: 1;
-    }
-
-    .drive-eta-label {
-      font-size: 14px;
-      color: #64748b;
-      margin-top: 4px;
-    }
-
-    .drive-info {
-      display: flex;
-      justify-content: center;
-      gap: 32px;
-      padding: 16px 0;
-      border-top: 1px solid #334155;
-    }
-
-    .drive-info-item {
-      text-align: center;
-    }
-
-    .drive-info-value {
-      font-size: 22px;
-      font-weight: 600;
-      color: white;
-    }
-
-    .drive-info-label {
-      font-size: 12px;
-      color: #64748b;
-      margin-top: 4px;
-    }
-
-    .drive-next {
-      margin-top: 16px;
-      padding: 18px;
-      background: #334155;
-      border-radius: 16px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .drive-next-icon {
-      width: 52px;
-      height: 52px;
-      background: var(--green);
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 26px;
-      color: white;
-    }
-
-    .drive-next-text {
-      flex: 1;
-    }
-
-    .drive-next-instruction {
-      color: white;
-      font-size: 17px;
-      font-weight: 600;
-    }
-
-    .drive-next-distance {
-      color: #94a3b8;
-      font-size: 14px;
-      margin-top: 4px;
-    }
-
-    .drive-lane-block {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      margin-top: 8px;
-      padding: 10px 14px;
-      background: rgba(245, 158, 11, 0.10);
-      border: 1px solid rgba(245, 158, 11, 0.28);
-      border-radius: 12px;
-      transition: background 0.3s;
-    }
-    .drive-lane-block.lane-warn {
-      background: rgba(245, 158, 11, 0.18);
-      border-color: rgba(245, 158, 11, 0.50);
-    }
-    .drive-lane-block.lane-alert {
-      background: rgba(239, 68, 68, 0.18);
-      border-color: rgba(239, 68, 68, 0.50);
-    }
-    .drive-lane-icon {
-      font-size: 18px;
-      flex-shrink: 0;
-      width: 24px;
-      text-align: center;
-    }
-    .drive-lane-text { flex: 1; }
-    .drive-lane-instruction {
-      color: #fbbf24;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .drive-lane-block.lane-alert .drive-lane-instruction { color: #f87171; }
-    .drive-lane-distance {
-      color: #94a3b8;
-      font-size: 11px;
-      margin-top: 2px;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 40px;
-      color: var(--gray);
-      font-size: 15px;
-    }
-
-    .error {
-      margin: 16px;
-      padding: 16px;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 12px;
-      color: #b91c1c;
-      font-size: 14px;
-    }
-    /* ===== GOOGLE PLACES AUTOCOMPLETE DROPDOWN ===== */
-    .pac-container {
-      z-index: 9999 !important;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      margin-top: 4px;
-    }
-    .pac-item {
-      padding: 10px 14px;
-      font-size: 15px;
-      cursor: pointer;
-      border-top: 1px solid #f3f4f6;
-    }
-    .pac-item:first-child { border-top: none; }
-    .pac-item:hover { background: #f9fafb; }
-    .pac-item-query { font-size: 15px; color: var(--dark); font-weight: 500; }
-    .pac-matched { color: var(--green); font-weight: 700; }
-    .pac-icon { display: none; }
-    .pac-logo::after { display: none; }
-  </style>
-</head>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg: #090e1a;
+        --surface: #111827;
+        --surface2: #1e293b;
+        --surface3: #243044;
+        --green: #22d3a0;
+        --green-dim: #10b981;
+        --green-glow: rgba(34,211,160,0.14);
+        --blue: #60a5fa;
+        --amber: #f59e0b;
+        --text: #f1f5f9;
+        --text2: #94a3b8;
+        --text3: #475569;
+        --border: rgba(255,255,255,0.06);
+        --border2: rgba(255,255,255,0.11);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 80px;
+      }
+
+      /* ===== HERO SECTION ===== */
+      .hero-section {
+        position: relative;
+        height: 46vh;
+        min-height: 240px;
+        max-height: 380px;
+        background: #0d1520;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      #map { width: 100%; height: 100%; }
+
+      /* TOP FLOATING BAR */
+      .top-bar {
+        position: absolute;
+        top: 12px; left: 12px; right: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 10;
+      }
+
+      .top-btn {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        background: rgba(17,24,39,0.90);
+        border: 1px solid var(--border2);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; flex-shrink: 0;
+        color: var(--text); font-size: 18px;
+      }
+
+      .route-panel {
+        flex: 1;
+        background: rgba(15,22,36,0.92);
+        border: 1px solid var(--border2);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border-radius: 14px;
+        padding: 0 14px;
+        overflow: hidden;
+      }
+
+      .route-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 0;
+      }
+
+      .route-row:first-child { border-bottom: 1px solid var(--border); }
+
+      .route-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--text3); flex-shrink: 0;
+      }
+      .route-dot.green { background: var(--green); }
+
+      .route-input {
+        flex: 1; background: transparent; border: none; outline: none;
+        font-size: 14px; font-weight: 500; color: var(--text); font-family: inherit;
+      }
+      .route-input::placeholder { color: var(--text3); font-weight: 400; }
+
+      .gps-btn-top {
+        width: 30px; height: 30px; border-radius: 50%;
+        background: var(--green); border: none;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; flex-shrink: 0;
+      }
+      .gps-btn-top svg { width: 15px; height: 15px; fill: #090e1a; }
+      .gps-btn-top.gps-loading { opacity: 0.5; pointer-events: none; }
+
+      /* LIVE BADGE */
+      .live-badge {
+        position: absolute;
+        bottom: 12px; right: 12px;
+        background: rgba(9,14,26,0.82);
+        border: 1px solid rgba(34,211,160,0.28);
+        border-radius: 20px;
+        padding: 5px 10px;
+        font-size: 10px; font-weight: 700;
+        color: var(--green); letter-spacing: 0.6px;
+        display: flex; align-items: center; gap: 5px;
+        backdrop-filter: blur(8px);
+        pointer-events: none;
+      }
+      .live-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--green);
+        animation: livePulse 1.6s infinite;
+      }
+      @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+      /* ===== CONTROLS STRIP ===== */
+      .controls-strip {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 8px 12px 6px;
+        display: flex; flex-direction: column; gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .pref-bar { display:flex; gap:6px; }
+      .pref-btn {
+        flex:1; padding:7px 8px; font-size:12px;
+        background: var(--surface2); border: 1px solid var(--border2);
+        border-radius:10px; cursor:pointer; font-family:inherit; color: var(--text2);
+        transition: all 0.15s;
+      }
+      .pref-btn.active { background: var(--green-glow); color: var(--green); border-color: rgba(34,211,160,0.35); }
+
+      .filter-bar { display:flex; gap:6px; }
+      .filter-btn {
+        flex:1; padding:5px 8px; font-size:11px;
+        background: var(--surface2); border: 1px solid var(--border2);
+        border-radius:8px; cursor:pointer; font-family:inherit; color: var(--text2);
+      }
+      .filter-btn.active { background: rgba(245,158,11,0.14); color: #fbbf24; border-color: rgba(245,158,11,0.35); }
+
+      .lang-bar { display:flex; gap:4px; }
+      .lang-btn {
+        padding:3px 10px; border-radius:20px; border:1px solid var(--border2);
+        background:transparent; font-size:11px; font-weight:600;
+        cursor:pointer; color:var(--text3); transition:all 0.15s; min-width:34px;
+      }
+      .lang-btn.active { background:var(--green); color:#090e1a; border-color:var(--green); }
+
+      /* ===== CONTENT SCROLL ===== */
+      .content-scroll { flex:1; overflow-y:auto; }
+
+      /* ===== PREMIUM DECISION HERO ===== */
+      .decision-hero {
+        margin: 14px 14px 10px;
+        background: linear-gradient(148deg, #111827 0%, #0c1825 100%);
+        border: 1px solid rgba(34,211,160,0.20);
+        border-radius: 22px;
+        padding: 20px 20px 18px;
+        position: relative; overflow: hidden;
+      }
+      .decision-hero::before {
+        content:''; position:absolute; top:0; left:0; right:0; height:2px;
+        background: linear-gradient(90deg, transparent 0%, var(--green) 50%, transparent 100%);
+      }
+
+      .dh-overline {
+        font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+        color: var(--green); text-transform: uppercase; margin-bottom: 4px;
+      }
+      .dh-headline {
+        font-size: 20px; font-weight: 700; color: var(--text);
+        margin-bottom: 2px; display:flex; align-items:center; gap:8px;
+      }
+      .dh-check { color: var(--green); font-size: 18px; }
+      .dh-eta {
+        font-size: 68px; font-weight: 800; color: var(--text);
+        line-height: 1; letter-spacing: -2px; margin-bottom: 14px;
+      }
+      .dh-eta .dh-min {
+        font-size: 24px; font-weight: 600; color: var(--text2);
+        letter-spacing: 0; margin-left: 4px;
+      }
+      .dh-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 10px; }
+      .chip {
+        padding: 4px 10px; border-radius: 20px;
+        font-size: 11px; font-weight: 600;
+        background: var(--surface2); color: var(--text2); border: 1px solid var(--border2);
+      }
+      .chip.chip-green { background:rgba(34,211,160,0.11); color:var(--green); border-color:rgba(34,211,160,0.25); }
+      .chip.chip-blue  { background:rgba(96,165,250,0.11); color:var(--blue); border-color:rgba(96,165,250,0.25); }
+      .chip.chip-amber { background:rgba(245,158,11,0.11); color:var(--amber); border-color:rgba(245,158,11,0.25); }
+
+      .dh-via { font-size: 13px; color: var(--text2); margin-bottom: 14px; font-weight: 500; }
+
+      .dh-confidence {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      .dh-conf-label {
+        font-size: 10px; font-weight: 700; letter-spacing: 0.8px;
+        color: var(--text3); text-transform: uppercase;
+      }
+      .dh-conf-level {
+        font-size: 11px; font-weight: 700;
+        padding: 2px 8px; border-radius: 10px; text-transform: uppercase;
+      }
+      .dh-conf-level.high   { background:rgba(34,211,160,0.14); color:var(--green); }
+      .dh-conf-level.medium { background:rgba(245,158,11,0.14); color:var(--amber); }
+      .dh-conf-level.low    { background:rgba(148,163,184,0.12); color:var(--text3); }
+      .dh-conf-pct { font-size:13px; font-weight:700; color:var(--text); }
+      .dh-conf-bar { flex:1; min-width:70px; height:4px; background:var(--surface2); border-radius:2px; overflow:hidden; }
+      .dh-conf-fill { height:100%; background:var(--green); border-radius:2px; transition:width 0.6s ease; }
+
+      /* ===== PREDICTIVE CARD ===== */
+      .predictive-card {
+        margin: 0 14px 10px;
+        background: var(--surface2);
+        border: 1px solid rgba(96,165,250,0.18);
+        border-radius: 16px;
+        padding: 14px 16px;
+        display: flex; align-items: flex-start; gap: 14px;
+      }
+      .pc-icon {
+        width: 42px; height: 42px; border-radius: 12px;
+        background: rgba(96,165,250,0.12);
+        display:flex; align-items:center; justify-content:center;
+        font-size:20px; flex-shrink:0;
+      }
+      .pc-content { flex:1; }
+      .pc-title {
+        font-size:10px; font-weight:700; letter-spacing:0.8px;
+        color:var(--blue); text-transform:uppercase; margin-bottom:3px;
+      }
+      .pc-main { font-size:14px; font-weight:600; color:var(--text); margin-bottom:3px; }
+      .pc-sub  { font-size:12px; color:var(--text2); }
+      .pc-save { font-size:12px; font-weight:700; color:var(--green); white-space:nowrap; padding-top:2px; }
+      .pc-actions { display:flex; gap:8px; margin-top:10px; }
+      .pc-action-btn {
+        flex:1; padding:9px 12px; border-radius:10px;
+        font-size:13px; font-weight:600; border:none; cursor:pointer; font-family:inherit;
+      }
+      .pc-action-btn.primary { background:var(--green); color:#090e1a; }
+      .pc-action-btn.secondary { background:var(--surface); color:var(--text2); border:1px solid var(--border2); }
+
+      /* ===== CTA ROW ===== */
+      .cta-row { margin: 0 14px 14px; display:flex; gap:10px; align-items:stretch; }
+      .cta-start {
+        flex:1; padding:16px 20px;
+        background: var(--green); color:#090e1a;
+        border:none; border-radius:16px;
+        font-size:15px; font-weight:800; cursor:pointer;
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        gap:2px; letter-spacing:0.4px; text-transform:uppercase;
+        transition: transform 0.12s, opacity 0.12s; font-family:inherit;
+      }
+      .cta-start:hover { transform:translateY(-1px); opacity:0.92; }
+      .cta-start small { font-size:11px; font-weight:500; opacity:0.7; text-transform:none; letter-spacing:0; }
+      .cta-details {
+        width:90px; padding:16px 12px;
+        background:var(--surface2); color:var(--text2);
+        border:1px solid var(--border2); border-radius:16px;
+        font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+        transition:background 0.15s; font-family:inherit;
+      }
+      .cta-details:hover { background:var(--surface); }
+
+      /* ===== OTHER ROUTES ===== */
+      .other-routes { margin: 0 14px 10px; }
+      .section-head {
+        display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+      }
+      .section-head > span:first-child {
+        font-size:11px; font-weight:700; letter-spacing:0.8px;
+        color:var(--text3); text-transform:uppercase;
+      }
+      .how-compare { font-size:11px; color:var(--text3); cursor:pointer; }
+      .alt-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .alt-card-p {
+        background:var(--surface); border:1px solid var(--border);
+        border-radius:14px; padding:14px 12px;
+        cursor:pointer; transition:transform 0.12s, border-color 0.12s;
+      }
+      .alt-card-p:hover { transform:translateY(-2px); border-color:var(--border2); }
+      .alt-role { font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px; }
+      .alt-role.faster  { color:var(--amber); }
+      .alt-role.relaxed { color:var(--blue); }
+      .alt-role.no-tolls{ color:var(--green); }
+      .alt-role.other   { color:var(--text3); }
+      .alt-time-p {
+        font-size:30px; font-weight:800; color:var(--text);
+        letter-spacing:-0.5px; line-height:1; margin-bottom:4px;
+      }
+      .alt-time-p span { font-size:14px; font-weight:500; color:var(--text2); }
+      .alt-label-p { font-size:12px; color:var(--text2); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .alt-badges { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+      .alt-badge { font-size:10px; font-weight:600; padding:2px 7px; border-radius:8px; background:var(--surface2); color:var(--text3); }
+      .alt-badge.amber { background:rgba(245,158,11,0.12); color:var(--amber); }
+      .alt-badge.green { background:rgba(34,211,160,0.10); color:var(--green); }
+      .alt-badge.blue  { background:rgba(96,165,250,0.10); color:var(--blue); }
+      .alt-insight { font-size:11px; color:var(--text3); margin-top:2px; }
+
+      /* ===== INFO STRIP ===== */
+      .info-strip {
+        margin: 0 14px 14px;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 14px;
+        display:flex; justify-content:space-around; padding:12px 8px;
+      }
+      .info-item { display:flex; flex-direction:column; align-items:center; gap:3px; }
+      .info-label { font-size:9px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; }
+      .info-value { font-size:14px; font-weight:700; color:var(--text); }
+
+      /* ===== QUICK ACCESS ===== */
+      .quick-section { margin: 16px 14px 12px; }
+      .quick-title { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+      .quick-list { background:var(--surface); border-radius:14px; overflow:hidden; border:1px solid var(--border); }
+      .quick-item {
+        display:flex; align-items:center; gap:14px; padding:15px 16px;
+        border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.12s;
+      }
+      .quick-item:last-child { border-bottom:none; }
+      .quick-item:hover { background:var(--surface2); }
+      .quick-icon { width:38px; height:38px; background:var(--surface2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+      .quick-label { flex:1; font-size:15px; font-weight:500; color:var(--text); }
+      .quick-arrow { color:var(--text3); font-size:18px; }
+
+      /* ===== BOTTOM NAV ===== */
+      .bottom-nav {
+        position:fixed; bottom:0; left:0; right:0;
+        background:rgba(11,17,30,0.97);
+        border-top:1px solid var(--border);
+        display:flex; justify-content:space-around;
+        padding:10px 0 22px; z-index:100;
+        backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+      }
+      .nav-item {
+        display:flex; flex-direction:column; align-items:center; gap:3px;
+        cursor:pointer; padding:4px 14px; color:var(--text3); transition:color 0.15s;
+      }
+      .nav-item.active { color:var(--green); }
+      .nav-item svg { width:22px; height:22px; }
+      .nav-label { font-size:10px; font-weight:600; letter-spacing:0.2px; }
+
+      /* ===== ROUTE DETAILS MODAL ===== */
+      .modal-overlay {
+        position:fixed; top:0; left:0; right:0; bottom:0;
+        background:rgba(0,0,0,0.72);
+        display:flex; align-items:flex-end; justify-content:center;
+        z-index:1000; opacity:0; visibility:hidden;
+        transition:opacity 0.2s, visibility 0.2s;
+      }
+      .modal-overlay.visible { opacity:1; visibility:visible; }
+      .modal-content {
+        background:var(--surface); border-radius:24px 24px 0 0;
+        padding:24px; width:100%; max-width:500px; max-height:85vh; overflow-y:auto;
+        transform:translateY(100%); transition:transform 0.3s ease;
+        border:1px solid var(--border2); border-bottom:none;
+      }
+      .modal-overlay.visible .modal-content { transform:translateY(0); }
+      .modal-handle { width:40px; height:4px; background:var(--surface2); border-radius:2px; margin:0 auto 20px; }
+      .modal-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
+      .modal-title { font-size:22px; font-weight:700; color:var(--text); }
+      .modal-role-badge { padding:6px 12px; border-radius:20px; font-size:12px; font-weight:600; text-transform:uppercase; }
+      .modal-role-badge.recommended { background:var(--green); color:#090e1a; }
+      .modal-role-badge.alternative { background:var(--surface2); color:var(--text2); }
+      .detail-section { margin-bottom:20px; }
+      .detail-section-title { font-size:12px; font-weight:600; color:var(--text3); text-transform:uppercase; margin-bottom:10px; }
+      .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .detail-item { background:var(--surface2); padding:14px; border-radius:12px; }
+      .detail-label { font-size:12px; color:var(--text3); margin-bottom:4px; }
+      .detail-value { font-size:20px; font-weight:600; color:var(--text); }
+      .detail-item.full-width { grid-column:1/-1; }
+      .modal-why { background:rgba(34,211,160,0.06); border:1px solid rgba(34,211,160,0.16); padding:16px; border-radius:12px; margin-bottom:16px; }
+      .modal-why-title { font-size:13px; font-weight:600; color:var(--green); margin-bottom:8px; }
+      .modal-why-points { list-style:none; }
+      .modal-why-points li { font-size:14px; color:var(--text); line-height:1.5; padding-left:20px; position:relative; margin-bottom:6px; }
+      .modal-why-points li::before { content:""; position:absolute; left:0; top:8px; width:8px; height:8px; background:var(--green); border-radius:50%; }
+      .comparison-note { background:rgba(245,158,11,0.09); border:1px solid rgba(245,158,11,0.2); padding:14px; border-radius:12px; font-size:14px; color:#fbbf24; margin-bottom:16px; }
+      .segment-list { display:flex; flex-direction:column; gap:10px; }
+      .segment-item { background:var(--surface2); padding:14px; border-radius:12px; display:flex; align-items:center; gap:12px; }
+      .segment-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+      .segment-icon.highway { background:rgba(59,130,246,0.15); }
+      .segment-icon.city    { background:rgba(245,158,11,0.15); }
+      .segment-icon.traffic { background:rgba(239,68,68,0.15); }
+      .segment-icon.turns   { background:rgba(168,85,247,0.15); }
+      .segment-content { flex:1; }
+      .segment-title { font-size:14px; font-weight:600; color:var(--text); }
+      .segment-details { font-size:13px; color:var(--text2); }
+      .modal-cta {
+        width:100%; padding:16px; background:var(--green); color:#090e1a;
+        border:none; border-radius:14px; font-size:17px; font-weight:700; cursor:pointer;
+        text-transform:uppercase; letter-spacing:0.3px; font-family:inherit;
+      }
+
+      /* ===== DRIVE MODE ===== */
+      .drive-mode {
+        display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+        background:#0f172a; z-index:2000; flex-direction:column;
+      }
+      .drive-mode.active { display:flex; }
+      .drive-header { padding:16px 20px; background:#1e293b; display:flex; justify-content:space-between; align-items:center; }
+      .drive-status { color:#94a3b8; font-size:14px; }
+      .drive-exit { padding:10px 20px; background:#ef4444; color:white; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; }
+      .drive-map-container { flex:1; min-height:0; position:relative; }
+      #drive-map { width:100%; height:100%; }
+      .drive-ahead { position:absolute; top:16px; left:16px; right:16px; background:rgba(30,41,59,0.95); border-radius:14px; padding:14px 16px; display:flex; align-items:center; gap:12px; }
+      .drive-ahead-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+      .drive-ahead-icon.stable  { background:#166534; }
+      .drive-ahead-icon.warning { background:#f59e0b; }
+      .drive-ahead-icon.alert   { background:#ef4444; }
+      .drive-ahead-text { flex:1; color:white; font-size:14px; font-weight:500; }
+      .drive-alert { position:absolute; bottom:16px; left:16px; right:16px; background:rgba(15,23,42,0.96); border:1px solid rgba(148,163,184,0.18); border-radius:18px; padding:16px; display:none; box-shadow:0 10px 30px rgba(0,0,0,0.28); backdrop-filter:blur(8px); }
+      .drive-alert.visible { display:block; }
+      .drive-alert-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+      .drive-alert-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase; }
+      .drive-alert-badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
+      .drive-alert-badge.high   { background:rgba(16,185,129,0.18); color:#6ee7b7; }
+      .drive-alert-badge.medium { background:rgba(245,158,11,0.18); color:#fcd34d; }
+      .drive-alert-badge.low    { background:rgba(148,163,184,0.18); color:#cbd5e1; }
+      .drive-alert-state { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; }
+      .drive-alert-state.switch  { color:#86efac; }
+      .drive-alert-state.suggest { color:#fcd34d; }
+      .drive-alert-message { color:white; margin-bottom:12px; }
+      .drive-alert-title  { font-size:18px; font-weight:700; line-height:1.2; margin-bottom:4px; }
+      .drive-alert-detail { font-size:14px; color:#cbd5e1; line-height:1.4; margin-bottom:6px; }
+      .drive-alert-meta   { font-size:12px; color:#94a3b8; line-height:1.3; }
+      .drive-alert-actions { display:flex; gap:10px; }
+      .drive-alert-btn { flex:1; padding:12px 14px; border-radius:12px; font-size:14px; font-weight:700; border:none; cursor:pointer; transition:transform 0.15s ease, opacity 0.15s ease; }
+      .drive-alert-btn:hover { transform:translateY(-1px); }
+      .drive-alert-btn.primary { background:#2d6a4f; color:white; }
+      .drive-alert-btn.primary.suggest { background:#b45309; }
+      .drive-alert-btn.secondary { background:#334155; color:white; }
+      .drive-panel { background:#1e293b; padding:24px 20px; border-radius:28px 28px 0 0; }
+      .drive-eta { text-align:center; margin-bottom:16px; }
+      .drive-eta-time { font-size:56px; font-weight:700; color:white; line-height:1; }
+      .drive-eta-label { font-size:14px; color:#64748b; margin-top:4px; }
+      .drive-info { display:flex; justify-content:center; gap:32px; padding:16px 0; border-top:1px solid #334155; }
+      .drive-info-item { text-align:center; }
+      .drive-info-value { font-size:22px; font-weight:600; color:white; }
+      .drive-info-label { font-size:12px; color:#64748b; margin-top:4px; }
+      .drive-next { margin-top:16px; padding:18px; background:#334155; border-radius:16px; display:flex; align-items:center; gap:14px; }
+      .drive-next-icon { width:52px; height:52px; background:var(--green); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:26px; color:#090e1a; }
+      .drive-next-text { flex:1; }
+      .drive-next-instruction { color:white; font-size:17px; font-weight:600; }
+      .drive-next-distance { color:#94a3b8; font-size:14px; margin-top:4px; }
+      .drive-lane-block { display:none; align-items:center; gap:10px; margin-top:8px; padding:10px 14px; background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.28); border-radius:12px; transition:background 0.3s; }
+      .drive-lane-block.lane-warn { background:rgba(245,158,11,0.18); border-color:rgba(245,158,11,0.50); }
+      .drive-lane-block.lane-alert { background:rgba(239,68,68,0.18); border-color:rgba(239,68,68,0.50); }
+      .drive-lane-icon { font-size:18px; flex-shrink:0; width:24px; text-align:center; }
+      .drive-lane-text { flex:1; }
+      .drive-lane-instruction { color:#fbbf24; font-size:13px; font-weight:600; }
+      .drive-lane-block.lane-alert .drive-lane-instruction { color:#f87171; }
+      .drive-lane-distance { color:#94a3b8; font-size:11px; margin-top:2px; }
+
+      /* ===== MISC ===== */
+      .hidden { display:none !important; }
+      .loading { display:flex; align-items:center; justify-content:center; padding:40px; color:var(--text2); font-size:15px; }
+      .error { margin:16px; padding:16px; background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.20); border-radius:12px; color:#f87171; font-size:14px; }
+      .predict-tip { display:none !important; }
+
+      /* ===== AUTOCOMPLETE (dark) ===== */
+      .pac-container { z-index:9999 !important; border-radius:12px; background:var(--surface); border:1px solid var(--border2); box-shadow:0 16px 40px rgba(0,0,0,0.5); font-family:inherit; margin-top:4px; }
+      .pac-item { padding:10px 14px; font-size:14px; cursor:pointer; border-top:1px solid var(--border); background:transparent; color:var(--text2); }
+      .pac-item:first-child { border-top:none; }
+      .pac-item:hover { background:var(--surface2); }
+      .pac-item-query { font-size:14px; color:var(--text); font-weight:500; }
+      .pac-matched { color:var(--green); font-weight:700; }
+      .pac-icon { display:none; }
+      .pac-logo::after { display:none; }
+
+      /* ===== AI DECISION UX (legacy modal compat) ===== */
+      .ai-confidence-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; text-transform:uppercase; letter-spacing:0.4px; }
+      .ai-confidence-badge .conf-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
+      .confidence-high   { background:rgba(34,211,160,0.14); color:var(--green); }
+      .confidence-medium { background:rgba(245,158,11,0.14); color:var(--amber); }
+      .confidence-low    { background:rgba(148,163,184,0.12); color:var(--text3); }
+
+      /* ===== LANGUAGE BAR ===== */
+      /* (already defined above in controls-strip) */
+
+      /* ===== RTL ===== */
+      body.rtl { direction:rtl; }
+      body.rtl .route-row  { flex-direction:row-reverse; }
+      body.rtl .top-bar    { flex-direction:row-reverse; }
+      body.rtl .pref-bar, body.rtl .filter-bar, body.rtl .lang-bar { flex-direction:row-reverse; }
+      body.rtl .drive-next { flex-direction:row-reverse; }
+      body.rtl .drive-lane-block { flex-direction:row-reverse; }
+      body.rtl .drive-info { flex-direction:row-reverse; }
+      body.rtl .drive-eta  { text-align:right; }
+      body.rtl .modal-header { flex-direction:row-reverse; }
+      body.rtl .detail-grid { direction:rtl; }
+      body.rtl .modal-why-points { padding-right:18px; padding-left:0; }
+      body.rtl .quick-item { text-align:right; flex-direction:row-reverse; }
+      body.rtl .dh-confidence { flex-direction:row-reverse; }
+      body.rtl .dh-chips { flex-direction:row-reverse; }
+      body.rtl .section-head { flex-direction:row-reverse; }
+      body.rtl .cta-row  { flex-direction:row-reverse; }
+      body.rtl .info-strip { flex-direction:row-reverse; }
+      body.rtl .alt-row  { direction:rtl; }
+    </style>
+  </head>
 <body>
 
-<!-- INPUT PANEL -->
-<div class="input-panel">
-  <div class="input-row">
-    <span class="input-label">From:</span>
-    <input type="text" class="input-value" id="start" placeholder="Current location" value="">
-    <button class="voice-btn" id="gps-btn" onclick="requestGPS()" title="Use my location">
-      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-    </button>
-  </div>
-  <div class="input-row">
-    <span class="input-label">To:</span>
-    <input type="text" class="input-value" id="end" placeholder="Where to?" value="">
-  </div>
-</div>
-
-<!-- PREFERENCE BAR (minimal) -->
-<div class="pref-bar" id="pref-bar">
-  <button type="button" class="pref-btn" data-pref="balanced" onclick="setUserPreference('balanced')">Balanced</button>
-  <button type="button" class="pref-btn" data-pref="fastest"  onclick="setUserPreference('fastest')">Fastest</button>
-  <button type="button" class="pref-btn" data-pref="no_tolls" onclick="setUserPreference('no_tolls')">No tolls</button>
-</div>
-<div class="filter-bar" id="filter-bar">
-  <button type="button" class="filter-btn" data-filter="avoid_highways" onclick="toggleFilter('avoid_highways')">🛣 Avoid highways</button>
-  <button type="button" class="filter-btn" data-filter="fewer_turns"    onclick="toggleFilter('fewer_turns')">↩ Fewer turns</button>
-</div>
-
-<!-- RESULTS CONTAINER -->
-<div id="results"></div>
-
-<!-- QUICK ACCESS -->
-<div class="quick-section" id="quick-access">
-  <div class="quick-title">Quick Access</div>
-  <div class="quick-list">
-    <div class="quick-item" onclick="setDestination('Home')" ondblclick="updateSavedPlace('Home')">
-      <div class="quick-icon">&#127968;</div>
-      <div class="quick-label">Home</div>
-      <div class="quick-arrow">&#8250;</div>
+  <!-- HERO SECTION: full-width map + floating top bar -->
+  <div class="hero-section">
+    <div id="map"></div>
+    <div class="top-bar">
+      <button class="top-btn" title="Menu">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+      </button>
+      <div class="route-panel">
+        <div class="route-row">
+          <span class="route-dot green"></span>
+          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="Current location" value="">
+          <button class="gps-btn-top" id="gps-btn" onclick="requestGPS()" title="Use my location">
+            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          </button>
+        </div>
+        <div class="route-row">
+          <span class="route-dot"></span>
+          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="Where to?" value="">
+        </div>
+      </div>
     </div>
-    <div class="quick-item" onclick="setDestination('Work')" ondblclick="updateSavedPlace('Work')">
-      <div class="quick-icon">&#128188;</div>
-      <div class="quick-label">Work</div>
-      <div class="quick-arrow">&#8250;</div>
+    <div class="live-badge"><span class="live-dot"></span> LIVE TRAFFIC</div>
+  </div>
+
+  <!-- CONTROLS STRIP (pref / filter / lang) -->
+  <div class="controls-strip">
+    <div class="pref-bar" id="pref-bar">
+      <button type="button" class="pref-btn" data-pref="balanced" onclick="setUserPreference('balanced')" data-i18n="pref_balanced">Balanced</button>
+      <button type="button" class="pref-btn" data-pref="fastest"  onclick="setUserPreference('fastest')"  data-i18n="pref_fastest">Fastest</button>
+      <button type="button" class="pref-btn" data-pref="no_tolls" onclick="setUserPreference('no_tolls')" data-i18n="pref_no_tolls">No tolls</button>
+    </div>
+    <div class="filter-bar" id="filter-bar">
+      <button type="button" class="filter-btn" data-filter="avoid_highways" onclick="toggleFilter('avoid_highways')" data-i18n="filter_highways">🛣 Avoid highways</button>
+      <button type="button" class="filter-btn" data-filter="fewer_turns"    onclick="toggleFilter('fewer_turns')"    data-i18n="filter_turns">↩ Fewer turns</button>
+    </div>
+    <div class="lang-bar" id="lang-bar">
+      <button type="button" class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
+      <button type="button" class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+      <button type="button" class="lang-btn" data-lang="ua" onclick="setLang('ua')">UA</button>
+      <button type="button" class="lang-btn" data-lang="ar" onclick="setLang('ar')">AR</button>
     </div>
   </div>
-</div>
 
-<!-- MAP PREVIEW -->
-<div class="map-preview">
-  <div id="map"></div>
-</div>
+  <!-- CONTENT SCROLL -->
+  <div class="content-scroll">
+    <!-- RESULTS filled by renderResults() -->
+    <div id="results"></div>
 
-<!-- BOTTOM NAV -->
-<nav class="bottom-nav">
-  <div class="nav-item active" onclick="handleStartNavTap()">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
-    <span class="nav-label">Start</span>
+    <!-- QUICK ACCESS (shown when no routes) -->
+    <div class="quick-section" id="quick-access">
+      <div class="quick-title" data-i18n="quick_access">Quick Access</div>
+      <div class="quick-list">
+        <div class="quick-item" onclick="setDestination('Home')" ondblclick="updateSavedPlace('Home')">
+          <div class="quick-icon">&#127968;</div>
+          <div class="quick-label">Home</div>
+          <div class="quick-arrow">&#8250;</div>
+        </div>
+        <div class="quick-item" onclick="setDestination('Work')" ondblclick="updateSavedPlace('Work')">
+          <div class="quick-icon">&#128188;</div>
+          <div class="quick-label">Work</div>
+          <div class="quick-arrow">&#8250;</div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="nav-item">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
-    <span class="nav-label">History</span>
-  </div>
-  <div class="nav-item">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
-    <span class="nav-label">AI Insights</span>
-  </div>
-  <div class="nav-item">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-    <span class="nav-label">Places</span>
-  </div>
-</nav>
 
+  <!-- BOTTOM NAV (premium dark) -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" onclick="handleStartNavTap()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+      <span class="nav-label" data-i18n="nav_route">Route</span>
+    </div>
+    <div class="nav-item" onclick="handleStartNavTap()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      <span class="nav-label" data-i18n="nav_drive">Drive</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17v-6c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v6H4v2h16v-2h-2zm-2 0H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6zm-4 5c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2z"/></svg>
+      <span class="nav-label" data-i18n="nav_alerts">Alerts</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span class="nav-label" data-i18n="nav_saved">Saved</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      <span class="nav-label" data-i18n="nav_profile">Profile</span>
+    </div>
+  </nav>
 <!-- ROUTE DETAILS MODAL -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
   <div class="modal-content" id="modal-content">
@@ -1153,14 +633,14 @@
 
     <div class="drive-ahead">
       <div class="drive-ahead-icon stable" id="drive-ahead-icon">&#9728;</div>
-      <div class="drive-ahead-text" id="drive-ahead-text">Calculating conditions...</div>
+      <div class="drive-ahead-text" id="drive-ahead-text" data-i18n="calculating">Calculating conditions...</div>
     </div>
 
     <div class="drive-alert" id="drive-alert">
       <div class="drive-alert-message" id="drive-alert-message"></div>
       <div class="drive-alert-actions">
-        <button class="drive-alert-btn primary" onclick="switchToAlternative()">Switch Route</button>
-        <button class="drive-alert-btn secondary" onclick="dismissAlert()">Keep Current</button>
+        <button class="drive-alert-btn primary" onclick="switchToAlternative()" data-i18n="switch_route">Switch Route</button>
+        <button class="drive-alert-btn secondary" onclick="dismissAlert()" data-i18n="keep_current">Keep Current</button>
       </div>
     </div>
   </div>
@@ -1168,22 +648,22 @@
   <div class="drive-panel">
     <div class="drive-eta">
       <div class="drive-eta-time" id="drive-eta-time">--</div>
-      <div class="drive-eta-label">min remaining</div>
+      <div class="drive-eta-label" data-i18n="min_remaining">min remaining</div>
     </div>
     <div class="drive-info">
       <div class="drive-info-item">
         <div class="drive-info-value" id="drive-distance">--</div>
-        <div class="drive-info-label">km left</div>
+        <div class="drive-info-label" data-i18n="km_left">km left</div>
       </div>
       <div class="drive-info-item">
         <div class="drive-info-value" id="drive-traffic">--</div>
-        <div class="drive-info-label">traffic</div>
+        <div class="drive-info-label" data-i18n="traffic_label">traffic</div>
       </div>
     </div>
     <div class="drive-next">
       <div class="drive-next-icon" id="drive-next-icon">&#8593;</div>
       <div class="drive-next-text">
-        <div class="drive-next-instruction" id="drive-next-instruction">Follow the route</div>
+        <div class="drive-next-instruction" id="drive-next-instruction" data-i18n="follow_route">Follow the route</div>
         <div class="drive-next-distance" id="drive-next-distance"></div>
       </div>
     </div>
@@ -1219,7 +699,273 @@ let lastKnownUserLatLng = null;
 let smoothedUserLatLng = null;
 let lastWarningPhase = "";
 let voiceEnabled = true;
-let lastSpokenText = "";
+
+  // ============================================================
+  //  i18n — MULTILANGUAGE  (Day 8 · 9 · 10)
+  // ============================================================
+  let currentLang = (() => { try { return localStorage.getItem("clearroad_lang") || "en"; } catch { return "en"; } })();
+
+  const i18n = {
+    en: {
+      from:"From:", to:"To:",
+      placeholder_start:"Current location", placeholder_end:"Where to?",
+      pref_balanced:"Balanced", pref_fastest:"Fastest", pref_no_tolls:"No tolls",
+      filter_highways:"🛣 Avoid highways", filter_turns:"↩ Fewer turns",
+      quick_access:"Quick Access",
+      min_remaining:"min remaining", km_left:"km left", traffic_label:"traffic",
+      follow_route:"Follow the route", calculating:"Calculating conditions...",
+      switch_route:"Switch Route", keep_current:"Keep Current",
+      nav_route:"Route", nav_drive:"Drive", nav_alerts:"Alerts", nav_saved:"Saved", nav_profile:"Profile",
+      gps_blocked:"Location blocked — allow access and tap 📍",
+      gps_unavail:"Location unavailable — enter manually or tap 📍",
+      gps_timeout:"Location timeout — tap 📍 again",
+      gps_error:"Location error — enter manually or tap 📍",
+      gps_current:"Current location",
+      gps_unsupported:"GPS not supported — enter manually",
+      gps_detecting:"Detecting location…",
+      tw_prep_exit:"Prepare for exit", tw_prep_ramp:"Prepare to take the ramp",
+      tw_prep_keep_left:"Prepare to keep left", tw_prep_keep_right:"Prepare to keep right",
+      tw_prep_uturn:"Prepare for U-turn", tw_prep_merge:"Prepare to merge",
+      tw_prep_left:"Prepare to turn left", tw_prep_right:"Prepare to turn right",
+      tw_prep_straight:"Stay on current road",
+      tw_soon_exit:"Exit ahead", tw_soon_ramp:"Ramp ahead",
+      tw_soon_keep_left:"Keep left ahead", tw_soon_keep_right:"Keep right ahead",
+      tw_soon_uturn:"U-turn ahead", tw_soon_merge:"Merge ahead",
+      tw_soon_left:"Left turn ahead", tw_soon_right:"Right turn ahead",
+      tw_soon_straight:"Continue straight",
+      tw_now_exit:"Take the exit now", tw_now_ramp:"Take the ramp now",
+      tw_now_keep_left:"Keep left now", tw_now_keep_right:"Keep right now",
+      tw_now_uturn:"Make a U-turn now", tw_now_merge:"Merge now",
+      tw_now_left:"Turn left now", tw_now_right:"Turn right now",
+      tw_now_straight:"Continue straight",
+      ctx_uturn:"Prepare for U-turn ahead", ctx_left:"Turn left ahead",
+      ctx_right:"Turn right ahead", ctx_keep_left:"Keep left ahead",
+      ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
+      ctx_merge:"Merge ahead",
+      lg_exit_now:"Take the exit now", lg_ramp_now:"Take the ramp now",
+      lg_lane_now:"Use the correct lane now",
+      lg_merge_prep:"Prepare to merge", lg_merge_soon:"Merge ahead", lg_merge_now:"Merge now",
+      stress_smooth:"Smooth drive", stress_steady:"Steady drive",
+      stress_active:"Active drive", stress_stressful:"Stressful drive", stress_busy:"Busy route",
+      stab_very:"Very stable", stab_stable:"Stable", stab_moderate:"Moderate", stab_unpred:"Unpredictable",
+      conf_high:"High", conf_medium:"Medium", conf_low:"Low",
+      traf_stable:"stable", traf_moderate:"moderate", traf_heavy:"heavy",
+      dep_leave_now:"Better to leave now before traffic builds",
+      pers_calm:"Learns your calm driving style",
+      pers_no_tolls:"Learns your no-tolls preference",
+      pers_fastest:"Learns your fastest-route style",
+      modal_recommended:"Recommended", modal_alternative:"Alternative",
+      modal_why_title:"Why this route", modal_tradeoff:"Trade-off",
+      modal_key_facts:"Key facts", modal_time:"Time", modal_distance:"Distance",
+      modal_delay:"Delay", modal_tolls:"Tolls", modal_traffic:"Traffic",
+      modal_turns:"Turns", modal_highway:"Highway share",
+      modal_go:"Go via", modal_try:"Try",
+      pred_best_now:"Best time to go now", pred_good_time:"Good time — light delays",
+      pred_consider:"Consider waiting — traffic building up", pred_stable:"Conditions are stable"
+    },
+    ru: {
+      from:"Откуда:", to:"Куда:",
+      placeholder_start:"Текущее местоположение", placeholder_end:"Куда едем?",
+      pref_balanced:"Оптимальный", pref_fastest:"Быстрейший", pref_no_tolls:"Без платных",
+      filter_highways:"🛣 Без шоссе", filter_turns:"↩ Меньше поворотов",
+      quick_access:"Быстрый доступ",
+      min_remaining:"мин осталось", km_left:"км осталось", traffic_label:"трафик",
+      follow_route:"Следуйте по маршруту", calculating:"Анализирую обстановку...",
+      switch_route:"Сменить маршрут", keep_current:"Остаться",
+      nav_route:"Маршрут", nav_drive:"Езда", nav_alerts:"Оповещения", nav_saved:"Сохранённые", nav_profile:"Профиль",
+      gps_blocked:"Доступ закрыт — разрешите и нажмите 📍",
+      gps_unavail:"Геолокация недоступна — введите вручную или нажмите 📍",
+      gps_timeout:"Тайм-аут GPS — нажмите 📍 ещё раз",
+      gps_error:"Ошибка GPS — введите вручную или нажмите 📍",
+      gps_current:"Текущее местоположение",
+      gps_unsupported:"GPS не поддерживается — введите вручную",
+      gps_detecting:"Определяю местоположение…",
+      tw_prep_exit:"Подготовьтесь к съезду", tw_prep_ramp:"Подготовьтесь к рампе",
+      tw_prep_keep_left:"Держитесь левее заранее", tw_prep_keep_right:"Держитесь правее заранее",
+      tw_prep_uturn:"Подготовьтесь к развороту", tw_prep_merge:"Подготовьтесь к слиянию",
+      tw_prep_left:"Подготовьтесь повернуть налево", tw_prep_right:"Подготовьтесь повернуть направо",
+      tw_prep_straight:"Продолжайте движение",
+      tw_soon_exit:"Съезд впереди", tw_soon_ramp:"Рампа впереди",
+      tw_soon_keep_left:"Держитесь левее", tw_soon_keep_right:"Держитесь правее",
+      tw_soon_uturn:"Разворот впереди", tw_soon_merge:"Слияние впереди",
+      tw_soon_left:"Поворот налево впереди", tw_soon_right:"Поворот направо впереди",
+      tw_soon_straight:"Продолжайте прямо",
+      tw_now_exit:"Съезжайте сейчас", tw_now_ramp:"Берите рампу сейчас",
+      tw_now_keep_left:"Держитесь левее сейчас", tw_now_keep_right:"Держитесь правее сейчас",
+      tw_now_uturn:"Сейчас разворот", tw_now_merge:"Вливайтесь сейчас",
+      tw_now_left:"Поворот налево сейчас", tw_now_right:"Поворот направо сейчас",
+      tw_now_straight:"Едьте прямо",
+      ctx_uturn:"Подготовьтесь к развороту", ctx_left:"Поворот налево впереди",
+      ctx_right:"Поворот направо впереди", ctx_keep_left:"Держитесь левее",
+      ctx_keep_right:"Держитесь правее", ctx_ramp:"Рампа впереди", ctx_merge:"Слияние впереди",
+      lg_exit_now:"Съезжайте сейчас", lg_ramp_now:"Берите рампу сейчас",
+      lg_lane_now:"Займите правильную полосу",
+      lg_merge_prep:"Подготовьтесь к слиянию", lg_merge_soon:"Слияние впереди", lg_merge_now:"Вливайтесь сейчас",
+      stress_smooth:"Спокойная езда", stress_steady:"Ровная езда",
+      stress_active:"Активный маршрут", stress_stressful:"Напряжённая езда", stress_busy:"Загруженный маршрут",
+      stab_very:"Очень стабильный", stab_stable:"Стабильный", stab_moderate:"Умеренный", stab_unpred:"Непредсказуемый",
+      conf_high:"Высокая", conf_medium:"Средняя", conf_low:"Низкая",
+      traf_stable:"стабильный", traf_moderate:"умеренный", traf_heavy:"плотный",
+      dep_leave_now:"Лучше выехать сейчас, пока не стало хуже",
+      pers_calm:"Запоминает спокойный стиль езды",
+      pers_no_tolls:"Запоминает предпочтение без платных",
+      pers_fastest:"Запоминает быстрейший маршрут",
+      modal_recommended:"Рекомендуем", modal_alternative:"Альтернатива",
+      modal_why_title:"Почему этот маршрут", modal_tradeoff:"Компромисс",
+      modal_key_facts:"Ключевые данные", modal_time:"Время", modal_distance:"Расстояние",
+      modal_delay:"Задержка", modal_tolls:"Платные", modal_traffic:"Трафик",
+      modal_turns:"Повороты", modal_highway:"Доля шоссе",
+      modal_go:"Ехать через", modal_try:"Попробовать",
+      pred_best_now:"Сейчас лучшее время выехать", pred_good_time:"Хорошее время — небольшие задержки",
+      pred_consider:"Лучше подождать — трафик нарастает", pred_stable:"Обстановка стабильна"
+    },
+    ua: {
+      from:"Звідки:", to:"Куди:",
+      placeholder_start:"Поточне місцезнаходження", placeholder_end:"Куди їдемо?",
+      pref_balanced:"Оптимальний", pref_fastest:"Найшвидший", pref_no_tolls:"Без платних",
+      filter_highways:"🛣 Без автотрас", filter_turns:"↩ Менше поворотів",
+      quick_access:"Швидкий доступ",
+      min_remaining:"хв залишилось", km_left:"км залишилось", traffic_label:"трафік",
+      follow_route:"Слідуйте маршрутом", calculating:"Аналізую обстановку...",
+      switch_route:"Змінити маршрут", keep_current:"Залишитись",
+      nav_route:"Маршрут", nav_drive:"Їзда", nav_alerts:"Сповіщення", nav_saved:"Збережені", nav_profile:"Профіль",
+      gps_blocked:"Доступ закрито — дозвольте і натисніть 📍",
+      gps_unavail:"Геолокація недоступна — введіть вручну або натисніть 📍",
+      gps_timeout:"Тайм-аут GPS — натисніть 📍 ще раз",
+      gps_error:"Помилка GPS — введіть вручну або натисніть 📍",
+      gps_current:"Поточне місцезнаходження",
+      gps_unsupported:"GPS не підтримується — введіть вручну",
+      gps_detecting:"Визначаю місцезнаходження…",
+      tw_prep_exit:"Готуйтесь до з'їзду", tw_prep_ramp:"Готуйтесь до рампи",
+      tw_prep_keep_left:"Тримайтесь лівіше заздалегідь", tw_prep_keep_right:"Тримайтесь правіше заздалегідь",
+      tw_prep_uturn:"Готуйтесь до розвороту", tw_prep_merge:"Готуйтесь до злиття",
+      tw_prep_left:"Готуйтесь повернути ліворуч", tw_prep_right:"Готуйтесь повернути праворуч",
+      tw_prep_straight:"Продовжуйте рух",
+      tw_soon_exit:"З'їзд попереду", tw_soon_ramp:"Рампа попереду",
+      tw_soon_keep_left:"Тримайтесь лівіше", tw_soon_keep_right:"Тримайтесь правіше",
+      tw_soon_uturn:"Розворот попереду", tw_soon_merge:"Злиття попереду",
+      tw_soon_left:"Поворот ліворуч попереду", tw_soon_right:"Поворот праворуч попереду",
+      tw_soon_straight:"Продовжуйте прямо",
+      tw_now_exit:"З'їжджайте зараз", tw_now_ramp:"Беріть рампу зараз",
+      tw_now_keep_left:"Тримайтесь лівіше зараз", tw_now_keep_right:"Тримайтесь правіше зараз",
+      tw_now_uturn:"Зараз розворот", tw_now_merge:"Вливайтесь зараз",
+      tw_now_left:"Поворот ліворуч зараз", tw_now_right:"Поворот праворуч зараз",
+      tw_now_straight:"Їдьте прямо",
+      ctx_uturn:"Готуйтесь до розвороту", ctx_left:"Поворот ліворуч попереду",
+      ctx_right:"Поворот праворуч попереду", ctx_keep_left:"Тримайтесь лівіше",
+      ctx_keep_right:"Тримайтесь правіше", ctx_ramp:"Рампа попереду", ctx_merge:"Злиття попереду",
+      lg_exit_now:"З'їжджайте зараз", lg_ramp_now:"Беріть рампу зараз",
+      lg_lane_now:"Займіть правильну смугу",
+      lg_merge_prep:"Готуйтесь до злиття", lg_merge_soon:"Злиття попереду", lg_merge_now:"Вливайтесь зараз",
+      stress_smooth:"Спокійна їзда", stress_steady:"Рівна їзда",
+      stress_active:"Активний маршрут", stress_stressful:"Напружена їзда", stress_busy:"Завантажений маршрут",
+      stab_very:"Дуже стабільний", stab_stable:"Стабільний", stab_moderate:"Помірний", stab_unpred:"Непередбачуваний",
+      conf_high:"Висока", conf_medium:"Середня", conf_low:"Низька",
+      traf_stable:"стабільний", traf_moderate:"помірний", traf_heavy:"щільний",
+      dep_leave_now:"Краще виїхати зараз, поки не стало гірше",
+      pers_calm:"Запам'ятовує спокійний стиль",
+      pers_no_tolls:"Запам'ятовує уникання платних",
+      pers_fastest:"Запам'ятовує найшвидший маршрут",
+      modal_recommended:"Рекомендуємо", modal_alternative:"Альтернатива",
+      modal_why_title:"Чому цей маршрут", modal_tradeoff:"Компроміс",
+      modal_key_facts:"Ключові дані", modal_time:"Час", modal_distance:"Відстань",
+      modal_delay:"Затримка", modal_tolls:"Платні", modal_traffic:"Трафік",
+      modal_turns:"Повороти", modal_highway:"Частка автотраси",
+      modal_go:"Їхати через", modal_try:"Спробувати",
+      pred_best_now:"Зараз найкращий час виїхати", pred_good_time:"Гарний час — невеликі затримки",
+      pred_consider:"Краще зачекати — трафік зростає", pred_stable:"Обстановка стабільна"
+    },
+    ar: {
+      from:"من:", to:"إلى:",
+      placeholder_start:"موقعك الحالي", placeholder_end:"إلى أين؟",
+      pref_balanced:"متوازن", pref_fastest:"الأسرع", pref_no_tolls:"بدون رسوم",
+      filter_highways:"🛣 تجنب الطرق السريعة", filter_turns:"↩ منعطفات أقل",
+      quick_access:"وصول سريع",
+      min_remaining:"دقيقة متبقية", km_left:"كم متبقي", traffic_label:"المرور",
+      follow_route:"اتبع المسار", calculating:"جاري تحليل الأوضاع...",
+      switch_route:"تغيير المسار", keep_current:"البقاء",
+      nav_route:"المسار", nav_drive:"القيادة", nav_alerts:"التنبيهات", nav_saved:"المحفوظة", nav_profile:"الملف",
+      gps_blocked:"تم حظر الموقع — اسمح بالوصول واضغط 📍",
+      gps_unavail:"الموقع غير متاح — أدخل يدويًا أو اضغط 📍",
+      gps_timeout:"انتهت مهلة GPS — اضغط 📍 مرة أخرى",
+      gps_error:"خطأ في GPS — أدخل يدويًا أو اضغط 📍",
+      gps_current:"موقعك الحالي",
+      gps_unsupported:"GPS غير مدعوم — أدخل يدويًا",
+      gps_detecting:"جاري تحديد الموقع…",
+      tw_prep_exit:"استعد للخروج", tw_prep_ramp:"استعد لأخذ المنحدر",
+      tw_prep_keep_left:"استعد للبقاء يسارًا", tw_prep_keep_right:"استعد للبقاء يمينًا",
+      tw_prep_uturn:"استعد للاستدارة", tw_prep_merge:"استعد للاندماج",
+      tw_prep_left:"استعد للانعطاف يسارًا", tw_prep_right:"استعد للانعطاف يمينًا",
+      tw_prep_straight:"ابق في مسارك الحالي",
+      tw_soon_exit:"المخرج قريب", tw_soon_ramp:"المنحدر قريب",
+      tw_soon_keep_left:"ابق في المسار الأيسر", tw_soon_keep_right:"ابق في المسار الأيمن",
+      tw_soon_uturn:"الاستدارة قريبة", tw_soon_merge:"الاندماج قريب",
+      tw_soon_left:"انعطاف يسار قريب", tw_soon_right:"انعطاف يمين قريب",
+      tw_soon_straight:"واصل مباشرة",
+      tw_now_exit:"اخرج الآن", tw_now_ramp:"خذ المنحدر الآن",
+      tw_now_keep_left:"ابق يسارًا الآن", tw_now_keep_right:"ابق يمينًا الآن",
+      tw_now_uturn:"استدر الآن", tw_now_merge:"اندمج الآن",
+      tw_now_left:"انعطف يسارًا الآن", tw_now_right:"انعطف يمينًا الآن",
+      tw_now_straight:"واصل مباشرة",
+      ctx_uturn:"استعد للاستدارة قريبًا", ctx_left:"انعطاف يسار قريب",
+      ctx_right:"انعطاف يمين قريب", ctx_keep_left:"ابق في المسار الأيسر",
+      ctx_keep_right:"ابق في المسار الأيمن", ctx_ramp:"المنحدر قريب", ctx_merge:"الاندماج قريب",
+      lg_exit_now:"اخرج الآن", lg_ramp_now:"خذ المنحدر الآن",
+      lg_lane_now:"استخدم المسار الصحيح الآن",
+      lg_merge_prep:"استعد للاندماج", lg_merge_soon:"الاندماج قريب", lg_merge_now:"اندمج الآن",
+      stress_smooth:"قيادة هادئة", stress_steady:"قيادة مستقرة",
+      stress_active:"طريق نشط", stress_stressful:"قيادة متوترة", stress_busy:"طريق مزدحم",
+      stab_very:"مستقر جدًا", stab_stable:"مستقر", stab_moderate:"معتدل", stab_unpred:"غير متوقع",
+      conf_high:"عالية", conf_medium:"متوسطة", conf_low:"منخفضة",
+      traf_stable:"مستقر", traf_moderate:"معتدل", traf_heavy:"كثيف",
+      dep_leave_now:"من الأفضل المغادرة الآن قبل ازدياد الازدحام",
+      pers_calm:"يتعلم أسلوب القيادة الهادئة",
+      pers_no_tolls:"يتعلم تجنب الطرق ذات الرسوم",
+      pers_fastest:"يتعلم تفضيل الطريق الأسرع",
+      modal_recommended:"موصى به", modal_alternative:"بديل",
+      modal_why_title:"لماذا هذا المسار", modal_tradeoff:"مقايضة",
+      modal_key_facts:"بيانات رئيسية", modal_time:"الوقت", modal_distance:"المسافة",
+      modal_delay:"التأخير", modal_tolls:"الرسوم", modal_traffic:"الحركة",
+      modal_turns:"المنعطفات", modal_highway:"حصة الطريق السريع",
+      modal_go:"انطلق عبر", modal_try:"جرب",
+      pred_best_now:"الوقت الأفضل للانطلاق الآن", pred_good_time:"وقت جيد — تأخيرات خفيفة",
+      pred_consider:"يفضل الانتظار — الازدحام يتصاعد", pred_stable:"الأوضاع مستقرة"
+    }
+  };
+
+  function t(key) {
+    return (i18n[currentLang] && i18n[currentLang][key]) || i18n.en[key] || key;
+  }
+
+  function voiceLang() {
+    const map = { en:"en-US", ru:"ru-RU", ua:"uk-UA", ar:"ar-AE" };
+    return map[currentLang] || "en-US";
+  }
+
+  function setLang(lang) {
+    if (!i18n[lang]) return;
+    currentLang = lang;
+    try { localStorage.setItem("clearroad_lang", lang); } catch {}
+    document.querySelectorAll(".lang-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.lang === lang)
+    );
+    document.body.classList.toggle("rtl", lang === "ar");
+    document.documentElement.setAttribute("lang", lang);
+    applyLangDom();
+  }
+
+  function applyLangDom() {
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      el.textContent = t(el.getAttribute("data-i18n"));
+    });
+    document.querySelectorAll("[data-i18n-ph]").forEach(el => {
+      const cur = el.value;
+      el.placeholder = t(el.getAttribute("data-i18n-ph"));
+      if (!cur) el.placeholder = t(el.getAttribute("data-i18n-ph"));
+    });
+  }
+
+  let lastSpokenText = "";
 let lastSpokenAt = 0;
 let heldTimedWarning = null;
 let heldTimedWarningUntil = 0;
@@ -1357,9 +1103,9 @@ function getPersonalizationBias(route) {
 }
 
 function getUserProfileLabel() {
-  if (userProfile.prefersCalmRoutes) return "Learns your calm driving style";
-  if (userProfile.prefersNoTolls)    return "Learns your no-tolls preference";
-  if (userProfile.prefersFastest)    return "Learns your fastest-route style";
+  if (userProfile.prefersCalmRoutes) return t("pers_calm");
+  if (userProfile.prefersNoTolls)    return t("pers_no_tolls");
+  if (userProfile.prefersFastest)    return t("pers_fastest");
   return "";
 }
 
@@ -1385,7 +1131,7 @@ function getTimingDecisionHint() {
     return `Better to leave in ${_departureDecision.waitMinutes} min`;
   }
   if (_departureDecision.type === "leave_now") {
-    return "Better to leave now before traffic builds";
+    return t("dep_leave_now");
   }
   return "";
 }
@@ -1477,9 +1223,9 @@ function trafficRank(level) {
 }
 
 function getTrafficText(traffic) {
-  if (traffic === "low") return "stable";
-  if (traffic === "medium") return "moderate";
-  return "heavy";
+  if (traffic === "low") return t("traf_stable");
+  if (traffic === "medium") return t("traf_moderate");
+  return t("traf_heavy");
 }
 
 function toTitleCaseLabel(value) {
@@ -1488,10 +1234,10 @@ function toTitleCaseLabel(value) {
 }
 
 function getStabilityLabel(stabilityScore) {
-  if (stabilityScore >= 70) return "Very stable";
-  if (stabilityScore >= 50) return "Stable";
-  if (stabilityScore >= 30) return "Moderate";
-  return "Unpredictable";
+  if (stabilityScore >= 70) return t("stab_very");
+  if (stabilityScore >= 50) return t("stab_stable");
+  if (stabilityScore >= 30) return t("stab_moderate");
+  return t("stab_unpred");
 }
 
 function isMeaningfulManeuver(step, route) {
@@ -1601,22 +1347,22 @@ function getDrivePersonality(route) {
   const highwayShare = route.highwayShare || 0;
 
   if (stress <= 6 && highwayShare >= 0.5 && turns <= 8) {
-    return "Smooth drive";
+    return t("stress_smooth");
   }
 
   if (stress <= 9 && delay <= 3) {
-    return "Steady drive";
+    return t("stress_steady");
   }
 
   if (stress <= 12) {
-    return "Active drive";
+    return t("stress_active");
   }
 
   if (turns >= 12 || delay >= 6) {
-    return "Stressful drive";
+    return t("stress_stressful");
   }
 
-  return "Busy route";
+  return t("stress_busy");
 }
 
 function getStressBadge(stressScore) {
@@ -1795,9 +1541,9 @@ function selectBestRoute(routes) {
 // MEDIUM = real trade-off (faster alt exists but worse on cost/stability)
 // LOW    = routes are genuinely interchangeable on all dimensions
 function calculateConfidence(best, allRoutes) {
-  if (!allRoutes || allRoutes.length < 2) return "High";
+  if (!allRoutes || allRoutes.length < 2) return t("conf_high");
   const others = allRoutes.filter(r => r.index !== best.index);
-  if (others.length === 0) return "High";
+  if (others.length === 0) return t("conf_high");
 
   const bestMin = getDisplayMinutes(best);
   const fasterAlts = others.filter(r => getDisplayMinutes(r) < bestMin);
@@ -1806,21 +1552,21 @@ function calculateConfidence(best, allRoutes) {
     : null;
 
   // Case A: nothing is faster — best is dominant on time
-  if (!fastestAlt) return "High";
+  if (!fastestAlt) return t("conf_high");
 
   const timeGap = bestMin - getDisplayMinutes(fastestAlt); // min that alt saves
 
   // Case B: best is free, faster alt is paid, small gap → clear human win
   if (best.tollCost === 0 && fastestAlt.tollCost > 0 && timeGap <= 3) {
-    return "High";
+    return t("conf_high");
   }
   // Case C: best clearly avoids worse traffic of the faster alt
   if (trafficRank(best.traffic) < trafficRank(fastestAlt.traffic) && timeGap <= 5) {
-    return "High";
+    return t("conf_high");
   }
   // Case D: best clearly avoids higher delay of the faster alt
   if ((fastestAlt.delayMinutes || 0) - (best.delayMinutes || 0) >= 3 && timeGap <= 5) {
-    return "High";
+    return t("conf_high");
   }
 
   // Truly similar across the board → LOW (rare)
@@ -1831,10 +1577,10 @@ function calculateConfidence(best, allRoutes) {
       && trafficRank(r.traffic) === trafficRank(best.traffic)
       && Math.abs((r.complexity || 0) - (best.complexity || 0)) <= 2;
   });
-  if (trulySimilar) return "Low";
+  if (trulySimilar) return t("conf_low");
 
   // Otherwise: meaningful trade-off
-  return "Medium";
+  return t("conf_medium");
 }
 
 // ============================================================
@@ -1993,42 +1739,63 @@ function getDrivePriorityWarning(r, stepIndex, userLatLng) {
 
   if (!currentStep) return null;
 
+  const phaseRank    = { now: 3, soon: 2, prepare: 1, none: 0 };
+  const typePriority = { exit: 5, ramp: 5, lane: 4, merge: 3, uturn: 2, interchange: 1 };
+
+  // 1. Current step wins if already active
   const currentMeta = getStepWarningMeta(currentStep, r.route);
-  const currentDist = getDistanceToStepEndMeters(currentStep, ulng);
-  const currentPhase = getWarningPhaseForType(currentDist, currentMeta?.type || "");
-
-  // 1. Если текущий шаг уже активен — он главный
-  if (currentMeta && currentPhase !== "none") {
-    return currentMeta;
-  }
-
-  // 2. Ищем следующий meaningful step
-  const upcoming = getUpcomingMeaningfulStep(steps, stepIndex, r);
-  if (upcoming?.step) {
-    const upcomingMeta = getStepWarningMeta(upcoming.step, r.route);
-
-    if (upcomingMeta) {
-      const distCurrent  = getDistanceToStepEndMeters(currentStep, ulng) ?? 999999;
-      const distUpcoming = getDistanceToStepEndMeters(upcoming.step, ulng) ?? 999999;
-      const effectiveDist = Math.min(distCurrent + 120, distUpcoming);
-
-      const upcomingPhase = getWarningPhaseForType(effectiveDist, upcomingMeta.type);
-
-      if (upcomingPhase !== "none") {
-        if (upcomingMeta.type === "exit" || upcomingMeta.type === "ramp") return upcomingMeta;
-        if (upcomingMeta.type === "lane" || upcomingMeta.type === "merge") return upcomingMeta;
-        if (upcomingMeta.type === "uturn") return upcomingMeta;
-      }
+  if (currentMeta) {
+    const currentDist  = getDistanceToStepEndMeters(currentStep, ulng);
+    const currentPhase = getWarningPhaseForType(currentDist, currentMeta.type || "");
+    if (currentPhase !== "none") {
+      return currentMeta;
     }
   }
 
-  // 3. Separate advisory for complex interchange
+  // 2. Upcoming steps — score all candidates, pick best
+  const candidates = [];
+
+  for (let i = stepIndex + 1; i < Math.min(steps.length, stepIndex + 5); i++) {
+    const step = steps[i];
+    const meta = getStepWarningMeta(step, r.route);
+    if (!meta) continue;
+
+    // Effective distance = remaining current step + full intermediate steps + approach to target
+    let effectiveMeters = getDistanceToStepEndMeters(currentStep, ulng) ?? 0;
+    for (let j = stepIndex + 1; j < i; j++) {
+      effectiveMeters += steps[j]?.distance?.value || 0;
+    }
+    effectiveMeters += Math.min(step.distance?.value || 0, 180);
+
+    const phase = getWarningPhaseForType(effectiveMeters, meta.type || "");
+    if (phase === "none") continue;
+
+    candidates.push({
+      meta,
+      type:           meta.type,
+      phase,
+      effectiveMeters,
+      typeScore:  typePriority[meta.type] || 0,
+      phaseScore: phaseRank[phase]        || 0
+    });
+  }
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => {
+      if (b.typeScore  !== a.typeScore)  return b.typeScore  - a.typeScore;
+      if (b.phaseScore !== a.phaseScore) return b.phaseScore - a.phaseScore;
+      return a.effectiveMeters - b.effectiveMeters;
+    });
+    return candidates[0].meta;
+  }
+
+  // 3. Fallback advisory only if nothing more concrete exists
   if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
     return {
-      type: "interchange",
-      icon: "⚠",
+      type:      "interchange",
+      icon:      "⚠",
       shortText: "Complex interchange ahead",
-      longText: "Complex interchange ahead — stay focused for lane choice"
+      longText:  "Complex interchange ahead — stay focused for lane choice"
     };
   }
 
@@ -2146,7 +1913,7 @@ function speakText(text, priority = "normal") {
   if (normalized === lastSpokenText && now - lastSpokenAt < 6000) return;
   if (priority === "urgent") window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(normalized);
-  utterance.lang = "en-US";
+  utterance.lang = voiceLang();
   utterance.rate = priority === "urgent" ? 1.0 : 0.95;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
@@ -2178,41 +1945,41 @@ function buildContextAwareVoicePrompt(step, phase) {
   const isRight     = text.includes("right") && !isKeepRight;
 
   if (phase === "prepare") {
-    if (isExit)      return "Prepare for exit";
-    if (isRamp)      return "Prepare to take the ramp";
-    if (isKeepLeft)  return "Prepare to keep left";
-    if (isKeepRight) return "Prepare to keep right";
-    if (isUTurn)     return "Prepare for U-turn";
-    if (isMerge)     return "Prepare to merge";
-    if (isLeft)      return "Prepare to turn left";
-    if (isRight)     return "Prepare to turn right";
-    return "Stay on current road";
+    if (isExit)      return t("tw_prep_exit");
+    if (isRamp)      return t("tw_prep_ramp");
+    if (isKeepLeft)  return t("tw_prep_keep_left");
+    if (isKeepRight) return t("tw_prep_keep_right");
+    if (isUTurn)     return t("tw_prep_uturn");
+    if (isMerge)     return t("tw_prep_merge");
+    if (isLeft)      return t("tw_prep_left");
+    if (isRight)     return t("tw_prep_right");
+    return t("tw_prep_straight");
   }
 
   if (phase === "soon") {
-    if (isExit)      return "Exit ahead";
-    if (isRamp)      return "Ramp ahead";
-    if (isKeepLeft)  return "Keep left ahead";
-    if (isKeepRight) return "Keep right ahead";
-    if (isUTurn)     return "U-turn ahead";
-    if (isMerge)     return "Merge ahead";
-    if (isLeft)      return "Left turn ahead";
-    if (isRight)     return "Right turn ahead";
-    return "Continue straight";
+    if (isExit)      return t("tw_soon_exit");
+    if (isRamp)      return t("tw_soon_ramp");
+    if (isKeepLeft)  return t("tw_soon_keep_left");
+    if (isKeepRight) return t("tw_soon_keep_right");
+    if (isUTurn)     return t("tw_soon_uturn");
+    if (isMerge)     return t("tw_soon_merge");
+    if (isLeft)      return t("tw_soon_left");
+    if (isRight)     return t("tw_soon_right");
+    return t("tw_soon_straight");
   }
 
   if (phase === "now") {
-    if (isExit)      return "Take the exit now";
-    if (isRamp)      return "Take the ramp now";
-    if (isKeepLeft)  return "Keep left now";
-    if (isKeepRight) return "Keep right now";
-    if (isUTurn)     return "Make a U-turn now";
-    if (isMerge)     return "Merge now";
-    if (isLeft)      return "Turn left now";
-    if (isRight)     return "Turn right now";
+    if (isExit)      return t("tw_now_exit");
+    if (isRamp)      return t("tw_now_ramp");
+    if (isKeepLeft)  return t("tw_now_keep_left");
+    if (isKeepRight) return t("tw_now_keep_right");
+    if (isUTurn)     return t("tw_now_uturn");
+    if (isMerge)     return t("tw_now_merge");
+    if (isLeft)      return t("tw_now_left");
+    if (isRight)     return t("tw_now_right");
   }
 
-  return "Continue straight";
+  return t("tw_now_straight");
 }
 
 function speakDriveInstruction(step, phase) {
@@ -2225,7 +1992,7 @@ function speakDriveInstruction(step, phase) {
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(normalizeVoiceText(text));
-    utter.rate = 1.0; utter.pitch = 1.0; utter.lang = "en-US";
+    utter.rate = 1.0; utter.pitch = 1.0; utter.lang = voiceLang();
     window.speechSynthesis.speak(utter);
     lastSpokenText = text;
     lastSpokenAt = now;
@@ -2236,13 +2003,13 @@ function getVoicePromptFromManeuver(vm) {
   if (!vm) return "";
   const m = (vm.maneuver || "").toLowerCase();
   if (!m || m === "straight") return "";
-  if (m.includes("uturn"))      return "Prepare for U-turn ahead";
-  if (m.includes("turn-left"))  return "Turn left ahead";
-  if (m.includes("turn-right")) return "Turn right ahead";
-  if (m.includes("keep-left"))  return "Keep left ahead";
-  if (m.includes("keep-right")) return "Keep right ahead";
-  if (m.includes("ramp"))       return "Take the ramp ahead";
-  if (m.includes("merge"))      return "Merge ahead";
+  if (m.includes("uturn"))      return t("ctx_uturn");
+  if (m.includes("turn-left"))  return t("ctx_left");
+  if (m.includes("turn-right")) return t("ctx_right");
+  if (m.includes("keep-left"))  return t("ctx_keep_left");
+  if (m.includes("keep-right")) return t("ctx_keep_right");
+  if (m.includes("ramp"))       return t("ctx_ramp");
+  if (m.includes("merge"))      return t("ctx_merge");
   return stripHtml(vm.instruction || "");
 }
 
@@ -2311,76 +2078,124 @@ function getHeldTimedWarning(timedWarning) {
 // ── Lane / Exit Guidance Block (lookahead, separate from main instruction) ──
 
 function buildLaneGuidanceText(meta, phase) {
-  const { type, shortText } = meta;
+  const type = meta?.type || "";
+  const base = meta?.shortText || "";
+
   if (type === "exit") {
-    if (phase === "prepare") return shortText.replace(/^Exit ahead/i, "Prepare for exit");
-    if (phase === "soon")    return `Keep right — ${shortText.replace(/^Exit ahead to /i, "exit to ")}`;
-    return "Take the exit now";
+    if (phase === "prepare") return base.replace("ahead", "").trim();
+    if (phase === "soon")    return base;
+    if (phase === "now")     return t("lg_exit_now");
   }
+
   if (type === "ramp") {
-    if (phase === "prepare") return shortText.replace(/^Ramp ahead/i, "Prepare for ramp");
-    if (phase === "soon")    return shortText;
-    return "Take the ramp now";
+    if (phase === "prepare") return base.replace("ahead", "").trim();
+    if (phase === "soon")    return base;
+    if (phase === "now")     return t("lg_ramp_now");
   }
+
   if (type === "lane") {
-    if (phase === "now") return shortText.replace(/\bahead\b/i, "now").replace(/\bfor\b.*/i, "now").trim();
-    return shortText;
+    if (phase === "prepare") return base;
+    if (phase === "soon")    return base;
+    if (phase === "now") {
+      if (base.toLowerCase().includes("left"))  return "Keep left now";
+      if (base.toLowerCase().includes("right")) return "Keep right now";
+      return "Use the correct lane now";
+    }
   }
+
   if (type === "merge") {
     if (phase === "prepare") return "Prepare to merge";
     if (phase === "soon")    return "Merge ahead";
-    return "Merge now";
+    if (phase === "now")     return "Merge now";
   }
-  return shortText;
+
+  return base;
 }
 
-function getDriveLaneGuidance(r, stepIndex) {
+function getDriveLaneGuidance(r, stepIndex, userLatLng) {
   const steps = r.route.legs[0].steps;
-  const ulng  = lastKnownUserLatLng;
-  const now   = Date.now();
+  const ulng = userLatLng || lastKnownUserLatLng;
+  const now = Date.now();
 
-  const LANE_TYPES = new Set(["lane", "exit", "ramp", "merge"]);
+  const candidates = [];
 
-  for (let i = stepIndex; i <= stepIndex + 3 && i < steps.length; i++) {
-    const meta = getStepWarningMeta(steps[i], r.route);
-    if (!meta || !LANE_TYPES.has(meta.type)) continue;
+  for (let i = stepIndex; i < Math.min(steps.length, stepIndex + 4); i++) {
+    const step = steps[i];
+    const meta = getStepWarningMeta(step, r.route);
+    if (!meta) continue;
 
-    // Distance: to end of THIS step if it's current, to end of PREVIOUS step if lookahead
-    const proxyStep = (i > stepIndex) ? steps[i - 1] : steps[i];
-    const dist = getDistanceToStepEndMeters(proxyStep, ulng);
-    if (dist == null) continue;
+    if (!["lane", "exit", "ramp", "merge"].includes(meta.type)) continue;
 
-    const phase = getWarningPhaseForType(dist, meta.type);
+    const meters = getDistanceToStepEndMeters(step, ulng);
+    const phase = getWarningPhaseForType(meters, meta.type);
     if (phase === "none") continue;
 
-    // Current step at "now" → handled by main timed warning, not lane block
-    if (i === stepIndex && phase === "now") return null;
+    const priority =
+      meta.type === "exit" || meta.type === "ramp" ? 3 :
+      meta.type === "lane" ? 2 :
+      meta.type === "merge" ? 1 : 0;
 
-    let distanceText;
-    if (dist <= 80)       distanceText = "Now";
-    else if (dist < 1000) distanceText = `${Math.round(dist / 10) * 10} m`;
-    else                  distanceText = `${(dist / 1000).toFixed(1)} km`;
+    candidates.push({
+      stepIndex: i,
+      type: meta.type,
+      phase,
+      priority,
+      meters,
+      icon: meta.icon,
+      shortText: buildLaneGuidanceText(meta, phase),
+      text: buildLaneGuidanceText(meta, phase),
+      distanceText:
+        meters == null
+          ? "Ahead"
+          : meters <= 60
+            ? "Now"
+            : meters < 1000
+              ? `${Math.round(meters / 10) * 10} m`
+              : `${(meters / 1000).toFixed(1)} km`
+    });
+  }
 
-    const text = buildLaneGuidanceText(meta, phase);
-    const result = { icon: meta.icon, text, distanceText, phase, type: meta.type };
-
-    // Hold: don't flicker on same text
-    if (_laneGuidanceHeld && _laneGuidanceHeld.text === result.text && now < _laneGuidanceHeldUntil) {
+  if (!candidates.length) {
+    if (_laneGuidanceHeld && now < _laneGuidanceHeldUntil) {
       return _laneGuidanceHeld;
     }
-    _laneGuidanceHeld = result;
-    _laneGuidanceHeldUntil = now + 2000;
-    return _laneGuidanceHeld;
+    _laneGuidanceHeld = null;
+    _laneGuidanceHeldUntil = 0;
+    return null;
   }
 
-  // Complex interchange advisory (supplementary — only when no lane guidance found)
-  if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
-    return { icon: "⚠", text: "Complex interchange ahead", distanceText: "Ahead", phase: "prepare", type: "interchange" };
+  // Жёсткий приоритет: exit/ramp > lane > merge; фаза; ближайший
+  candidates.sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    const phaseRank = { now: 3, soon: 2, prepare: 1 };
+    if (phaseRank[b.phase] !== phaseRank[a.phase]) return phaseRank[b.phase] - phaseRank[a.phase];
+    return (a.meters ?? 999999) - (b.meters ?? 999999);
+  });
+
+  const best = candidates[0];
+
+  // Улучшенный hold: держим старое если тот же тип+фаза или held приоритетнее
+  if (_laneGuidanceHeld && now < _laneGuidanceHeldUntil) {
+    const sameType  = _laneGuidanceHeld.type  === best.type;
+    const samePhase = _laneGuidanceHeld.phase === best.phase;
+
+    if (sameType && samePhase) {
+      return _laneGuidanceHeld;
+    }
+
+    const heldPriority =
+      _laneGuidanceHeld.type === "exit" || _laneGuidanceHeld.type === "ramp" ? 3 :
+      _laneGuidanceHeld.type === "lane" ? 2 :
+      _laneGuidanceHeld.type === "merge" ? 1 : 0;
+
+    if (heldPriority > best.priority) {
+      return _laneGuidanceHeld;
+    }
   }
 
-  // Expiry: clear held
-  if (now >= _laneGuidanceHeldUntil) _laneGuidanceHeld = null;
-  return null;
+  _laneGuidanceHeld = best;
+  _laneGuidanceHeldUntil = now + 2200;
+  return best;
 }
 
 function getUpcomingCondition(r, stepIndex) {
@@ -2887,6 +2702,16 @@ function startDriveMode(index) {
   startLiveDriveTracking();
 }
 
+function getDriveIcon(maneuver) {
+  const m = (maneuver || "").toLowerCase();
+  if (m.includes("uturn"))  return "↺";
+  if (m.includes("left"))   return "←";
+  if (m.includes("right"))  return "→";
+  if (m.includes("merge"))  return "⇢";
+  if (m.includes("ramp"))   return "↗";
+  return "↑";
+}
+
 function updateDriveUI() {
   const r = selectedRoute;
   if (!r) return;
@@ -2913,22 +2738,44 @@ function updateDriveUI() {
   document.getElementById("drive-distance").textContent = vm.distance;
   document.getElementById("drive-traffic").textContent = vm.trafficText;
 
-  document.getElementById("drive-next-instruction").textContent =
-    timedWarning ? timedWarning.shortText : vm.instruction;
-  document.getElementById("drive-next-distance").textContent =
-    timedWarning ? timedWarning.distanceText : vm.instructionDistance;
+  const laneGuidance = getDriveLaneGuidance(r, currentStepIndex, lastKnownUserLatLng);
 
-  let icon = "&#8593;";
-  if (timedWarning?.icon) {
-    icon = timedWarning.icon;
-  } else if (vm.maneuver.includes("left")) {
-    icon = "&#8592;";
-  } else if (vm.maneuver.includes("right")) {
-    icon = "&#8594;";
-  } else if (vm.maneuver.includes("uturn")) {
-    icon = "&#8634;";
+  // main instruction — только для текущего манёвра или non-lane timed warning
+  let mainInstruction = vm.instruction || "Follow the route";
+  let mainDistance    = vm.instructionDistance || "";
+  let mainIcon        = getDriveIcon(vm.maneuver || "");
+
+  if (timedWarning && !["lane", "exit", "ramp", "merge"].includes(timedWarning.type)) {
+    mainInstruction = timedWarning.shortText   || mainInstruction;
+    mainDistance    = timedWarning.distanceText || mainDistance;
+    mainIcon        = timedWarning.icon         || mainIcon;
   }
-  document.getElementById("drive-next-icon").innerHTML = icon;
+
+  // если laneGuidance активен и main instruction дублирует его — показываем route step
+  if (
+    laneGuidance &&
+    typeof mainInstruction === "string" &&
+    typeof laneGuidance.text === "string"
+  ) {
+    const mi = mainInstruction.toLowerCase();
+    const duplicated =
+      mi === laneGuidance.text.toLowerCase() ||
+      mi.includes("exit")       ||
+      mi.includes("ramp")       ||
+      mi.includes("keep left")  ||
+      mi.includes("keep right") ||
+      mi.includes("merge");
+
+    if (duplicated) {
+      mainInstruction = vm.instruction || "Continue straight";
+      mainDistance    = vm.instructionDistance || "";
+      mainIcon        = getDriveIcon(vm.maneuver || "");
+    }
+  }
+
+  document.getElementById("drive-next-instruction").textContent = mainInstruction;
+  document.getElementById("drive-next-distance").textContent    = mainDistance;
+  document.getElementById("drive-next-icon").textContent        = mainIcon;
 
   const aheadIcon = document.getElementById("drive-ahead-icon");
   aheadIcon.innerHTML = condition.icon;
@@ -2938,44 +2785,26 @@ function updateDriveUI() {
 
   document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
 
-  // Lane guidance block — priority: timedWarning (lane/exit/ramp/interchange) → hold → hide
-  const laneBlock        = document.getElementById("drive-lane-block");
-  const laneIcon         = document.getElementById("drive-lane-icon");
-  const laneInstruction  = document.getElementById("drive-lane-instruction");
-  const laneDistance     = document.getElementById("drive-lane-distance");
-
-  let laneGuidance = null;
-  if (timedWarning && ["lane", "exit", "ramp", "merge", "interchange"].includes(timedWarning.type)) {
-    laneGuidance = timedWarning;
-  }
-
-  laneGuidance = getHeldLaneGuidance(laneGuidance);
+  // Lane guidance block — driven by getDriveLaneGuidance (priority: exit/ramp > lane > merge)
+  const laneBlock       = document.getElementById("drive-lane-block");
+  const laneIcon        = document.getElementById("drive-lane-icon");
+  const laneInstruction = document.getElementById("drive-lane-instruction");
+  const laneDistance    = document.getElementById("drive-lane-distance");
 
   if (laneBlock && laneIcon && laneInstruction && laneDistance) {
     if (laneGuidance) {
       laneBlock.style.display = "flex";
       laneBlock.className = "drive-lane-block";
 
-      if (laneGuidance.phase === "soon") laneBlock.classList.add("lane-warn");
-      if (laneGuidance.phase === "now")  laneBlock.classList.add("lane-alert");
+      if (laneGuidance.phase === "soon") {
+        laneBlock.classList.add("lane-warn");
+      } else if (laneGuidance.phase === "now") {
+        laneBlock.classList.add("lane-alert");
+      }
 
       laneIcon.textContent        = laneGuidance.icon || "⇢";
-      laneInstruction.textContent = laneGuidance.shortText || "";
+      laneInstruction.textContent = laneGuidance.text || "";
       laneDistance.textContent    = laneGuidance.distanceText || "";
-
-      // Voice on phase change with 5s cooldown
-      const laneKey = (laneGuidance.shortText || "") + "|" + (laneGuidance.phase || "");
-      if (laneKey !== _lastLaneGuidanceText && Date.now() - _lastLaneGuidanceAt > 5000) {
-        _lastLaneGuidanceText = laneKey;
-        _lastLaneGuidanceAt   = Date.now();
-        if (voiceEnabled) {
-          setTimeout(() => {
-            const u = new SpeechSynthesisUtterance(normalizeVoiceText(laneGuidance.shortText || ""));
-            u.lang = "en-US"; u.rate = 0.95; u.pitch = 1.0;
-            window.speechSynthesis.speak(u);
-          }, 400);
-        }
-      }
     } else {
       laneBlock.style.display = "none";
       laneBlock.className = "drive-lane-block";
@@ -2984,9 +2813,13 @@ function updateDriveUI() {
     }
   }
 
-  // Main voice — current step instruction
-  const currentStep = r?.route?.legs?.[0]?.steps?.[currentStepIndex];
-  if (timedWarning) {
+  // Voice — ONE engine, priority: exit/ramp > lane/merge > timedWarning > none
+  const currentStep = selectedRoute?.route?.legs?.[0]?.steps?.[currentStepIndex];
+  if (laneGuidance && ["exit", "ramp"].includes(laneGuidance.type)) {
+    speakDriveInstruction(currentStep, laneGuidance.phase);
+  } else if (laneGuidance && ["lane", "merge"].includes(laneGuidance.type)) {
+    speakDriveInstruction(currentStep, laneGuidance.phase);
+  } else if (timedWarning) {
     speakDriveInstruction(currentStep, timedWarning.phase);
   } else {
     speakDriveInstruction(currentStep, "none");
@@ -3078,7 +2911,19 @@ function startDrive(index) {
 // ============================================================
 
 function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), {
+    const darkStyle = [
+      { elementType: "geometry",           stylers: [{ color: "#0d1520" }] },
+      { elementType: "labels.text.fill",   stylers: [{ color: "#8e9ab0" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#0d1520" }] },
+      { featureType: "road",               elementType: "geometry", stylers: [{ color: "#1e2d42" }] },
+      { featureType: "road.highway",       elementType: "geometry", stylers: [{ color: "#243352" }] },
+      { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#1a2740" }] },
+      { featureType: "water",              elementType: "geometry", stylers: [{ color: "#0a111d" }] },
+      { featureType: "poi",                stylers: [{ visibility: "off" }] },
+      { featureType: "transit",            stylers: [{ visibility: "off" }] },
+      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#60a5fa" }] }
+    ];
+    map = new google.maps.Map(document.getElementById("map"), {
     center: { lat: 25.2048, lng: 55.2708 },
     zoom: 11,
     disableDefaultUI: true,
@@ -3295,15 +3140,20 @@ function bindAutocompletePlaceChanged(autocomplete, kind) {
   if (!autocomplete || autocomplete.__patchedPlaceChanged) return;
   autocomplete.addListener("place_changed", () => {
     const place = autocomplete.getPlace();
+    if (!place?.geometry) return;
+
     const input = document.getElementById(kind === "start" ? "start" : "end");
     if (!input) return;
-    input.value = place?.formatted_address || place?.name || input.value || "";
-    if (kind === "start" && place?.geometry?.location) {
+
+    input.value = place.formatted_address || place.name || input.value || "";
+
+    if (kind === "start") {
       currentUserCoords = {
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng()
       };
     }
+
     tryCalculateRoutesFromInputs();
   });
   autocomplete.__patchedPlaceChanged = true;
@@ -3318,10 +3168,10 @@ function handleGeoError(err) {
   setGpsLoading(false);
   const startInput = document.getElementById("start");
   if (!startInput) return;
-  if (err?.code === 1) { startInput.placeholder = "Location blocked — allow access and tap 📍"; return; }
-  if (err?.code === 2) { startInput.placeholder = "Location unavailable — enter manually or tap 📍"; return; }
-  if (err?.code === 3) { startInput.placeholder = "Location timeout — tap 📍 again"; return; }
-  startInput.placeholder = "Location error — enter manually or tap 📍";
+  if (err?.code === 1) { startInput.placeholder = t("gps_blocked"); return; }
+  if (err?.code === 2) { startInput.placeholder = t("gps_unavail"); return; }
+  if (err?.code === 3) { startInput.placeholder = t("gps_timeout"); return; }
+  startInput.placeholder = t("gps_error");
 }
 
 function reverseGeocodeLatLng(latLng) {
@@ -3340,7 +3190,7 @@ async function applyResolvedStartLocation(latLng, shouldRoute = true) {
   currentUserCoords = { lat: latLng.lat, lng: latLng.lng };
   const address = await reverseGeocodeLatLng(latLng);
   startInput.value = address;
-  startInput.placeholder = "Current location";
+  startInput.placeholder = t("gps_current");
   if (map) map.panTo(latLng);
   if (shouldRoute) tryCalculateRoutesFromInputs();
 }
@@ -3348,12 +3198,12 @@ async function applyResolvedStartLocation(latLng, shouldRoute = true) {
 async function requestGPSPatched() {
   if (!navigator.geolocation) {
     const si = document.getElementById("start");
-    if (si) si.placeholder = "GPS not supported — enter manually";
+    if (si) si.placeholder = t("gps_unsupported");
     return;
   }
   setGpsLoading(true);
   const si = document.getElementById("start");
-  if (si) si.placeholder = "Detecting location…";
+  if (si) si.placeholder = t("gps_detecting");
 
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
@@ -3497,46 +3347,53 @@ function getDepartureDecision(nowMin, laterMin, waitMinutes = 15) {
 }
 
 function renderPredictiveDecision() {
-  const box = document.getElementById("predict-tip");
-  if (!box) return;
+  var box = document.getElementById("predict-tip");
+  if (box) { box.style.display = "none"; box.innerHTML = ""; }
+
+  var card = document.getElementById("predictive-card");
+  if (!card) return;
 
   if (!_departureDecision || _departureDecision.type === "neutral") {
-    box.style.display = "none";
-    box.innerHTML = "";
+    card.style.display = "none";
     return;
   }
 
-  if (_departureDecision.type === "wait") {
-    box.style.display = "block";
-    box.innerHTML = `
-      <div style="font-weight:700; margin-bottom:6px;">🧠 AI Timing Advice</div>
-      <div style="margin-bottom:10px;">${_departureDecision.message}</div>
-      <div style="display:flex; gap:8px;">
-        <button type="button" onclick="scheduleDelayedStart()" style="flex:1; padding:10px 12px; border:none; border-radius:10px; background:#2d6a4f; color:#fff; font-weight:600; cursor:pointer;">
-          Wait &amp; Start later
-        </button>
-        <button type="button" onclick="goNowDecision()" style="flex:1; padding:10px 12px; border:1px solid #a7f3d0; border-radius:10px; background:#fff; color:#065f46; font-weight:600; cursor:pointer;">
-          Go now
-        </button>
-      </div>
-      <div id="delayed-start-status" style="margin-top:8px; font-size:12px;"></div>
-    `;
+  var pcMain = document.getElementById("pc-main");
+  var pcSub  = document.getElementById("pc-sub");
+  var pcSave = document.getElementById("pc-save");
+
+  if (_departureDecision.type === "wait" && _predictiveData) {
+    card.style.display = "flex";
+    var titleEl = card.querySelector(".pc-title");
+    if (titleEl) titleEl.textContent = "BETTER OPTION AHEAD";
+    if (pcMain) pcMain.textContent = "Leave in " + _predictiveData.waitMinutes + " min \u2192 " + _predictiveData.laterMin + " min";
+    var saving = (_predictiveData.nowMin || 0) - (_predictiveData.laterMin || 0);
+    if (pcSave && saving > 0) pcSave.textContent = "Save " + saving + " min";
+    else if (pcSave) pcSave.textContent = "";
+    if (pcSub) {
+      var subHtml = _departureDecision.message;
+      subHtml += '<div class="pc-actions">';
+      subHtml += '<button type="button" class="pc-action-btn primary" onclick="scheduleDelayedStart()">Wait &amp; go later</button>';
+      subHtml += '<button type="button" class="pc-action-btn secondary" onclick="goNowDecision()">Go now</button>';
+      subHtml += "</div>";
+      subHtml += '<div id="delayed-start-status" style="margin-top:8px;font-size:12px;color:#94a3b8;"></div>';
+      pcSub.innerHTML = subHtml;
+    }
     return;
   }
 
   if (_departureDecision.type === "leave_now") {
-    box.style.display = "block";
-    box.innerHTML = `
-      <div style="font-weight:700; margin-bottom:6px;">🧠 AI Timing Advice</div>
-      <div style="margin-bottom:10px;">${_departureDecision.message}</div>
-      <div style="display:flex; gap:8px;">
-        <button type="button" onclick="goNowDecision()" style="flex:1; padding:10px 12px; border:none; border-radius:10px; background:#2d6a4f; color:#fff; font-weight:600; cursor:pointer;">
-          Go now
-        </button>
-      </div>
-    `;
+    card.style.display = "flex";
+    var titleEl2 = card.querySelector(".pc-title");
+    if (titleEl2) titleEl2.textContent = "AI TIMING ADVICE";
+    if (pcMain) pcMain.textContent = _departureDecision.message;
+    if (pcSub) {
+      pcSub.innerHTML = '<div class="pc-actions"><button type="button" class="pc-action-btn primary" onclick="goNowDecision()">Go now</button></div>';
+    }
+    if (pcSave) pcSave.textContent = "";
   }
 }
+
 
 function goNowDecision() {
   if (!_bestRoute) return;
@@ -3634,9 +3491,9 @@ function drawRoutes(result) {
       suppressMarkers: !isBest,
       preserveViewport: true,
       polylineOptions: {
-        strokeColor: isBest ? "#2d6a4f" : "#e07a28",
-        strokeOpacity: isBest ? 1 : 0.55,
-        strokeWeight: isBest ? 7 : 4,
+        strokeColor: isBest ? "#22d3a0" : "#60a5fa",
+        strokeOpacity: isBest ? 1 : 0.50,
+        strokeWeight: isBest ? 6 : 4,
         zIndex: isBest ? 10 : 1
       }
     });
@@ -3659,110 +3516,142 @@ function renderResults() {
   quickAccess.classList.add("hidden");
 
   const best = _bestRoute;
-  const fastest = _fastestRoute;
   selectedRoute = best;
 
-  // --- Best card (ТЗ2: clean UI, no comparative text) ---
-  // Day 4.5: AI Decision UX — confidence badge + hero time + one why-line
   const conf = calculateConfidence(best, analyzedRoutes);
-  const whyText = generateUnifiedDecisionWhy(best, analyzedRoutes);
   const distKm = (best.distance / 1000).toFixed(1);
-  const tollTag = best.tollCost > 0 ? `+${best.tollCost} AED Salik` : "No tolls";
+  const routeName = getRouteSummaryName(best);
   const routeMeta = getUnifiedRouteMeta(best);
-  const secondaryText = `${routeMeta.delayText} · ${best.complexity} turns`;
   const stress = { label: routeMeta.stressLabel, tone: routeMeta.stressTone };
-  const profileHint = getUserProfileLabel();
+  const confPct = conf === "HIGH" ? 93 : conf === "MEDIUM" ? 68 : 42;
 
-  let html = `
-    <div class="best-card">
-      <div class="decision-header">
-        <span class="best-label">Best route right now</span>
-        <span class="ai-confidence-badge confidence-${conf.toLowerCase()}">
-          <span class="conf-dot"></span>${conf}
-        </span>
-      </div>
-      <div class="ai-hero-time">${getDisplayMinutes(best)}<span>min</span></div>
-      <div class="ai-distance">${distKm} km · ${tollTag}</div>
-      <div class="ai-why">${whyText}</div>
-      <div class="ai-secondary">${secondaryText}</div>
-      <div class="ai-stress-row">
-        <span class="ai-stress-badge ${stress.tone}"><span class="dot"></span>${stress.label}</span>
-        <span class="ai-personality">${best.drivePersonality || "Steady drive"}</span>
-      </div>
-      ${profileHint ? `<div class="best-parking">AI learned: ${profileHint}</div>` : ""}
-      <div class="predict-tip" id="predict-tip" style="display:none"></div>
-      ${getParkingInsight() ? `<div class="best-parking">${getParkingInsight()}</div>` : ""}
-      <button class="start-btn" onclick="startDrive(${best.index})">Go via ${getRouteSummaryName(best)}</button>
-      <div class="why-link" onclick="openRouteDetails(${best.index})">Route details &rsaquo;</div>
-    </div>
-  `;
+  const chips = [];
+  if (best.traffic === "low")         chips.push({ label: t("traf_low"),      cls: "chip-green" });
+  else if (best.traffic === "medium") chips.push({ label: t("traf_moderate"), cls: "" });
+  else                                chips.push({ label: t("traf_heavy"),    cls: "chip-amber" });
+  chips.push({ label: stress.label, cls: stress.tone === "low" ? "chip-green" : stress.tone === "high" ? "chip-amber" : "" });
+  if (best.tollCost === 0) chips.push({ label: "No tolls", cls: "chip-blue" });
+  else                     chips.push({ label: "+" + best.tollCost + " AED Salik", cls: "chip-amber" });
+  const chipsHtml = chips.slice(0, 3).map(function(c) {
+    return '<span class="chip ' + c.cls + '">' + c.label + "</span>";
+  }).join("");
 
-  // --- Alternative cards ---
-  const alternatives = analyzedRoutes
-    .filter(r => r.index !== best.index)
-    .sort((a, b) => {
-      const timeDiff = Math.abs(getDisplayMinutes(a) - getDisplayMinutes(best))
-                     - Math.abs(getDisplayMinutes(b) - getDisplayMinutes(best));
-      return (
-        timeDiff ||
-        trafficRank(a.traffic) - trafficRank(b.traffic) ||
-        a.complexity - b.complexity ||
-        a.tollCost - b.tollCost ||
-        a.time - b.time
-      );
+  const timeInsight = generateTimeInsight(best);
+  const isWait = timeInsight.toLowerCase().indexOf("wait") !== -1 || timeInsight.toLowerCase().indexOf("consider") !== -1;
+  const decisionLabel = isWait ? "Leave soon" : "Leave now";
+
+  const now = new Date();
+  const arrival = new Date(now.getTime() + getDisplayMinutes(best) * 60000);
+  const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  var parkingLabel = "Easy";
+  try {
+    var dest = document.getElementById("end") ? document.getElementById("end").value : "";
+    if (typeof detectParkingType === "function" && detectParkingType(dest) === "salik_parking") parkingLabel = "Paid";
+  } catch(e) {}
+
+  var h = "";
+  h += '<div class="decision-hero">';
+  h += '<div class="dh-overline">BEST TIME TO LEAVE</div>';
+  h += '<div class="dh-headline">' + decisionLabel + ' <span class="dh-check">&#10003;</span></div>';
+  h += '<div class="dh-eta">' + getDisplayMinutes(best) + '<span class="dh-min">min</span></div>';
+  h += '<div class="dh-chips">' + chipsHtml + "</div>";
+  h += '<div class="dh-via">via ' + routeName + "</div>";
+  h += '<div class="dh-confidence">';
+  h += '<span class="dh-conf-label">AI CONFIDENCE</span>';
+  h += '<span class="dh-conf-level ' + conf.toLowerCase() + '">' + conf + "</span>";
+  h += '<span class="dh-conf-pct">' + confPct + "%</span>";
+  h += '<div class="dh-conf-bar"><div class="dh-conf-fill" style="width:' + confPct + '%"></div></div>';
+  h += "</div>";
+  h += "</div>";
+
+  h += '<div class="predictive-card" id="predictive-card" style="display:none">';
+  h += '<div class="pc-icon">&#9200;</div>';
+  h += '<div class="pc-content">';
+  h += '<div class="pc-title">BETTER OPTION AHEAD</div>';
+  h += '<div class="pc-main" id="pc-main"></div>';
+  h += '<div class="pc-sub" id="pc-sub"></div>';
+  h += "</div>";
+  h += '<div class="pc-save" id="pc-save"></div>';
+  h += "</div>";
+
+  h += '<div class="cta-row">';
+  h += '<button class="cta-start" onclick="startDrive(' + best.index + ')">';
+  h += "&#9650; START DRIVING";
+  h += "<small>via " + routeName + "</small>";
+  h += "</button>";
+  h += '<button class="cta-details" onclick="openRouteDetails(' + best.index + ')">DETAILS</button>';
+  h += "</div>";
+
+  var alternatives = analyzedRoutes
+    .filter(function(r) { return r.index !== best.index; })
+    .sort(function(a, b) {
+      var td = Math.abs(getDisplayMinutes(a) - getDisplayMinutes(best))
+             - Math.abs(getDisplayMinutes(b) - getDisplayMinutes(best));
+      return td || trafficRank(a.traffic) - trafficRank(b.traffic) || a.complexity - b.complexity;
     });
 
-  // Soft dedupe: drop only truly identical routes (time ±1 min, same toll, traffic, complexity)
-  const dedupedAlternatives = [];
-  for (const cand of alternatives) {
-    const dupIdx = dedupedAlternatives.findIndex(existing => {
-      const sameTime = Math.abs(getDisplayMinutes(existing) - getDisplayMinutes(cand)) <= 1;
-      const sameToll = existing.tollCost === cand.tollCost;
-      const sameTraffic = existing.traffic === cand.traffic;
-      const sameComplexity = Math.abs(existing.complexity - cand.complexity) <= 1;
-      return sameTime && sameToll && sameTraffic && sameComplexity;
-    });
-    if (dupIdx === -1) {
-      dedupedAlternatives.push(cand);
-      continue;
+  var deduped = [];
+  for (var i = 0; i < alternatives.length; i++) {
+    var cand = alternatives[i];
+    var di = -1;
+    for (var j = 0; j < deduped.length; j++) {
+      var e = deduped[j];
+      if (Math.abs(getDisplayMinutes(e) - getDisplayMinutes(cand)) <= 1 &&
+          e.tollCost === cand.tollCost && e.traffic === cand.traffic &&
+          Math.abs(e.complexity - cand.complexity) <= 1) { di = j; break; }
     }
-    const existing = dedupedAlternatives[dupIdx];
-    const candBetter =
-      trafficRank(cand.traffic) < trafficRank(existing.traffic) ||
-      (trafficRank(cand.traffic) === trafficRank(existing.traffic) && cand.complexity < existing.complexity) ||
-      (trafficRank(cand.traffic) === trafficRank(existing.traffic) &&
-       cand.complexity === existing.complexity && cand.time < existing.time);
-    if (candBetter) dedupedAlternatives[dupIdx] = cand;
+    if (di === -1) { deduped.push(cand); }
+    else {
+      var ex = deduped[di];
+      if (trafficRank(cand.traffic) < trafficRank(ex.traffic) ||
+          cand.complexity < ex.complexity || cand.time < ex.time) deduped[di] = cand;
+    }
   }
 
-  // Show up to 2 real alternatives
-  dedupedAlternatives.slice(0, 2).forEach(r => {
-    const insight = getRouteInsight(r, best, fastest) || getFallbackAlternativeInsight(r, best);
-    const insightHasMoney = insight && (insight.includes("AED") || insight.includes("Save"));
-    const insightHtml = `<div class="route-insight">${insight}</div>`;
-    const tollLine = insightHasMoney ? "" : (r.tollCost > 0 ? `+${r.tollCost} AED` : "No tolls");
-    const tollHtml = tollLine ? `<div class="alt-toll">${tollLine}</div>` : "";
-    const altStress = getStressBadge(r.stressScore || 0);
-    const stressHtml = `<div class="alt-toll">${altStress.label} · ${r.drivePersonality || "Active drive"}</div>`;
+  var alts = deduped.slice(0, 2);
+  if (alts.length) {
+    h += '<div class="other-routes">';
+    h += '<div class="section-head"><span>OTHER ROUTES</span><span class="how-compare">How we compare &#8505;</span></div>';
+    h += '<div class="alt-row">';
+    for (var k = 0; k < alts.length; k++) {
+      var r = alts[k];
+      var altTitle = getAlternativeTitle(r, best, _fastestRoute);
+      var roleCls = r.role === "faster_risky" ? "faster"
+                  : r.role === "more_relaxed"  ? "relaxed"
+                  : r.role === "no_tolls"       ? "no-tolls" : "other";
+      var insight = getRouteInsight(r, best, _fastestRoute) || getFallbackAlternativeInsight(r, best);
+      var tollBadge = r.tollCost === 0
+        ? '<span class="alt-badge green">No tolls</span>'
+        : '<span class="alt-badge amber">+' + r.tollCost + " AED</span>";
+      var trafBadge = r.traffic === "high"
+        ? '<span class="alt-badge amber">Heavy traffic</span>'
+        : r.traffic === "low"
+        ? '<span class="alt-badge green">Low traffic</span>'
+        : '<span class="alt-badge">Moderate</span>';
+      h += '<div class="alt-card-p" onclick="openRouteDetails(' + r.index + ')">';
+      h += '<div class="alt-role ' + roleCls + '">' + altTitle + "</div>";
+      h += '<div class="alt-time-p">' + getDisplayMinutes(r) + '<span> min</span></div>';
+      h += '<div class="alt-label-p">via ' + getRouteSummaryName(r) + "</div>";
+      h += '<div class="alt-badges">' + trafBadge + tollBadge + "</div>";
+      if (insight) h += '<div class="alt-insight">' + insight + "</div>";
+      h += "</div>";
+    }
+    h += "</div></div>";
+  }
 
-    html += `
-      <div class="alt-card ${r.role || "balanced"}" onclick="openRouteDetails(${r.index})">
-        <div class="alt-icon">&#128736;</div>
-        <div class="alt-content">
-          <div class="alt-title">${getAlternativeTitle(r, best, fastest)}</div>
-          <div class="alt-subtitle">${getDisplayMinutes(r)} min</div>
-          ${insightHtml}
-          ${tollHtml}
-          ${stressHtml}
-        </div>
-        <div class="alt-arrow">&#8250;</div>
-      </div>
-    `;
-  });
+  h += '<div class="info-strip">';
+  h += '<div class="info-item"><div class="info-label">Distance</div><div class="info-value">' + distKm + " km</div></div>";
+  h += '<div class="info-item"><div class="info-label">Est. Arrival</div><div class="info-value">' + arrivalStr + "</div></div>";
+  h += '<div class="info-item"><div class="info-label">Tolls</div><div class="info-value">' + (best.tollCost > 0 ? "AED " + best.tollCost : "None") + "</div></div>";
+  h += '<div class="info-item"><div class="info-label">Parking</div><div class="info-value">' + parkingLabel + "</div></div>";
+  h += "</div>";
+  h += '<div class="predict-tip" id="predict-tip" style="display:none"></div>';
 
-  container.innerHTML = html;
+  container.innerHTML = h;
   renderPredictiveDecision();
 }
+
 
 // ============================================================
 //  ROUTE DETAILS MODAL
@@ -3802,18 +3691,18 @@ function generateTimeInsight(best) {
 
   // Scenario 3: bad — wait
   if (delay > 5 || traffic === "high") {
-    return "Consider waiting — traffic building up";
+    return t("pred_consider");
   }
   // Scenario 1: ideal — go now
   if (delay <= 2 && traffic === "low") {
-    return "Best time to go now";
+    return t("pred_best_now");
   }
   // Scenario 2: ok — light delays
   if (delay <= 5 && traffic === "medium") {
-    return "Good time — light delays";
+    return t("pred_good_time");
   }
   // Fallback
-  return "Conditions are stable";
+  return t("pred_stable");
 }
 
 // One-line AI decision — always comparative, always factual
@@ -4159,48 +4048,48 @@ function openRouteDetails(index) {
         <h2 class="modal-title">${getRouteSummaryName(r)}</h2>
       </div>
       <span class="modal-role-badge ${isBest ? "recommended" : "alternative"}">
-        ${isBest ? "Recommended" : "Alternative"}
+        ${isBest ? t("modal_recommended") : t("modal_alternative")}
       </span>
     </div>
 
     ${compareNote}
 
     <div class="modal-why">
-      <div class="modal-why-title">${isBest ? "Why this route" : "Trade-off"}</div>
+      <div class="modal-why-title">${isBest ? t("modal_why_title") : t("modal_tradeoff")}</div>
       <ul class="modal-why-points">
         ${whyPoints.map(point => `<li>${point}</li>`).join("")}
       </ul>
     </div>
 
     <div class="detail-section">
-      <div class="detail-section-title">Key facts</div>
+      <div class="detail-section-title">${t("modal_key_facts")}</div>
       <div class="detail-grid">
         <div class="detail-item">
-          <div class="detail-label">Time</div>
+          <div class="detail-label">${t("modal_time")}</div>
           <div class="detail-value">${getDisplayMinutes(r)} min</div>
         </div>
         <div class="detail-item">
-          <div class="detail-label">Distance</div>
+          <div class="detail-label">${t("modal_distance")}</div>
           <div class="detail-value">${distKm} km</div>
         </div>
         <div class="detail-item">
-          <div class="detail-label">Delay</div>
+          <div class="detail-label">${t("modal_delay")}</div>
           <div class="detail-value">${delayText}</div>
         </div>
         <div class="detail-item">
-          <div class="detail-label">Tolls</div>
+          <div class="detail-label">${t("modal_tolls")}</div>
           <div class="detail-value" style="font-size:14px">${tollText}</div>
         </div>
         <div class="detail-item">
-          <div class="detail-label">Traffic</div>
+          <div class="detail-label">${t("modal_traffic")}</div>
           <div class="detail-value" style="font-size:14px">${trafficText}</div>
         </div>
         <div class="detail-item">
-          <div class="detail-label">Turns</div>
+          <div class="detail-label">${t("modal_turns")}</div>
           <div class="detail-value">${r.complexity}</div>
         </div>
         <div class="detail-item full-width">
-          <div class="detail-label">Highway share</div>
+          <div class="detail-label">${t("modal_highway")}</div>
           <div class="detail-value">${highwayPct}%</div>
         </div>
       </div>
@@ -4209,7 +4098,7 @@ function openRouteDetails(index) {
     ${segmentsHtml}
 
     <button class="modal-cta" onclick="startDrive(${r.index})">
-      ${isBest ? `Go via ${getRouteSummaryName(r)}` : `Try ${getRouteSummaryName(r)}`}
+      ${isBest ? `${t("modal_go")} ${getRouteSummaryName(r)}` : `${t("modal_try")} ${getRouteSummaryName(r)}`}
     </button>
   `;
 
@@ -4324,6 +4213,9 @@ function setUserPreference(value) {
   );
   calculateRoutes();
 }
+
+// init language on load
+setLang(currentLang);
 
 // sync active button on script load (DOM already built at this point)
 document.querySelectorAll(".pref-btn").forEach(b =>
