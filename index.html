@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -975,6 +975,44 @@
       margin-top: 4px;
     }
 
+    .drive-lane-block {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+      padding: 10px 14px;
+      background: rgba(245, 158, 11, 0.10);
+      border: 1px solid rgba(245, 158, 11, 0.28);
+      border-radius: 12px;
+      transition: background 0.3s;
+    }
+    .drive-lane-block.lane-warn {
+      background: rgba(245, 158, 11, 0.18);
+      border-color: rgba(245, 158, 11, 0.50);
+    }
+    .drive-lane-block.lane-alert {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.50);
+    }
+    .drive-lane-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      width: 24px;
+      text-align: center;
+    }
+    .drive-lane-text { flex: 1; }
+    .drive-lane-instruction {
+      color: #fbbf24;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .drive-lane-block.lane-alert .drive-lane-instruction { color: #f87171; }
+    .drive-lane-distance {
+      color: #94a3b8;
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -1149,6 +1187,13 @@
         <div class="drive-next-distance" id="drive-next-distance"></div>
       </div>
     </div>
+    <div class="drive-lane-block" id="drive-lane-block" style="display:none">
+      <div class="drive-lane-icon" id="drive-lane-icon">⇢</div>
+      <div class="drive-lane-text">
+        <div class="drive-lane-instruction" id="drive-lane-instruction"></div>
+        <div class="drive-lane-distance" id="drive-lane-distance"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1180,10 +1225,14 @@ let heldTimedWarning = null;
 let heldTimedWarningUntil = 0;
 let lastPhaseChangeAt = 0;
 let lastStableTimedPhase = "";
+let _laneGuidanceHeld = null;
+let _laneGuidanceHeldUntil = 0;
+let _lastLaneGuidanceText = "";
+let _lastLaneGuidanceAt = 0;
 let followUserMode = true;
 let lastUserHeading = 0;
 let driveMapHasFollowed = false;
-let autoLocationTried = false;
+
 let startAutocomplete = null;
 let endAutocomplete = null;
 let currentUserCoords = null;
@@ -1902,6 +1951,7 @@ function buildDriveViewModel(r, stepIndex) {
 function getStepWarningMeta(step, route) {
   const html = stripHtml(step?.html_instructions || "");
   const text = html.toLowerCase();
+  const maneuver = (step?.maneuver || "").toLowerCase();
   const roadText = normalizeRoadText(step, route);
 
   const roadMatch =
@@ -1910,6 +1960,8 @@ function getStepWarningMeta(step, route) {
     roadText.match(/\bE611\b/);
   const roadName = roadMatch ? roadMatch[0] : getRouteSummaryName({ route });
 
+  if (maneuver.includes("uturn") || text.includes("u-turn"))
+    return { type: "uturn", icon: "↩", shortText: "U-turn ahead", longText: "Prepare for U-turn ahead" };
   if (text.includes("keep right")) return { type: "lane",  icon: "↗", shortText: `Keep right for ${roadName}`,  longText: `Keep right ahead for exit toward ${roadName}` };
   if (text.includes("keep left"))  return { type: "lane",  icon: "↖", shortText: `Keep left for ${roadName}`,   longText: `Keep left ahead toward ${roadName}` };
   if (text.includes("exit"))       return { type: "exit",  icon: "⇢", shortText: `Exit ahead to ${roadName}`,   longText: `Prepare for exit toward ${roadName}` };
@@ -1934,17 +1986,29 @@ function isComplexInterchangeAhead(steps, currentStepIndex, route) {
   return hasHighway && specialCount >= 2;
 }
 
-function getDrivePriorityWarning(r, stepIndex) {
+function getDrivePriorityWarning(r, stepIndex, userLatLng) {
   const steps = r.route.legs[0].steps;
-  const meta = (s) => s ? getStepWarningMeta(s, r.route) : null;
-  return (
-    meta(steps[stepIndex]) ||
-    meta(steps[stepIndex + 1]) ||
-    meta(steps[stepIndex + 2]) ||
-    (isComplexInterchangeAhead(steps, stepIndex, r.route)
-      ? { type: "interchange", icon: "⚠", shortText: "Complex interchange ahead", longText: "Complex interchange ahead — stay focused for lane choice" }
-      : null)
-  );
+  const currentStep = steps[stepIndex];
+  const ulng = userLatLng || lastKnownUserLatLng;
+
+  if (!currentStep) return null;
+
+  const currentMeta  = getStepWarningMeta(currentStep, r.route);
+  const currentDist  = getDistanceToStepEndMeters(currentStep, ulng);
+  const currentPhase = getWarningPhaseForType(currentDist, currentMeta?.type || "");
+
+  if (currentMeta && currentPhase !== "none") return currentMeta;
+
+  if ((currentDist ?? 999999) <= NEXT_STEP_PREPARE_RADIUS_M) {
+    const upcoming = getUpcomingMeaningfulStep(steps, stepIndex, r);
+    if (upcoming?.step) return getStepWarningMeta(upcoming.step, r.route);
+  }
+
+  if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
+    return { type: "interchange", icon: "⚠", shortText: "Complex interchange ahead", longText: "Complex interchange ahead — stay focused for lane choice" };
+  }
+
+  return null;
 }
 
 function parseStepDistanceMeters(step) {
@@ -1961,61 +2025,54 @@ function getDistanceToStepEndMeters(step, userLatLng) {
 }
 
 function getWarningPhase(distanceMeters) {
-  if (distanceMeters == null) return "none";
-
-  const current = lastStableTimedPhase || "none";
-
-  if (current === "prepare") {
-    if (distanceMeters <= 240) return "soon";
-    if (distanceMeters > 860) return "none";
-    return "prepare";
-  }
-
-  if (current === "soon") {
-    if (distanceMeters <= 60) return "now";
-    if (distanceMeters > 360) return "prepare";
-    return "soon";
-  }
-
-  if (current === "now") {
-    if (distanceMeters > 120) return "soon";
-    return "now";
-  }
-
-  if (distanceMeters <= 80) return "now";
-  if (distanceMeters <= 300) return "soon";
-  if (distanceMeters <= 800) return "prepare";
-  return "none";
+  return getWarningPhaseForType(distanceMeters, "");
 }
 
 function buildTimedWarning(priorityWarning, step, userLatLng) {
   if (!priorityWarning || !step) return null;
 
   const meters = getDistanceToStepEndMeters(step, userLatLng);
-  const phase = getWarningPhase(meters);
+  const phase  = getWarningPhaseForType(meters, priorityWarning.type);
 
   if (phase === "none") return null;
 
   let distanceText = "Ahead";
   if (meters != null) {
-    if (meters <= 80) {
-      distanceText = "Now";
-    } else if (meters < 1000) {
-      distanceText = `${Math.round(meters / 10) * 10} m`;
-    } else {
-      distanceText = `${(meters / 1000).toFixed(1)} km`;
-    }
+    if (meters <= 80)       distanceText = "Now";
+    else if (meters < 1000) distanceText = `${Math.round(meters / 10) * 10} m`;
+    else                    distanceText = `${(meters / 1000).toFixed(1)} km`;
   }
 
-  if (phase === "prepare") {
-    return { ...priorityWarning, phase, shortText: `Prepare: ${priorityWarning.shortText}`, longText: priorityWarning.longText, distanceText };
+  const { type, icon, longText } = priorityWarning;
+
+  if (type === "exit" || type === "ramp") {
+    const label = type === "exit" ? "exit" : "ramp";
+    if (phase === "prepare") return { ...priorityWarning, phase, shortText: `Prepare for ${label} ahead`, longText, distanceText };
+    if (phase === "soon")    return { ...priorityWarning, phase, shortText: `Keep right — ${label} ahead`, longText, distanceText };
+    return { ...priorityWarning, phase: "now", shortText: `Take the ${label} now`, longText, distanceText: "Now" };
   }
 
-  if (phase === "soon") {
-    return { ...priorityWarning, phase, shortText: priorityWarning.shortText, longText: priorityWarning.longText, distanceText };
+  if (type === "lane") {
+    if (phase === "prepare") return { ...priorityWarning, phase, shortText: `Prepare: ${priorityWarning.shortText}`, longText, distanceText };
+    if (phase === "soon")    return { ...priorityWarning, phase, shortText: priorityWarning.shortText, longText, distanceText };
+    return { ...priorityWarning, phase: "now", shortText: priorityWarning.shortText.replace(/\bahead\b/i, "now").replace(/\bfor\b.*/, "now"), longText, distanceText: "Now" };
   }
 
-  return { ...priorityWarning, phase: "now", shortText: `NOW: ${priorityWarning.shortText}`, longText: `Now — ${priorityWarning.longText}`, distanceText: "Now" };
+  if (type === "merge") {
+    if (phase === "prepare") return { ...priorityWarning, phase, shortText: "Prepare to merge", longText, distanceText };
+    if (phase === "soon")    return { ...priorityWarning, phase, shortText: "Merge ahead", longText, distanceText };
+    return { ...priorityWarning, phase: "now", shortText: "Merge now", longText, distanceText: "Now" };
+  }
+
+  if (type === "uturn") {
+    if (phase === "prepare") return { ...priorityWarning, phase, shortText: "Prepare for U-turn", longText, distanceText };
+    if (phase === "soon")    return { ...priorityWarning, phase, shortText: "U-turn ahead", longText, distanceText };
+    return { ...priorityWarning, phase: "now", shortText: "Make a U-turn now", longText, distanceText: "Now" };
+  }
+
+  if (phase === "prepare") return { ...priorityWarning, phase, shortText: `Prepare: ${priorityWarning.shortText}`, longText, distanceText };
+  if (phase === "soon")    return { ...priorityWarning, phase, shortText: priorityWarning.shortText, longText, distanceText };
+  return { ...priorityWarning, phase: "now", shortText: `NOW: ${priorityWarning.shortText}`, longText, distanceText: "Now" };
 }
 
 function normalizeVoiceText(text) {
@@ -2052,34 +2109,85 @@ function getVoicePromptFromTimedWarning(timedWarning) {
   return timedWarning.shortText || "";
 }
 
+function buildContextAwareVoicePrompt(step, phase) {
+  const html = stripHtml(step?.html_instructions || "");
+  const text = html.toLowerCase();
+  const maneuver = (step?.maneuver || "").toLowerCase();
+
+  const isUTurn     = maneuver.includes("uturn") || text.includes("u-turn");
+  const isKeepLeft  = text.includes("keep left");
+  const isKeepRight = text.includes("keep right");
+  const isLeft      = text.includes("left");
+  const isRight     = text.includes("right");
+  const isExit      = text.includes("exit");
+  const isRamp      = text.includes("ramp");
+  const isMerge     = text.includes("merge");
+
+  if (phase === "prepare") {
+    if (isUTurn)     return "Prepare for U-turn";
+    if (isKeepLeft)  return "Prepare to keep left";
+    if (isKeepRight) return "Prepare to keep right";
+    if (isExit)      return "Prepare for exit";
+    if (isRamp)      return "Prepare to take the ramp";
+    if (isLeft)      return "Prepare to turn left";
+    if (isRight)     return "Prepare to turn right";
+    if (isMerge)     return "Prepare to merge";
+    return "Stay on the current road";
+  }
+  if (phase === "soon") {
+    if (isUTurn)     return "U-turn ahead";
+    if (isKeepLeft)  return "Keep left ahead";
+    if (isKeepRight) return "Keep right ahead";
+    if (isExit)      return "Exit ahead";
+    if (isRamp)      return "Ramp ahead";
+    if (isLeft)      return "Left turn ahead";
+    if (isRight)     return "Right turn ahead";
+    if (isMerge)     return "Merge ahead";
+    return "Continue straight";
+  }
+  if (phase === "now") {
+    if (isUTurn)     return "Make a U-turn now";
+    if (isKeepLeft)  return "Keep left now";
+    if (isKeepRight) return "Keep right now";
+    if (isExit)      return "Take the exit now";
+    if (isRamp)      return "Take the ramp now";
+    if (isLeft)      return "Turn left now";
+    if (isRight)     return "Turn right now";
+    if (isMerge)     return "Merge now";
+  }
+  return "Continue straight";
+}
+
+function speakDriveInstruction(step, phase) {
+  if (!voiceEnabled || !step) return;
+  const text = buildContextAwareVoicePrompt(step, phase);
+  if (!text || text === "Continue straight") return;
+  const now = Date.now();
+  if (text === lastSpokenText && now - lastSpokenAt < 4500) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(normalizeVoiceText(text));
+    utter.rate = 1.0; utter.pitch = 1.0; utter.lang = "en-US";
+    window.speechSynthesis.speak(utter);
+    lastSpokenText = text;
+    lastSpokenAt = now;
+  } catch (e) { console.warn("speech failed", e); }
+}
+
 function getVoicePromptFromManeuver(vm) {
   if (!vm) return "";
-  const instruction = stripHtml(vm.instruction || "");
-  if (!instruction) return "";
-  if (vm.maneuver?.includes("uturn")) return "Make a U turn";
-  if (vm.maneuver?.includes("left"))  return "Turn left";
-  if (vm.maneuver?.includes("right")) return "Turn right";
-  return instruction;
+  const m = (vm.maneuver || "").toLowerCase();
+  if (!m || m === "straight") return "";
+  if (m.includes("uturn"))      return "Prepare for U-turn ahead";
+  if (m.includes("turn-left"))  return "Turn left ahead";
+  if (m.includes("turn-right")) return "Turn right ahead";
+  if (m.includes("keep-left"))  return "Keep left ahead";
+  if (m.includes("keep-right")) return "Keep right ahead";
+  if (m.includes("ramp"))       return "Take the ramp ahead";
+  if (m.includes("merge"))      return "Merge ahead";
+  return stripHtml(vm.instruction || "");
 }
 
-function maybeSpeakDriveInstruction(vm, timedWarning) {
-  if (!voiceEnabled) return;
-
-  if (timedWarning?.phase) {
-    if (timedWarning.phase !== lastWarningPhase) {
-      const text = getVoicePromptFromTimedWarning(timedWarning);
-      speakText(text, timedWarning.phase === "now" ? "urgent" : "normal");
-    }
-    return;
-  }
-
-  const fallbackText = getVoicePromptFromManeuver(vm);
-  if (!fallbackText) return;
-
-  if (Date.now() - lastSpokenAt > 12000) {
-    speakText(fallbackText, "normal");
-  }
-}
 
 function toggleVoice() {
   voiceEnabled = !voiceEnabled;
@@ -2099,22 +2207,13 @@ function toggleFollowMode() {
 
 function getDriveTimedWarning(r, stepIndex) {
   const steps = r.route.legs[0].steps;
-  const userLatLng = lastKnownUserLatLng;
+  const ulng  = lastKnownUserLatLng;
 
-  const candidates = [
-    { step: steps[stepIndex],     warning: getStepWarningMeta(steps[stepIndex],     r.route) },
-    { step: steps[stepIndex + 1], warning: getStepWarningMeta(steps[stepIndex + 1], r.route) },
-    { step: steps[stepIndex + 2], warning: getStepWarningMeta(steps[stepIndex + 2], r.route) }
-  ];
-
-  for (const item of candidates) {
-    if (!item.step || !item.warning) continue;
-    const timed = buildTimedWarning(item.warning, item.step, userLatLng);
+  // CURRENT step only — never advance to next step here
+  const curWarning = getStepWarningMeta(steps[stepIndex], r.route);
+  if (curWarning && steps[stepIndex]) {
+    const timed = buildTimedWarning(curWarning, steps[stepIndex], ulng);
     if (timed) return timed;
-  }
-
-  if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
-    return { type: "interchange", icon: "⚠", phase: "prepare", shortText: "Prepare: complex interchange ahead", longText: "Complex interchange ahead — stay focused for lane choice", distanceText: "Ahead" };
   }
 
   return null;
@@ -2149,6 +2248,81 @@ function getHeldTimedWarning(timedWarning) {
   heldTimedWarningUntil = now + 2500;
 
   return heldTimedWarning;
+}
+
+// ── Lane / Exit Guidance Block (lookahead, separate from main instruction) ──
+
+function buildLaneGuidanceText(meta, phase) {
+  const { type, shortText } = meta;
+  if (type === "exit") {
+    if (phase === "prepare") return shortText.replace(/^Exit ahead/i, "Prepare for exit");
+    if (phase === "soon")    return `Keep right — ${shortText.replace(/^Exit ahead to /i, "exit to ")}`;
+    return "Take the exit now";
+  }
+  if (type === "ramp") {
+    if (phase === "prepare") return shortText.replace(/^Ramp ahead/i, "Prepare for ramp");
+    if (phase === "soon")    return shortText;
+    return "Take the ramp now";
+  }
+  if (type === "lane") {
+    if (phase === "now") return shortText.replace(/\bahead\b/i, "now").replace(/\bfor\b.*/i, "now").trim();
+    return shortText;
+  }
+  if (type === "merge") {
+    if (phase === "prepare") return "Prepare to merge";
+    if (phase === "soon")    return "Merge ahead";
+    return "Merge now";
+  }
+  return shortText;
+}
+
+function getDriveLaneGuidance(r, stepIndex) {
+  const steps = r.route.legs[0].steps;
+  const ulng  = lastKnownUserLatLng;
+  const now   = Date.now();
+
+  const LANE_TYPES = new Set(["lane", "exit", "ramp", "merge"]);
+
+  for (let i = stepIndex; i <= stepIndex + 3 && i < steps.length; i++) {
+    const meta = getStepWarningMeta(steps[i], r.route);
+    if (!meta || !LANE_TYPES.has(meta.type)) continue;
+
+    // Distance: to end of THIS step if it's current, to end of PREVIOUS step if lookahead
+    const proxyStep = (i > stepIndex) ? steps[i - 1] : steps[i];
+    const dist = getDistanceToStepEndMeters(proxyStep, ulng);
+    if (dist == null) continue;
+
+    const phase = getWarningPhaseForType(dist, meta.type);
+    if (phase === "none") continue;
+
+    // Current step at "now" → handled by main timed warning, not lane block
+    if (i === stepIndex && phase === "now") return null;
+
+    let distanceText;
+    if (dist <= 80)       distanceText = "Now";
+    else if (dist < 1000) distanceText = `${Math.round(dist / 10) * 10} m`;
+    else                  distanceText = `${(dist / 1000).toFixed(1)} km`;
+
+    const text = buildLaneGuidanceText(meta, phase);
+    const result = { icon: meta.icon, text, distanceText, phase, type: meta.type };
+
+    // Hold: don't flicker on same text
+    if (_laneGuidanceHeld && _laneGuidanceHeld.text === result.text && now < _laneGuidanceHeldUntil) {
+      return _laneGuidanceHeld;
+    }
+    _laneGuidanceHeld = result;
+    _laneGuidanceHeldUntil = now + 2000;
+    return _laneGuidanceHeld;
+  }
+
+  // Complex interchange advisory (supplementary — only when no lane guidance found)
+  if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
+    return { icon: "⚠", text: "Complex interchange ahead", distanceText: "Ahead", phase: "prepare", type: "interchange" };
+  }
+
+  // Expiry: clear held
+  if (now >= _laneGuidanceHeldUntil) _laneGuidanceHeld = null;
+  return null;
 }
 
 function getUpcomingCondition(r, stepIndex) {
@@ -2327,25 +2501,23 @@ function getUserLatLngFromPosition(pos) {
 }
 
 function getClosestStepIndex(userLatLng, steps, currentIndex = 0) {
+  // Only compare end_location (not start_location) to avoid premature step advancement.
+  // start_location[i+1] == end_location[i], so using both causes step i+1 to tie-win
+  // as the user approaches the turn — advancing the index too early.
   let minDist = Infinity;
   let bestIndex = currentIndex;
 
-  const from = Math.max(0, currentIndex - 1);
+  const from = Math.max(0, currentIndex);
   const to = Math.min(steps.length - 1, currentIndex + 3);
 
   for (let i = from; i <= to; i++) {
     const step = steps[i];
-    const points = [];
-    if (step.start_location) points.push(step.start_location);
-    if (step.end_location) points.push(step.end_location);
-
-    points.forEach(point => {
-      const d = google.maps.geometry.spherical.computeDistanceBetween(userLatLng, point);
-      if (d < minDist) {
-        minDist = d;
-        bestIndex = i;
-      }
-    });
+    if (!step?.end_location) continue;
+    const d = google.maps.geometry.spherical.computeDistanceBetween(userLatLng, step.end_location);
+    if (d < minDist) {
+      minDist = d;
+      bestIndex = i;
+    }
   }
 
   return bestIndex;
@@ -2466,13 +2638,7 @@ function handleLiveDrivePosition(pos) {
   updateDriveUserMarker(userLatLng);
   updateDriveCamera(userLatLng);
 
-  const steps = selectedRoute.route.legs[0].steps;
-  const candidateIndex = getClosestStepIndex(userLatLng, steps, currentStepIndex);
-  const stableIndex = getStableStepIndex(candidateIndex);
-
-  if (stableIndex !== currentStepIndex) {
-    currentStepIndex = stableIndex;
-  }
+  currentStepIndex = findBestCurrentStepIndex(selectedRoute, userLatLng, currentStepIndex);
 
   updateDriveUI();
 
@@ -2667,6 +2833,10 @@ function updateDriveUI() {
   const r = selectedRoute;
   if (!r) return;
 
+  if (lastKnownUserLatLng) {
+    currentStepIndex = findBestCurrentStepIndex(r, lastKnownUserLatLng, currentStepIndex);
+  }
+
   const vm = buildDriveViewModel(r, currentStepIndex);
   let timedWarning = getDriveTimedWarning(r, currentStepIndex);
   timedWarning = getHeldTimedWarning(timedWarning);
@@ -2710,13 +2880,45 @@ function updateDriveUI() {
 
   document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
 
-  maybeSpeakDriveInstruction(vm, timedWarning);
+  // Lane guidance block
+  const laneGuidance = getDriveLaneGuidance(r, currentStepIndex);
+  const laneBlock    = document.getElementById("drive-lane-block");
+  if (laneBlock) {
+    if (laneGuidance) {
+      document.getElementById("drive-lane-icon").textContent = laneGuidance.icon;
+      document.getElementById("drive-lane-instruction").textContent = laneGuidance.text;
+      document.getElementById("drive-lane-distance").textContent = laneGuidance.distanceText;
+      laneBlock.className = "drive-lane-block" +
+        (laneGuidance.phase === "now" ? " lane-alert" : laneGuidance.phase === "soon" ? " lane-warn" : "");
+      laneBlock.style.display = "flex";
 
-  if (timedWarning?.phase) {
-    lastWarningPhase = timedWarning.phase;
-  } else {
-    lastWarningPhase = "";
+      // Voice lane guidance on phase change
+      const laneKey = laneGuidance.text + "|" + laneGuidance.phase;
+      if (laneKey !== _lastLaneGuidanceText && Date.now() - _lastLaneGuidanceAt > 5000) {
+        _lastLaneGuidanceText = laneKey;
+        _lastLaneGuidanceAt   = Date.now();
+        if (voiceEnabled) {
+          setTimeout(() => {
+            const u = new SpeechSynthesisUtterance(normalizeVoiceText(laneGuidance.text));
+            u.lang = "en-US"; u.rate = 0.95; u.pitch = 1.0;
+            window.speechSynthesis.speak(u);
+          }, 400);
+        }
+      }
+    } else {
+      laneBlock.style.display = "none";
+    }
   }
+
+  // Main voice — current step instruction
+  const currentStep = r?.route?.legs?.[0]?.steps?.[currentStepIndex];
+  if (timedWarning) {
+    speakDriveInstruction(currentStep, timedWarning.phase);
+  } else {
+    speakDriveInstruction(currentStep, "none");
+  }
+
+  lastWarningPhase = timedWarning?.phase || "";
 }
 
 function simulateDriveProgress() {
@@ -2820,9 +3022,13 @@ function initMap() {
   document.getElementById("start").addEventListener("change", calculateRoutes);
   document.getElementById("end").addEventListener("change", calculateRoutes);
 
-  tryAutoCurrentLocation();
   initAutocomplete();
+  ensureAutocompleteReady();
+  patchAutocompleteBindings();
+  patchGpsEntrypoints();
+  wireInputAssist();
 }
+
 
 function initAutocomplete() {
   if (startAutocomplete && endAutocomplete) return;
@@ -2830,7 +3036,8 @@ function initAutocomplete() {
   const endInput   = document.getElementById("end");
   if (!startInput || !endInput) return;
   if (!google?.maps?.places) {
-    console.error("[ClearRoad] Google Maps Places not loaded — autocomplete unavailable");
+    console.error("Google Places library is not loaded.");
+    wireInputAssist();
     return;
   }
 
@@ -2842,25 +3049,8 @@ function initAutocomplete() {
   startAutocomplete = new google.maps.places.Autocomplete(startInput, options);
   endAutocomplete   = new google.maps.places.Autocomplete(endInput, options);
 
-  startAutocomplete.addListener("place_changed", () => {
-    const place = startAutocomplete.getPlace();
-    if (!place) return;
-    startInput.value = place.formatted_address || place.name || "";
-    if (place.geometry?.location) {
-      currentUserCoords = {
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng()
-      };
-    }
-    if (endInput.value.trim()) calculateRoutes();
-  });
-
-  endAutocomplete.addListener("place_changed", () => {
-    const place = endAutocomplete.getPlace();
-    if (!place) return;
-    endInput.value = place.formatted_address || place.name || "";
-    if (startInput.value.trim()) calculateRoutes();
-  });
+  patchAutocompleteBindings();
+  wireInputAssist();
 }
 
 function clearRoutes() {
@@ -2945,111 +3135,243 @@ function calculateRoutes() {
 //  DAY 6 — GPS / Current Position
 // ============================================================
 
-function setStartFieldStatus(msg) {
-  const el = document.getElementById("start");
-  if (el) el.placeholder = msg;
+// ============================================================
+//  PRODUCTION PATCH — INPUT ASSIST + STEP STABILITY + VOICE
+// ============================================================
+
+const AUTOCOMPLETE_DEBOUNCE_MS  = 220;
+const STEP_SWITCH_COOLDOWN_MS   = 1800;
+const STEP_REACHED_RADIUS_M     = 28;
+const NEXT_STEP_PREPARE_RADIUS_M = 180;
+const NEXT_STEP_SOON_RADIUS_M   = 90;
+
+let _startInputDebounced   = null;
+let _endInputDebounced     = null;
+let _lastManualRouteTrigger = 0;
+
+function debounce(fn, delay) {
+  let t = null;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay || 220); };
 }
 
 function setGpsLoading(on) {
   const btn = document.getElementById("gps-btn");
-  if (btn) btn.classList.toggle("gps-loading", on);
+  if (btn) btn.classList.toggle("gps-loading", !!on);
+}
+
+function tryCalculateRoutesFromInputs() {
+  const now   = Date.now();
+  const start = document.getElementById("start")?.value?.trim() || "";
+  const end   = document.getElementById("end")?.value?.trim() || "";
+  if (!start || !end) return;
+  if (now - _lastManualRouteTrigger < 900) return;
+  _lastManualRouteTrigger = now;
+  calculateRoutes();
+}
+
+function wireInputAssist() {
+  const startInput = document.getElementById("start");
+  const endInput   = document.getElementById("end");
+  if (!startInput || !endInput) return;
+
+  if (!_startInputDebounced) {
+    _startInputDebounced = debounce(() => {
+      const s = startInput.value.trim();
+      const e = endInput.value.trim();
+      if ((s.length >= 3 || e.length >= 3) && s && e) tryCalculateRoutesFromInputs();
+    }, AUTOCOMPLETE_DEBOUNCE_MS);
+  }
+  if (!_endInputDebounced) {
+    _endInputDebounced = debounce(() => {
+      const s = startInput.value.trim();
+      const e = endInput.value.trim();
+      if ((s.length >= 3 || e.length >= 3) && s && e) tryCalculateRoutesFromInputs();
+    }, AUTOCOMPLETE_DEBOUNCE_MS);
+  }
+
+  if (!startInput.dataset.inputAssistBound) {
+    startInput.addEventListener("input", _startInputDebounced);
+    startInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); tryCalculateRoutesFromInputs(); }
+    });
+    startInput.addEventListener("blur", () => tryCalculateRoutesFromInputs());
+    startInput.dataset.inputAssistBound = "1";
+  }
+  if (!endInput.dataset.inputAssistBound) {
+    endInput.addEventListener("input", _endInputDebounced);
+    endInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); tryCalculateRoutesFromInputs(); }
+    });
+    endInput.addEventListener("blur", () => tryCalculateRoutesFromInputs());
+    endInput.dataset.inputAssistBound = "1";
+  }
+}
+
+function ensureAutocompleteReady() {
+  if (!google?.maps?.places) {
+    console.error("Google Places library is not loaded.");
+    wireInputAssist();
+    return;
+  }
+  if (!startAutocomplete || !endAutocomplete) initAutocomplete();
+  wireInputAssist();
+}
+
+function bindAutocompletePlaceChanged(autocomplete, kind) {
+  if (!autocomplete || autocomplete.__patchedPlaceChanged) return;
+  autocomplete.addListener("place_changed", () => {
+    const place = autocomplete.getPlace();
+    const input = document.getElementById(kind === "start" ? "start" : "end");
+    if (!input) return;
+    input.value = place?.formatted_address || place?.name || input.value || "";
+    if (kind === "start" && place?.geometry?.location) {
+      currentUserCoords = {
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng()
+      };
+    }
+    tryCalculateRoutesFromInputs();
+  });
+  autocomplete.__patchedPlaceChanged = true;
+}
+
+function patchAutocompleteBindings() {
+  if (startAutocomplete) bindAutocompletePlaceChanged(startAutocomplete, "start");
+  if (endAutocomplete)   bindAutocompletePlaceChanged(endAutocomplete, "end");
 }
 
 function handleGeoError(err) {
   setGpsLoading(false);
-  if (!err) {
-    setStartFieldStatus("Location unavailable — enter or tap 📍");
-    return;
-  }
-  if (err.code === 1) {
-    setStartFieldStatus("Location blocked — allow access and tap 📍");
-  } else if (err.code === 2) {
-    setStartFieldStatus("Location unavailable — enter or tap 📍");
-  } else if (err.code === 3) {
-    setStartFieldStatus("Location timeout — tap 📍 to retry");
-  } else {
-    setStartFieldStatus("Location error — enter or tap 📍");
-  }
-}
-
-function reverseGeocodeLatLng(lat, lng, callback) {
-  try {
-    new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
-      callback(
-        (status === "OK" && results && results[0])
-          ? results[0].formatted_address
-          : `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-      );
-    });
-  } catch (e) {
-    callback(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-  }
-}
-
-function applyResolvedStartLocation(lat, lng, address) {
-  currentUserCoords = { lat, lng };
-  if (map) {
-    map.panTo(new google.maps.LatLng(lat, lng));
-    if ((map.getZoom() || 0) < 14) map.setZoom(14);
-  }
   const startInput = document.getElementById("start");
-  if (startInput) {
-    startInput.placeholder = "Current location";
-    startInput.value = address;
-  }
-  const endVal = document.getElementById("end")?.value?.trim();
-  if (endVal) calculateRoutes();
+  if (!startInput) return;
+  if (err?.code === 1) { startInput.placeholder = "Location blocked — allow access and tap 📍"; return; }
+  if (err?.code === 2) { startInput.placeholder = "Location unavailable — enter manually or tap 📍"; return; }
+  if (err?.code === 3) { startInput.placeholder = "Location timeout — tap 📍 again"; return; }
+  startInput.placeholder = "Location error — enter manually or tap 📍";
 }
 
-function requestGPS() {
+function reverseGeocodeLatLng(latLng) {
+  return new Promise((resolve) => {
+    try {
+      new google.maps.Geocoder().geocode({ location: latLng }, (results, status) => {
+        resolve((status === "OK" && results?.[0]) ? results[0].formatted_address : `${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`);
+      });
+    } catch { resolve(`${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`); }
+  });
+}
+
+async function applyResolvedStartLocation(latLng, shouldRoute = true) {
+  const startInput = document.getElementById("start");
+  if (!startInput) return;
+  currentUserCoords = { lat: latLng.lat, lng: latLng.lng };
+  const address = await reverseGeocodeLatLng(latLng);
+  startInput.value = address;
+  startInput.placeholder = "Current location";
+  if (map) map.panTo(latLng);
+  if (shouldRoute) tryCalculateRoutesFromInputs();
+}
+
+async function requestGPSPatched() {
   if (!navigator.geolocation) {
-    setStartFieldStatus("GPS not supported — enter manually");
+    const si = document.getElementById("start");
+    if (si) si.placeholder = "GPS not supported — enter manually";
     return;
   }
   setGpsLoading(true);
-  setStartFieldStatus("Detecting location…");
+  const si = document.getElementById("start");
+  if (si) si.placeholder = "Detecting location…";
 
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
+    async (pos) => {
+      await applyResolvedStartLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }, true);
       setGpsLoading(false);
-      const { latitude: lat, longitude: lng } = pos.coords;
-      reverseGeocodeLatLng(lat, lng, (address) => {
-        applyResolvedStartLocation(lat, lng, address);
-      });
     },
     (err) => { handleGeoError(err); },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
   );
 }
 
-function tryAutoCurrentLocation() {
-  const startInput = document.getElementById("start");
-  if (!startInput || startInput.value.trim()) return;
-  if (autoLocationTried) return;
-  autoLocationTried = true;
+async function requestGPS() { await requestGPSPatched(); }
 
-  if (!navigator.geolocation) {
-    setStartFieldStatus("Enter your starting location");
-    return;
+function patchGpsEntrypoints() {
+  const btn = document.getElementById("gps-btn");
+  if (btn) btn.onclick = requestGPSPatched;
+}
+
+// ── Step Stability ──
+
+function getDistanceToStepStartMeters(step, userLatLng) {
+  if (!step?.start_location || !userLatLng) return null;
+  return google.maps.geometry.spherical.computeDistanceBetween(userLatLng, step.start_location);
+}
+
+function isStepActuallyReached(step, userLatLng) {
+  const d = getDistanceToStepEndMeters(step, userLatLng);
+  return d != null && d <= STEP_REACHED_RADIUS_M;
+}
+
+function findBestCurrentStepIndex(routeObj, userLatLng, fromIndex) {
+  const steps = routeObj.route.legs[0].steps;
+  const now   = Date.now();
+  const start = Math.max(0, fromIndex - 1);
+  const end   = Math.min(steps.length - 1, fromIndex + 2);
+  let bestIndex = fromIndex;
+  let bestScore = Infinity;
+
+  for (let i = start; i <= end; i++) {
+    const step        = steps[i];
+    const distToEnd   = getDistanceToStepEndMeters(step, userLatLng) ?? 999999;
+    const distToStart = getDistanceToStepStartMeters(step, userLatLng) ?? 999999;
+    const reachedPenalty = isStepActuallyReached(step, userLatLng) ? 1000 : 0;
+    const futurePenalty  = i > fromIndex ? 120 : 0;
+    const score = distToEnd + distToStart * 0.35 + futurePenalty + reachedPenalty;
+    if (score < bestScore) { bestScore = score; bestIndex = i; }
   }
 
-  setGpsLoading(true);
-  setStartFieldStatus("Detecting location…");
+  if (bestIndex !== lastStableStepIndex && now - lastStepSwitchAt < STEP_SWITCH_COOLDOWN_MS) {
+    return lastStableStepIndex;
+  }
+  if (bestIndex > fromIndex) {
+    const distCurrentEnd = getDistanceToStepEndMeters(steps[fromIndex], userLatLng) ?? 999999;
+    if (distCurrentEnd > NEXT_STEP_PREPARE_RADIUS_M) return fromIndex;
+  }
+  if (bestIndex !== lastStableStepIndex) { lastStableStepIndex = bestIndex; lastStepSwitchAt = now; }
+  return bestIndex;
+}
 
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      setGpsLoading(false);
-      const { latitude: lat, longitude: lng } = pos.coords;
-      reverseGeocodeLatLng(lat, lng, (address) => {
-        applyResolvedStartLocation(lat, lng, address);
-      });
-    },
-    (err) => {
-      autoLocationTried = false;
-      handleGeoError(err);
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-  );
+function getUpcomingMeaningfulStep(steps, currentIndex, routeObj) {
+  for (let i = currentIndex + 1; i < steps.length; i++) {
+    if (getStepWarningMeta(steps[i], routeObj.route)) return { index: i, step: steps[i] };
+  }
+  return null;
+}
+
+function getWarningPhaseForType(distanceMeters, type) {
+  if (distanceMeters == null) return "none";
+  switch (type) {
+    case "exit":
+    case "ramp":
+      if (distanceMeters <= 80)   return "now";
+      if (distanceMeters <= 450)  return "soon";
+      if (distanceMeters <= 1100) return "prepare";
+      return "none";
+    case "lane":
+    case "merge":
+      if (distanceMeters <= 60)  return "now";
+      if (distanceMeters <= 280) return "soon";
+      if (distanceMeters <= 650) return "prepare";
+      return "none";
+    case "uturn":
+      if (distanceMeters <= 45)  return "now";
+      if (distanceMeters <= 130) return "soon";
+      if (distanceMeters <= 300) return "prepare";
+      return "none";
+    default:
+      if (distanceMeters <= 50)  return "now";
+      if (distanceMeters <= 150) return "soon";
+      if (distanceMeters <= 300) return "prepare";
+      return "none";
+  }
 }
 
 // ============================================================
