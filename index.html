@@ -1005,7 +1005,7 @@
 <div class="input-panel">
   <div class="input-row">
     <span class="input-label">From:</span>
-    <input type="text" class="input-value" id="start" placeholder="Current location" value="Dubai Marina">
+    <input type="text" class="input-value" id="start" placeholder="Current location" value="">
     <button class="voice-btn" id="gps-btn" onclick="requestGPS()" title="Use my location">
       <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
     </button>
@@ -1084,6 +1084,7 @@
     <div style="display:flex;align-items:center;gap:10px;">
       <span class="drive-status" id="drive-status">Navigating...</span>
       <button class="drive-exit" type="button" onclick="toggleVoice()" style="background:#334155;">Voice</button>
+      <button class="drive-exit" type="button" onclick="toggleFollowMode()" style="background:#1d4ed8;">Follow</button>
     </div>
     <button class="drive-exit" onclick="exitDriveMode()">Exit</button>
   </div>
@@ -1158,6 +1159,13 @@ let heldTimedWarning = null;
 let heldTimedWarningUntil = 0;
 let lastPhaseChangeAt = 0;
 let lastStableTimedPhase = "";
+let followUserMode = true;
+let lastUserHeading = 0;
+let driveMapHasFollowed = false;
+let autoLocationTried = false;
+let startAutocomplete = null;
+let endAutocomplete = null;
+let currentUserCoords = null;
 let offRouteSince = 0;
 let lastStepSwitchAt = 0;
 let lastStableStepIndex = 0;
@@ -2060,6 +2068,14 @@ function toggleVoice() {
   }
 }
 
+function toggleFollowMode() {
+  followUserMode = !followUserMode;
+
+  if (followUserMode && lastKnownUserLatLng) {
+    updateDriveCamera(lastKnownUserLatLng);
+  }
+}
+
 function getDriveTimedWarning(r, stepIndex) {
   const steps = r.route.legs[0].steps;
   const userLatLng = lastKnownUserLatLng;
@@ -2337,6 +2353,16 @@ function smoothUserPosition(newLatLng) {
   return smoothedUserLatLng;
 }
 
+function updateUserHeading(prevLatLng, nextLatLng) {
+  if (!prevLatLng || !nextLatLng) return lastUserHeading || 0;
+
+  const d = google.maps.geometry.spherical.computeDistanceBetween(prevLatLng, nextLatLng);
+  if (d < 5) return lastUserHeading || 0;
+
+  lastUserHeading = google.maps.geometry.spherical.computeHeading(prevLatLng, nextLatLng) || 0;
+  return lastUserHeading;
+}
+
 function hasUserMoved(prevLatLng, nextLatLng) {
   if (!prevLatLng || !nextLatLng) return true;
   const d = google.maps.geometry.spherical.computeDistanceBetween(prevLatLng, nextLatLng);
@@ -2357,15 +2383,47 @@ function getStableStepIndex(candidateIndex) {
 
 function updateDriveUserMarker(userLatLng) {
   if (!driveMap) return;
+
+  const icon = {
+    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+    scale: 6,
+    fillColor: "#2563eb",
+    fillOpacity: 1,
+    strokeColor: "#ffffff",
+    strokeWeight: 2,
+    rotation: lastUserHeading || 0,
+    anchor: new google.maps.Point(0, 2)
+  };
+
   if (!driveUserMarker) {
     driveUserMarker = new google.maps.Marker({
       position: userLatLng,
       map: driveMap,
       title: "You",
-      zIndex: 9999
+      zIndex: 9999,
+      icon
     });
   } else {
     driveUserMarker.setPosition(userLatLng);
+    driveUserMarker.setIcon(icon);
+  }
+}
+
+function updateDriveCamera(userLatLng) {
+  if (!driveMap || !followUserMode || !userLatLng) return;
+
+  if (!driveMapHasFollowed) {
+    driveMap.setZoom(17);
+    driveMap.panTo(userLatLng);
+    driveMapHasFollowed = true;
+    return;
+  }
+
+  driveMap.panTo(userLatLng);
+
+  const currentZoom = driveMap.getZoom() || 0;
+  if (currentZoom < 16) {
+    driveMap.setZoom(16);
   }
 }
 
@@ -2375,13 +2433,17 @@ function handleLiveDrivePosition(pos) {
   const rawLatLng = getUserLatLngFromPosition(pos);
   const userLatLng = smoothUserPosition(rawLatLng);
 
+  updateUserHeading(lastKnownUserLatLng, userLatLng);
+
   if (!hasUserMoved(lastKnownUserLatLng, userLatLng)) {
     updateDriveUserMarker(userLatLng);
+    updateDriveCamera(userLatLng);
     return;
   }
 
   lastKnownUserLatLng = userLatLng;
   updateDriveUserMarker(userLatLng);
+  updateDriveCamera(userLatLng);
 
   const steps = selectedRoute.route.legs[0].steps;
   const candidateIndex = getClosestStepIndex(userLatLng, steps, currentStepIndex);
@@ -2488,6 +2550,7 @@ function handleOffRouteRecalculation(userLatLng) {
     });
 
     updateDriveUI();
+    updateDriveCamera(userLatLng);
   });
 }
 
@@ -2535,6 +2598,9 @@ function startDriveMode(index) {
   heldTimedWarningUntil = 0;
   lastPhaseChangeAt = 0;
   lastStableTimedPhase = "";
+  followUserMode = true;
+  lastUserHeading = 0;
+  driveMapHasFollowed = false;
 
   document.getElementById("drive-mode").classList.add("active");
 
@@ -2716,6 +2782,54 @@ function initMap() {
 
   document.getElementById("start").addEventListener("change", calculateRoutes);
   document.getElementById("end").addEventListener("change", calculateRoutes);
+
+  tryAutoCurrentLocation();
+  initAutocomplete();
+}
+
+function initAutocomplete() {
+  const startInput = document.getElementById("start");
+  const endInput   = document.getElementById("end");
+
+  if (!startInput || !endInput || !google?.maps?.places) return;
+
+  const options = {
+    fields: ["formatted_address", "geometry", "name"],
+    componentRestrictions: { country: "ae" }
+  };
+
+  startAutocomplete = new google.maps.places.Autocomplete(startInput, options);
+  endAutocomplete   = new google.maps.places.Autocomplete(endInput, options);
+
+  startAutocomplete.addListener("place_changed", () => {
+    const place = startAutocomplete.getPlace();
+    if (!place) return;
+    if (place.formatted_address) {
+      startInput.value = place.formatted_address;
+    } else if (place.name) {
+      startInput.value = place.name;
+    }
+    if (place.geometry?.location) {
+      currentUserCoords = {
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng()
+      };
+    }
+    const endValue = endInput.value.trim();
+    if (endValue) calculateRoutes();
+  });
+
+  endAutocomplete.addListener("place_changed", () => {
+    const place = endAutocomplete.getPlace();
+    if (!place) return;
+    if (place.formatted_address) {
+      endInput.value = place.formatted_address;
+    } else if (place.name) {
+      endInput.value = place.name;
+    }
+    const startValue = startInput.value.trim();
+    if (startValue) calculateRoutes();
+  });
 }
 
 function clearRoutes() {
@@ -2808,6 +2922,7 @@ function requestGPS() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const { latitude: lat, longitude: lng } = pos.coords;
+      currentUserCoords = { lat, lng };
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ location: { lat, lng } }, (results, status) => {
         if (btn) btn.classList.remove("gps-loading");
@@ -2821,6 +2936,66 @@ function requestGPS() {
       if (btn) btn.classList.remove("gps-loading");
     },
     { timeout: 8000, maximumAge: 60000 }
+  );
+}
+
+function tryAutoCurrentLocation() {
+  const startInput = document.getElementById("start");
+  if (!startInput) return;
+  const existing = startInput.value.trim();
+  if (existing && existing !== "Dubai Marina") {
+    autoLocationTried = true;
+    return;
+  }
+
+  if (autoLocationTried) return;
+  autoLocationTried = true;
+
+  if (!navigator.geolocation) return;
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      currentUserCoords = { lat, lng };
+
+      const latLng = new google.maps.LatLng(lat, lng);
+
+      if (map) {
+        map.panTo(latLng);
+        if ((map.getZoom() || 0) < 14) map.setZoom(14);
+      }
+
+      try {
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === "OK" && results && results[0]) {
+            startInput.value = results[0].formatted_address;
+          } else {
+            startInput.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          }
+          const endValue = document.getElementById("end")?.value?.trim();
+          if (endValue) {
+            calculateRoutes();
+          }
+        });
+      } catch (e) {
+        startInput.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        const endValue = document.getElementById("end")?.value?.trim();
+        if (endValue) {
+          calculateRoutes();
+        }
+      }
+    },
+    () => {
+      // silent fail: keep manual input if denied
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 6000,
+      maximumAge: 30000
+    }
   );
 }
 
