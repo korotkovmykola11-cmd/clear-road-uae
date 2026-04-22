@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -2825,10 +2825,14 @@ function initMap() {
 }
 
 function initAutocomplete() {
+  if (startAutocomplete && endAutocomplete) return;
   const startInput = document.getElementById("start");
   const endInput   = document.getElementById("end");
-
-  if (!startInput || !endInput || !google?.maps?.places) return;
+  if (!startInput || !endInput) return;
+  if (!google?.maps?.places) {
+    console.error("[ClearRoad] Google Maps Places not loaded — autocomplete unavailable");
+    return;
+  }
 
   const options = {
     fields: ["formatted_address", "geometry", "name"],
@@ -2841,31 +2845,21 @@ function initAutocomplete() {
   startAutocomplete.addListener("place_changed", () => {
     const place = startAutocomplete.getPlace();
     if (!place) return;
-    if (place.formatted_address) {
-      startInput.value = place.formatted_address;
-    } else if (place.name) {
-      startInput.value = place.name;
-    }
+    startInput.value = place.formatted_address || place.name || "";
     if (place.geometry?.location) {
       currentUserCoords = {
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng()
       };
     }
-    const endValue = endInput.value.trim();
-    if (endValue) calculateRoutes();
+    if (endInput.value.trim()) calculateRoutes();
   });
 
   endAutocomplete.addListener("place_changed", () => {
     const place = endAutocomplete.getPlace();
     if (!place) return;
-    if (place.formatted_address) {
-      endInput.value = place.formatted_address;
-    } else if (place.name) {
-      endInput.value = place.name;
-    }
-    const startValue = startInput.value.trim();
-    if (startValue) calculateRoutes();
+    endInput.value = place.formatted_address || place.name || "";
+    if (startInput.value.trim()) calculateRoutes();
   });
 }
 
@@ -2951,95 +2945,110 @@ function calculateRoutes() {
 //  DAY 6 — GPS / Current Position
 // ============================================================
 
-function requestGPS() {
-  if (!navigator.geolocation) return;
+function setStartFieldStatus(msg) {
+  const el = document.getElementById("start");
+  if (el) el.placeholder = msg;
+}
+
+function setGpsLoading(on) {
   const btn = document.getElementById("gps-btn");
-  if (btn) btn.classList.add("gps-loading");
+  if (btn) btn.classList.toggle("gps-loading", on);
+}
+
+function handleGeoError(err) {
+  setGpsLoading(false);
+  if (!err) {
+    setStartFieldStatus("Location unavailable — enter or tap 📍");
+    return;
+  }
+  if (err.code === 1) {
+    setStartFieldStatus("Location blocked — allow access and tap 📍");
+  } else if (err.code === 2) {
+    setStartFieldStatus("Location unavailable — enter or tap 📍");
+  } else if (err.code === 3) {
+    setStartFieldStatus("Location timeout — tap 📍 to retry");
+  } else {
+    setStartFieldStatus("Location error — enter or tap 📍");
+  }
+}
+
+function reverseGeocodeLatLng(lat, lng, callback) {
+  try {
+    new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
+      callback(
+        (status === "OK" && results && results[0])
+          ? results[0].formatted_address
+          : `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+      );
+    });
+  } catch (e) {
+    callback(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+  }
+}
+
+function applyResolvedStartLocation(lat, lng, address) {
+  currentUserCoords = { lat, lng };
+  if (map) {
+    map.panTo(new google.maps.LatLng(lat, lng));
+    if ((map.getZoom() || 0) < 14) map.setZoom(14);
+  }
+  const startInput = document.getElementById("start");
+  if (startInput) {
+    startInput.placeholder = "Current location";
+    startInput.value = address;
+  }
+  const endVal = document.getElementById("end")?.value?.trim();
+  if (endVal) calculateRoutes();
+}
+
+function requestGPS() {
+  if (!navigator.geolocation) {
+    setStartFieldStatus("GPS not supported — enter manually");
+    return;
+  }
+  setGpsLoading(true);
+  setStartFieldStatus("Detecting location…");
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      setGpsLoading(false);
       const { latitude: lat, longitude: lng } = pos.coords;
-      currentUserCoords = { lat, lng };
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (btn) btn.classList.remove("gps-loading");
-        if (status === "OK" && results[0]) {
-          document.getElementById("start").value = results[0].formatted_address;
-          calculateRoutes();
-        }
+      reverseGeocodeLatLng(lat, lng, (address) => {
+        applyResolvedStartLocation(lat, lng, address);
       });
     },
-    () => {
-      if (btn) btn.classList.remove("gps-loading");
-    },
-    { timeout: 8000, maximumAge: 60000 }
+    (err) => { handleGeoError(err); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
   );
 }
 
 function tryAutoCurrentLocation() {
   const startInput = document.getElementById("start");
-  if (!startInput) return;
-  const existing = startInput.value.trim();
-  if (existing) {
-    autoLocationTried = true;
-    return;
-  }
-
+  if (!startInput || startInput.value.trim()) return;
   if (autoLocationTried) return;
   autoLocationTried = true;
 
   if (!navigator.geolocation) {
-    startInput.placeholder = "Enter your location";
+    setStartFieldStatus("Enter your starting location");
     return;
   }
 
-  const gpsBtn = document.getElementById("gps-btn");
-  if (gpsBtn) gpsBtn.classList.add("gps-loading");
-  startInput.placeholder = "Detecting location…";
+  setGpsLoading(true);
+  setStartFieldStatus("Detecting location…");
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-
-      currentUserCoords = { lat, lng };
-
-      if (map) {
-        const latLng = new google.maps.LatLng(lat, lng);
-        map.panTo(latLng);
-        if ((map.getZoom() || 0) < 14) map.setZoom(14);
-      }
-
-      try {
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (gpsBtn) gpsBtn.classList.remove("gps-loading");
-          startInput.placeholder = "Current location";
-          if (status === "OK" && results && results[0]) {
-            startInput.value = results[0].formatted_address;
-          } else {
-            startInput.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-          }
-          const endValue = document.getElementById("end")?.value?.trim();
-          if (endValue) calculateRoutes();
-        });
-      } catch (e) {
-        if (gpsBtn) gpsBtn.classList.remove("gps-loading");
-        startInput.placeholder = "Current location";
-        startInput.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-        const endValue = document.getElementById("end")?.value?.trim();
-        if (endValue) calculateRoutes();
-      }
+      setGpsLoading(false);
+      const { latitude: lat, longitude: lng } = pos.coords;
+      reverseGeocodeLatLng(lat, lng, (address) => {
+        applyResolvedStartLocation(lat, lng, address);
+      });
     },
-    () => {
-      if (gpsBtn) gpsBtn.classList.remove("gps-loading");
-      startInput.placeholder = "Location blocked — tap 📍";
+    (err) => {
+      autoLocationTried = false;
+      handleGeoError(err);
     },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 30000
-    }
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
   );
 }
 
