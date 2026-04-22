@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1081,7 +1081,10 @@
 <!-- DRIVE MODE -->
 <div class="drive-mode" id="drive-mode">
   <div class="drive-header">
-    <span class="drive-status" id="drive-status">Navigating...</span>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="drive-status" id="drive-status">Navigating...</span>
+      <button class="drive-exit" type="button" onclick="toggleVoice()" style="background:#334155;">Voice</button>
+    </div>
     <button class="drive-exit" onclick="exitDriveMode()">Exit</button>
   </div>
 
@@ -1142,6 +1145,22 @@ let driveRenderer = null;
 let driveInterval = null;
 let currentStepIndex = 0;
 let betterRouteIndex = null;
+let driveWatchId = null;
+let driveUserMarker = null;
+let lastRerouteCheckAt = 0;
+let lastKnownUserLatLng = null;
+let smoothedUserLatLng = null;
+let lastWarningPhase = "";
+let voiceEnabled = true;
+let lastSpokenText = "";
+let lastSpokenAt = 0;
+let heldTimedWarning = null;
+let heldTimedWarningUntil = 0;
+let lastPhaseChangeAt = 0;
+let lastStableTimedPhase = "";
+let offRouteSince = 0;
+let lastStepSwitchAt = 0;
+let lastStableStepIndex = 0;
 
 let _bestRoute = null;
 let _fastestRoute = null;
@@ -1403,8 +1422,14 @@ function isMeaningfulManeuver(step, route) {
   const maneuver = (step.maneuver || "").toLowerCase();
   const strong = ["turn-left", "turn-right", "uturn-left", "uturn-right", "roundabout"];
   if (strong.some(m => maneuver.includes(m))) return true;
-  if (html.includes("exit")) return true;
-  if (html.includes("continue") || html.includes("keep") || html.includes("slight")) return false;
+  if (
+    html.includes("exit") ||
+    html.includes("keep right") ||
+    html.includes("keep left") ||
+    html.includes("ramp") ||
+    html.includes("merge")
+  ) return true;
+  if (html.includes("continue") || html.includes("slight")) return false;
   return false;
 }
 
@@ -1845,30 +1870,269 @@ function buildDriveViewModel(r, stepIndex) {
   };
 }
 
+function getStepWarningMeta(step, route) {
+  const html = stripHtml(step?.html_instructions || "");
+  const text = html.toLowerCase();
+  const roadText = normalizeRoadText(step, route);
+
+  const roadMatch =
+    roadText.match(/\bE311\b/) ||
+    roadText.match(/\bE11\b/) ||
+    roadText.match(/\bE611\b/);
+  const roadName = roadMatch ? roadMatch[0] : getRouteSummaryName({ route });
+
+  if (text.includes("keep right")) return { type: "lane",  icon: "↗", shortText: `Keep right for ${roadName}`,  longText: `Keep right ahead for exit toward ${roadName}` };
+  if (text.includes("keep left"))  return { type: "lane",  icon: "↖", shortText: `Keep left for ${roadName}`,   longText: `Keep left ahead toward ${roadName}` };
+  if (text.includes("exit"))       return { type: "exit",  icon: "⇢", shortText: `Exit ahead to ${roadName}`,   longText: `Prepare for exit toward ${roadName}` };
+  if (text.includes("ramp"))       return { type: "ramp",  icon: "⇗", shortText: `Ramp ahead to ${roadName}`,   longText: `Take the ramp ahead toward ${roadName}` };
+  if (text.includes("merge"))      return { type: "merge", icon: "⇄", shortText: `Merge ahead`,                 longText: `Merge carefully ahead` };
+  return null;
+}
+
+function isComplexInterchangeAhead(steps, currentStepIndex, route) {
+  const lookahead = steps.slice(currentStepIndex, currentStepIndex + 4);
+  const specialCount = lookahead.filter(step => {
+    const text = stripHtml(step?.html_instructions || "").toLowerCase();
+    return (
+      text.includes("exit") ||
+      text.includes("keep right") ||
+      text.includes("keep left") ||
+      text.includes("ramp") ||
+      text.includes("merge")
+    );
+  }).length;
+  const hasHighway = lookahead.some(step => stepLooksLikeHighway(step, route));
+  return hasHighway && specialCount >= 2;
+}
+
+function getDrivePriorityWarning(r, stepIndex) {
+  const steps = r.route.legs[0].steps;
+  const meta = (s) => s ? getStepWarningMeta(s, r.route) : null;
+  return (
+    meta(steps[stepIndex]) ||
+    meta(steps[stepIndex + 1]) ||
+    meta(steps[stepIndex + 2]) ||
+    (isComplexInterchangeAhead(steps, stepIndex, r.route)
+      ? { type: "interchange", icon: "⚠", shortText: "Complex interchange ahead", longText: "Complex interchange ahead — stay focused for lane choice" }
+      : null)
+  );
+}
+
+function parseStepDistanceMeters(step) {
+  if (!step?.distance?.value) return null;
+  return step.distance.value;
+}
+
+function getDistanceToStepEndMeters(step, userLatLng) {
+  if (!step?.end_location || !userLatLng) return parseStepDistanceMeters(step);
+  return google.maps.geometry.spherical.computeDistanceBetween(
+    userLatLng,
+    step.end_location
+  );
+}
+
+function getWarningPhase(distanceMeters) {
+  if (distanceMeters == null) return "none";
+
+  const current = lastStableTimedPhase || "none";
+
+  if (current === "prepare") {
+    if (distanceMeters <= 240) return "soon";
+    if (distanceMeters > 860) return "none";
+    return "prepare";
+  }
+
+  if (current === "soon") {
+    if (distanceMeters <= 60) return "now";
+    if (distanceMeters > 360) return "prepare";
+    return "soon";
+  }
+
+  if (current === "now") {
+    if (distanceMeters > 120) return "soon";
+    return "now";
+  }
+
+  if (distanceMeters <= 80) return "now";
+  if (distanceMeters <= 300) return "soon";
+  if (distanceMeters <= 800) return "prepare";
+  return "none";
+}
+
+function buildTimedWarning(priorityWarning, step, userLatLng) {
+  if (!priorityWarning || !step) return null;
+
+  const meters = getDistanceToStepEndMeters(step, userLatLng);
+  const phase = getWarningPhase(meters);
+
+  if (phase === "none") return null;
+
+  let distanceText = "Ahead";
+  if (meters != null) {
+    if (meters <= 80) {
+      distanceText = "Now";
+    } else if (meters < 1000) {
+      distanceText = `${Math.round(meters / 10) * 10} m`;
+    } else {
+      distanceText = `${(meters / 1000).toFixed(1)} km`;
+    }
+  }
+
+  if (phase === "prepare") {
+    return { ...priorityWarning, phase, shortText: `Prepare: ${priorityWarning.shortText}`, longText: priorityWarning.longText, distanceText };
+  }
+
+  if (phase === "soon") {
+    return { ...priorityWarning, phase, shortText: priorityWarning.shortText, longText: priorityWarning.longText, distanceText };
+  }
+
+  return { ...priorityWarning, phase: "now", shortText: `NOW: ${priorityWarning.shortText}`, longText: `Now — ${priorityWarning.longText}`, distanceText: "Now" };
+}
+
+function normalizeVoiceText(text) {
+  return (text || "")
+    .replace(/\bE311\b/g, "E three one one")
+    .replace(/\bE611\b/g, "E six one one")
+    .replace(/\bE11\b/g, "E eleven")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function speakText(text, priority = "normal") {
+  if (!voiceEnabled || !("speechSynthesis" in window)) return;
+  if (!text) return;
+  const now = Date.now();
+  const normalized = normalizeVoiceText(text);
+  if (normalized === lastSpokenText && now - lastSpokenAt < 6000) return;
+  if (priority === "urgent") window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(normalized);
+  utterance.lang = "en-US";
+  utterance.rate = priority === "urgent" ? 1.0 : 0.95;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+  lastSpokenText = normalized;
+  lastSpokenAt = now;
+  window.speechSynthesis.speak(utterance);
+}
+
+function getVoicePromptFromTimedWarning(timedWarning) {
+  if (!timedWarning) return "";
+  if (timedWarning.phase === "prepare") return timedWarning.shortText.replace(/^Prepare:\s*/i, "Prepare to ");
+  if (timedWarning.phase === "soon")    return timedWarning.shortText;
+  if (timedWarning.phase === "now")     return timedWarning.shortText.replace(/^NOW:\s*/i, "Now ");
+  return timedWarning.shortText || "";
+}
+
+function getVoicePromptFromManeuver(vm) {
+  if (!vm) return "";
+  const instruction = stripHtml(vm.instruction || "");
+  if (!instruction) return "";
+  if (vm.maneuver?.includes("uturn")) return "Make a U turn";
+  if (vm.maneuver?.includes("left"))  return "Turn left";
+  if (vm.maneuver?.includes("right")) return "Turn right";
+  return instruction;
+}
+
+function maybeSpeakDriveInstruction(vm, timedWarning) {
+  if (!voiceEnabled) return;
+
+  if (timedWarning?.phase) {
+    if (timedWarning.phase !== lastWarningPhase) {
+      const text = getVoicePromptFromTimedWarning(timedWarning);
+      speakText(text, timedWarning.phase === "now" ? "urgent" : "normal");
+    }
+    return;
+  }
+
+  const fallbackText = getVoicePromptFromManeuver(vm);
+  if (!fallbackText) return;
+
+  if (Date.now() - lastSpokenAt > 12000) {
+    speakText(fallbackText, "normal");
+  }
+}
+
+function toggleVoice() {
+  voiceEnabled = !voiceEnabled;
+
+  if (!voiceEnabled && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function getDriveTimedWarning(r, stepIndex) {
+  const steps = r.route.legs[0].steps;
+  const userLatLng = lastKnownUserLatLng;
+
+  const candidates = [
+    { step: steps[stepIndex],     warning: getStepWarningMeta(steps[stepIndex],     r.route) },
+    { step: steps[stepIndex + 1], warning: getStepWarningMeta(steps[stepIndex + 1], r.route) },
+    { step: steps[stepIndex + 2], warning: getStepWarningMeta(steps[stepIndex + 2], r.route) }
+  ];
+
+  for (const item of candidates) {
+    if (!item.step || !item.warning) continue;
+    const timed = buildTimedWarning(item.warning, item.step, userLatLng);
+    if (timed) return timed;
+  }
+
+  if (isComplexInterchangeAhead(steps, stepIndex, r.route)) {
+    return { type: "interchange", icon: "⚠", phase: "prepare", shortText: "Prepare: complex interchange ahead", longText: "Complex interchange ahead — stay focused for lane choice", distanceText: "Ahead" };
+  }
+
+  return null;
+}
+
+function getHeldTimedWarning(timedWarning) {
+  const now = Date.now();
+
+  if (!timedWarning) {
+    if (heldTimedWarning && now < heldTimedWarningUntil) {
+      return heldTimedWarning;
+    }
+    heldTimedWarning = null;
+    heldTimedWarningUntil = 0;
+    return null;
+  }
+
+  const nextPhase = timedWarning.phase || "";
+  const currentPhase = lastStableTimedPhase || "";
+
+  if (nextPhase !== currentPhase) {
+    if (now - lastPhaseChangeAt < 1800 && currentPhase) {
+      if (heldTimedWarning && now < heldTimedWarningUntil) {
+        return heldTimedWarning;
+      }
+    }
+    lastPhaseChangeAt = now;
+    lastStableTimedPhase = nextPhase;
+  }
+
+  heldTimedWarning = timedWarning;
+  heldTimedWarningUntil = now + 2500;
+
+  return heldTimedWarning;
+}
+
 function getUpcomingCondition(r, stepIndex) {
   const leg = r.route.legs[0];
   const steps = leg.steps;
   const upcoming = steps.slice(stepIndex, stepIndex + 5);
 
+  const timedWarning = getDriveTimedWarning(r, stepIndex);
+  if (timedWarning) {
+    return { type: timedWarning.phase === "now" ? "alert" : "warning", icon: timedWarning.icon, text: timedWarning.longText };
+  }
+
   const hasHighway = upcoming.some(s => stepLooksLikeHighway(s, r.route));
   const hasManyTurns = upcoming.filter(s => isMeaningfulManeuver(s, r.route)).length >= 3;
   const isNearEnd = stepIndex >= steps.length - 3;
 
-  if (r.traffic === "high") {
-    return { type: "warning", icon: "&#9888;", text: "Heavier traffic ahead" };
-  }
-  if (hasManyTurns) {
-    return { type: "warning", icon: "&#128260;", text: "Multiple turns ahead" };
-  }
-  if (isNearEnd) {
-    return { type: "stable", icon: "&#127937;", text: "Approaching destination" };
-  }
-  if (hasHighway) {
-    return { type: "stable", icon: "&#128739;", text: "Highway section ahead — smooth driving" };
-  }
-  if (r.traffic === "low") {
-    return { type: "stable", icon: "&#9728;", text: "Stable traffic ahead" };
-  }
+  if (r.traffic === "high") return { type: "warning", icon: "&#9888;", text: "Heavier traffic ahead" };
+  if (hasManyTurns)         return { type: "warning", icon: "&#128260;", text: "Multiple turns ahead" };
+  if (isNearEnd)            return { type: "stable",  icon: "&#127937;", text: "Approaching destination" };
+  if (hasHighway)           return { type: "stable",  icon: "&#128739;", text: "Highway section ahead — smooth driving" };
+  if (r.traffic === "low")  return { type: "stable",  icon: "&#9728;", text: "Stable traffic ahead" };
   return { type: "stable", icon: "&#9728;", text: "Moderate conditions ahead" };
 }
 
@@ -2021,14 +2285,256 @@ function evaluateReroute(currentRoute, allRoutes) {
   };
 }
 
+function getUserLatLngFromPosition(pos) {
+  return new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+}
+
+function getClosestStepIndex(userLatLng, steps, currentIndex = 0) {
+  let minDist = Infinity;
+  let bestIndex = currentIndex;
+
+  const from = Math.max(0, currentIndex - 1);
+  const to = Math.min(steps.length - 1, currentIndex + 3);
+
+  for (let i = from; i <= to; i++) {
+    const step = steps[i];
+    const points = [];
+    if (step.start_location) points.push(step.start_location);
+    if (step.end_location) points.push(step.end_location);
+
+    points.forEach(point => {
+      const d = google.maps.geometry.spherical.computeDistanceBetween(userLatLng, point);
+      if (d < minDist) {
+        minDist = d;
+        bestIndex = i;
+      }
+    });
+  }
+
+  return bestIndex;
+}
+
+function isUserOffRoute(userLatLng, route) {
+  const path = route.route.overview_path;
+  if (!path || !path.length) return false;
+  return !google.maps.geometry.poly.isLocationOnEdge(
+    userLatLng,
+    new google.maps.Polyline({ path }),
+    0.00045
+  );
+}
+
+function smoothUserPosition(newLatLng) {
+  if (!smoothedUserLatLng) {
+    smoothedUserLatLng = newLatLng;
+    return newLatLng;
+  }
+  const alpha = 0.35;
+  smoothedUserLatLng = new google.maps.LatLng(
+    smoothedUserLatLng.lat() + (newLatLng.lat() - smoothedUserLatLng.lat()) * alpha,
+    smoothedUserLatLng.lng() + (newLatLng.lng() - smoothedUserLatLng.lng()) * alpha
+  );
+  return smoothedUserLatLng;
+}
+
+function hasUserMoved(prevLatLng, nextLatLng) {
+  if (!prevLatLng || !nextLatLng) return true;
+  const d = google.maps.geometry.spherical.computeDistanceBetween(prevLatLng, nextLatLng);
+  return d > 8;
+}
+
+function getStableStepIndex(candidateIndex) {
+  const now = Date.now();
+  if (candidateIndex < currentStepIndex) return currentStepIndex;
+  if (candidateIndex > currentStepIndex + 1) candidateIndex = currentStepIndex + 1;
+  if (candidateIndex !== currentStepIndex) {
+    if (now - lastStepSwitchAt < 2500) return currentStepIndex;
+    lastStepSwitchAt = now;
+  }
+  lastStableStepIndex = candidateIndex;
+  return candidateIndex;
+}
+
+function updateDriveUserMarker(userLatLng) {
+  if (!driveMap) return;
+  if (!driveUserMarker) {
+    driveUserMarker = new google.maps.Marker({
+      position: userLatLng,
+      map: driveMap,
+      title: "You",
+      zIndex: 9999
+    });
+  } else {
+    driveUserMarker.setPosition(userLatLng);
+  }
+}
+
+function handleLiveDrivePosition(pos) {
+  if (!selectedRoute) return;
+
+  const rawLatLng = getUserLatLngFromPosition(pos);
+  const userLatLng = smoothUserPosition(rawLatLng);
+
+  if (!hasUserMoved(lastKnownUserLatLng, userLatLng)) {
+    updateDriveUserMarker(userLatLng);
+    return;
+  }
+
+  lastKnownUserLatLng = userLatLng;
+  updateDriveUserMarker(userLatLng);
+
+  const steps = selectedRoute.route.legs[0].steps;
+  const candidateIndex = getClosestStepIndex(userLatLng, steps, currentStepIndex);
+  const stableIndex = getStableStepIndex(candidateIndex);
+
+  if (stableIndex !== currentStepIndex) {
+    currentStepIndex = stableIndex;
+  }
+
+  updateDriveUI();
+
+  if (isUserOffRoute(userLatLng, selectedRoute)) {
+    if (!offRouteSince) offRouteSince = Date.now();
+    if (Date.now() - offRouteSince > 4000) {
+      handleOffRouteRecalculation(userLatLng);
+      offRouteSince = 0;
+      return;
+    }
+  } else {
+    offRouteSince = 0;
+  }
+
+  const now = Date.now();
+  if (currentStepIndex >= 2 && now - lastRerouteCheckAt > 15000) {
+    lastRerouteCheckAt = now;
+
+    const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
+
+    if (!reroute) {
+      _rerouteDecision = null;
+      betterRouteIndex = null;
+      dismissAlert();
+      return;
+    }
+
+    if (reroute.index !== betterRouteIndex) {
+      betterRouteIndex = reroute.index;
+      _rerouteDecision = reroute.decision;
+      renderDriveAlertDecision(reroute.decision, reroute.route);
+    }
+  }
+}
+
+function handleOffRouteRecalculation(userLatLng) {
+  betterRouteIndex = null;
+  _rerouteDecision = null;
+  dismissAlert();
+
+  const destination = document.getElementById("end").value.trim();
+  if (!destination || !directionsService) return;
+
+  directionsService.route({
+    origin: userLatLng,
+    destination,
+    travelMode: google.maps.TravelMode.DRIVING,
+    provideRouteAlternatives: true,
+    drivingOptions: {
+      departureTime: new Date(),
+      trafficModel: "bestguess"
+    }
+  }, (result, status) => {
+    if (status !== "OK" || !result.routes?.length) return;
+
+    currentDirectionsResult = result;
+
+    analyzedRoutes = result.routes.map((route, i) => {
+      const leg = route.legs[0];
+      const metrics = calculateRouteMetrics(route, leg, route);
+      return { route, index: i, displayIndex: i + 1, ...metrics };
+    });
+
+    analyzedRoutes = analyzedRoutes.map(r => {
+      const scoreData = calculateRouteScore(r, analyzedRoutes);
+      return { ...r, ...scoreData };
+    });
+
+    _bestRoute = selectBestRoute(analyzedRoutes);
+    _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+
+    analyzedRoutes.forEach(r => {
+      r.role = getRouteRole(r, _bestRoute, _fastestRoute, analyzedRoutes);
+    });
+
+    selectedRoute = _bestRoute;
+    currentStepIndex = 0;
+    betterRouteIndex = null;
+    _rerouteDecision = null;
+    offRouteSince = 0;
+    lastStepSwitchAt = 0;
+    lastStableStepIndex = 0;
+    smoothedUserLatLng = userLatLng;
+    dismissAlert();
+
+    if (driveRenderer) driveRenderer.setMap(null);
+
+    driveRenderer = new google.maps.DirectionsRenderer({
+      map: driveMap,
+      directions: currentDirectionsResult,
+      routeIndex: selectedRoute.index,
+      polylineOptions: {
+        strokeColor: "#2d6a4f",
+        strokeWeight: 6
+      }
+    });
+
+    updateDriveUI();
+  });
+}
+
+function startLiveDriveTracking() {
+  if (!navigator.geolocation) return;
+  stopLiveDriveTracking();
+  driveWatchId = navigator.geolocation.watchPosition(
+    handleLiveDrivePosition,
+    (err) => { console.error("Drive GPS error:", err); },
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 7000 }
+  );
+}
+
+function stopLiveDriveTracking() {
+  if (driveWatchId !== null) {
+    navigator.geolocation.clearWatch(driveWatchId);
+    driveWatchId = null;
+  }
+  smoothedUserLatLng = null;
+  offRouteSince = 0;
+  lastStepSwitchAt = 0;
+  lastStableStepIndex = 0;
+}
+
 function startDriveMode(index) {
   clearDelayedStartTimer();
+
   const r = analyzedRoutes.find(x => x.index === index);
   if (!r || !currentDirectionsResult) return;
 
   selectedRoute = r;
   currentStepIndex = 0;
   betterRouteIndex = null;
+  _rerouteDecision = null;
+  lastRerouteCheckAt = 0;
+  lastKnownUserLatLng = null;
+  offRouteSince = 0;
+  lastStepSwitchAt = 0;
+  lastStableStepIndex = 0;
+  smoothedUserLatLng = null;
+  lastWarningPhase = "";
+  lastSpokenText = "";
+  lastSpokenAt = 0;
+  heldTimedWarning = null;
+  heldTimedWarningUntil = 0;
+  lastPhaseChangeAt = 0;
+  lastStableTimedPhase = "";
 
   document.getElementById("drive-mode").classList.add("active");
 
@@ -2062,8 +2568,12 @@ function startDriveMode(index) {
   updateDriveUI();
   driveMap.fitBounds(r.route.bounds);
 
-  if (driveInterval) clearInterval(driveInterval);
-  driveInterval = setInterval(simulateDriveProgress, 5000);
+  if (driveInterval) {
+    clearInterval(driveInterval);
+    driveInterval = null;
+  }
+
+  startLiveDriveTracking();
 }
 
 function updateDriveUI() {
@@ -2071,19 +2581,38 @@ function updateDriveUI() {
   if (!r) return;
 
   const vm = buildDriveViewModel(r, currentStepIndex);
-  const condition = getUpcomingCondition(r, currentStepIndex);
+  let timedWarning = getDriveTimedWarning(r, currentStepIndex);
+  timedWarning = getHeldTimedWarning(timedWarning);
+
+  const condition = timedWarning
+    ? {
+        type: timedWarning.phase === "now" ? "alert" : "warning",
+        icon: timedWarning.icon,
+        text: timedWarning.longText
+      }
+    : getUpcomingCondition(r, currentStepIndex);
+
   const stress = getStressBadge(r.stressScore || 0);
 
   document.getElementById("drive-eta-time").textContent = vm.eta;
   document.getElementById("drive-distance").textContent = vm.distance;
   document.getElementById("drive-traffic").textContent = vm.trafficText;
-  document.getElementById("drive-next-instruction").textContent = vm.instruction;
-  document.getElementById("drive-next-distance").textContent = vm.instructionDistance;
+
+  document.getElementById("drive-next-instruction").textContent =
+    timedWarning ? timedWarning.shortText : vm.instruction;
+  document.getElementById("drive-next-distance").textContent =
+    timedWarning ? timedWarning.distanceText : vm.instructionDistance;
 
   let icon = "&#8593;";
-  if (vm.maneuver.includes("left")) icon = "&#8592;";
-  else if (vm.maneuver.includes("right")) icon = "&#8594;";
-  else if (vm.maneuver.includes("uturn")) icon = "&#8634;";
+  if (timedWarning?.icon) {
+    icon = timedWarning.icon;
+  } else if (vm.maneuver.includes("left")) {
+    icon = "&#8592;";
+  } else if (vm.maneuver.includes("right")) {
+    icon = "&#8594;";
+  } else if (vm.maneuver.includes("uturn")) {
+    icon = "&#8634;";
+  }
   document.getElementById("drive-next-icon").innerHTML = icon;
 
   const aheadIcon = document.getElementById("drive-ahead-icon");
@@ -2093,35 +2622,18 @@ function updateDriveUI() {
     `${condition.text} · ${stress.label.toLowerCase()} · ${r.drivePersonality || "steady drive"}`;
 
   document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
+
+  maybeSpeakDriveInstruction(vm, timedWarning);
+
+  if (timedWarning?.phase) {
+    lastWarningPhase = timedWarning.phase;
+  } else {
+    lastWarningPhase = "";
+  }
 }
 
 function simulateDriveProgress() {
-  if (!selectedRoute) return;
-
-  const leg = selectedRoute.route.legs[0];
-  const totalSteps = leg.steps.length;
-
-  if (currentStepIndex < totalSteps - 1) {
-    currentStepIndex++;
-    updateDriveUI();
-  }
-
-  if (currentStepIndex < 2) return;
-
-  const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
-
-  if (!reroute) {
-    _rerouteDecision = null;
-    betterRouteIndex = null;
-    dismissAlert();
-    return;
-  }
-
-  if (reroute.index !== betterRouteIndex) {
-    betterRouteIndex = reroute.index;
-    _rerouteDecision = reroute.decision;
-    renderDriveAlertDecision(reroute.decision, reroute.route);
-  }
+  // Day 5.5: disabled — replaced by GPS watchPosition in startLiveDriveTracking()
 }
 
 function showDriveAlert(message, benefit) {
@@ -2148,13 +2660,32 @@ function switchToAlternative() {
 
 function exitDriveMode() {
   clearDelayedStartTimer();
+  stopLiveDriveTracking();
+
+  if (driveUserMarker) {
+    driveUserMarker.setMap(null);
+    driveUserMarker = null;
+  }
+
   document.getElementById("drive-mode").classList.remove("active");
+
   if (driveInterval) {
     clearInterval(driveInterval);
     driveInterval = null;
   }
+
   currentStepIndex = 0;
   betterRouteIndex = null;
+  _rerouteDecision = null;
+  lastKnownUserLatLng = null;
+  lastWarningPhase = "";
+  lastSpokenText = "";
+  lastSpokenAt = 0;
+  heldTimedWarning = null;
+  heldTimedWarningUntil = 0;
+  lastPhaseChangeAt = 0;
+  lastStableTimedPhase = "";
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
 function startDrive(index) {
@@ -3177,7 +3708,7 @@ document.querySelectorAll(".filter-btn").forEach(b =>
 // ============================================================
 
 window.initMap = initMap;
-</script>    
+</script>  
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
