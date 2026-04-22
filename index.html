@@ -2980,7 +2980,7 @@ function tryAutoCurrentLocation() {
   const startInput = document.getElementById("start");
   if (!startInput) return;
   const existing = startInput.value.trim();
-  if (existing && existing !== "Dubai Marina") {
+  if (existing) {
     autoLocationTried = true;
     return;
   }
@@ -2988,7 +2988,14 @@ function tryAutoCurrentLocation() {
   if (autoLocationTried) return;
   autoLocationTried = true;
 
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) {
+    startInput.placeholder = "Enter your location";
+    return;
+  }
+
+  const gpsBtn = document.getElementById("gps-btn");
+  if (gpsBtn) gpsBtn.classList.add("gps-loading");
+  startInput.placeholder = "Detecting location…";
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
@@ -2997,9 +3004,8 @@ function tryAutoCurrentLocation() {
 
       currentUserCoords = { lat, lng };
 
-      const latLng = new google.maps.LatLng(lat, lng);
-
       if (map) {
+        const latLng = new google.maps.LatLng(lat, lng);
         map.panTo(latLng);
         if ((map.getZoom() || 0) < 14) map.setZoom(14);
       }
@@ -3007,30 +3013,31 @@ function tryAutoCurrentLocation() {
       try {
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (gpsBtn) gpsBtn.classList.remove("gps-loading");
+          startInput.placeholder = "Current location";
           if (status === "OK" && results && results[0]) {
             startInput.value = results[0].formatted_address;
           } else {
             startInput.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
           }
           const endValue = document.getElementById("end")?.value?.trim();
-          if (endValue) {
-            calculateRoutes();
-          }
+          if (endValue) calculateRoutes();
         });
       } catch (e) {
+        if (gpsBtn) gpsBtn.classList.remove("gps-loading");
+        startInput.placeholder = "Current location";
         startInput.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
         const endValue = document.getElementById("end")?.value?.trim();
-        if (endValue) {
-          calculateRoutes();
-        }
+        if (endValue) calculateRoutes();
       }
     },
     () => {
-      // silent fail: keep manual input if denied
+      if (gpsBtn) gpsBtn.classList.remove("gps-loading");
+      startInput.placeholder = "Location blocked — tap 📍";
     },
     {
       enableHighAccuracy: true,
-      timeout: 6000,
+      timeout: 10000,
       maximumAge: 30000
     }
   );
