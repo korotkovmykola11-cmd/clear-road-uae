@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -485,6 +485,16 @@
       .drive-lane-block.lane-alert .drive-lane-instruction { color:#f87171; }
       .drive-lane-distance { color:#94a3b8; font-size:11px; margin-top:2px; }
 
+      /* Complex interchange warning */
+      .drive-interchange-warn {
+        display:none; position:absolute; top:60px; left:16px; right:16px;
+        background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.40);
+        border-radius:12px; padding:10px 14px;
+        font-size:13px; font-weight:600; color:#fbbf24;
+        text-align:center;
+      }
+      .drive-interchange-warn.visible { display:block; }
+
       /* ===== MISC ===== */
       .hidden { display:none !important; }
       .loading { display:flex; align-items:center; justify-content:center; padding:40px; color:var(--text2); font-size:15px; }
@@ -648,6 +658,10 @@
       <div class="drive-ahead-text" id="drive-ahead-text" data-i18n="calculating">Calculating conditions...</div>
     </div>
 
+    <div class="drive-interchange-warn" id="drive-interchange-warn">
+      Complex interchange ahead — stay focused
+    </div>
+
     <div class="drive-alert" id="drive-alert">
       <div class="drive-alert-message" id="drive-alert-message"></div>
       <div class="drive-alert-actions">
@@ -752,13 +766,17 @@ let voiceEnabled = true;
       tw_now_straight:"Continue straight",
       ctx_uturn:"Prepare for U-turn ahead", ctx_left:"Turn left ahead",
       ctx_right:"Turn right ahead", ctx_keep_left:"Keep left ahead",
-      ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
-      ctx_merge:"Merge ahead",
+ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
+  ctx_fork:"Take the fork ahead", ctx_merge:"Merge ahead",
       lg_exit_now:"Take the exit now", lg_ramp_now:"Take the ramp now",
       lg_lane_now:"Use the correct lane now",
       lg_merge_prep:"Prepare to merge", lg_merge_soon:"Merge ahead", lg_merge_now:"Merge now",
       stress_smooth:"Smooth drive", stress_steady:"Steady drive",
-      stress_active:"Active drive", stress_stressful:"Stressful drive", stress_busy:"Busy route",
+      stress_active:"Active drive", stress_stressful:"Stressful drive",
+      interchange_warn:"Complex interchange ahead — stay focused",
+      lane_2left:"Use 2 left lanes", lane_2right:"Use 2 right lanes",
+      lane_left:"Use left lane", lane_right:"Use right lane",
+      lane_middle:"Stay in middle lanes", stress_busy:"Busy route",
       stab_very:"Very stable", stab_stable:"Stable", stab_moderate:"Moderate", stab_unpred:"Unpredictable",
       conf_high:"High", conf_medium:"Medium", conf_low:"Low",
       traf_stable:"stable", traf_moderate:"moderate", traf_heavy:"heavy",
@@ -809,7 +827,7 @@ let voiceEnabled = true;
       tw_now_straight:"Едьте прямо",
       ctx_uturn:"Подготовьтесь к развороту", ctx_left:"Поворот налево впереди",
       ctx_right:"Поворот направо впереди", ctx_keep_left:"Держитесь левее",
-      ctx_keep_right:"Держитесь правее", ctx_ramp:"Рампа впереди", ctx_merge:"Слияние впереди",
+      ctx_keep_right:"Держитесь правее", ctx_ramp:"Рампа впереди", ctx_fork:"Развилка впереди", ctx_merge:"Слияние впереди",
       lg_exit_now:"Съезжайте сейчас", lg_ramp_now:"Берите рампу сейчас",
       lg_lane_now:"Займите правильную полосу",
       lg_merge_prep:"Подготовьтесь к слиянию", lg_merge_soon:"Слияние впереди", lg_merge_now:"Вливайтесь сейчас",
@@ -865,7 +883,7 @@ let voiceEnabled = true;
       tw_now_straight:"Їдьте прямо",
       ctx_uturn:"Готуйтесь до розвороту", ctx_left:"Поворот ліворуч попереду",
       ctx_right:"Поворот праворуч попереду", ctx_keep_left:"Тримайтесь лівіше",
-      ctx_keep_right:"Тримайтесь правіше", ctx_ramp:"Рампа попереду", ctx_merge:"Злиття попереду",
+      ctx_keep_right:"Тримайтесь правіше", ctx_ramp:"Рампа попереду", ctx_fork:"Розвилка попереду", ctx_merge:"Злиття попереду",
       lg_exit_now:"З'їжджайте зараз", lg_ramp_now:"Беріть рампу зараз",
       lg_lane_now:"Займіть правильну смугу",
       lg_merge_prep:"Готуйтесь до злиття", lg_merge_soon:"Злиття попереду", lg_merge_now:"Вливайтесь зараз",
@@ -921,7 +939,7 @@ let voiceEnabled = true;
       tw_now_straight:"واصل مباشرة",
       ctx_uturn:"استعد للاستدارة قريبًا", ctx_left:"انعطاف يسار قريب",
       ctx_right:"انعطاف يمين قريب", ctx_keep_left:"ابق في المسار الأيسر",
-      ctx_keep_right:"ابق في المسار الأيمن", ctx_ramp:"المنحدر قريب", ctx_merge:"الاندماج قريب",
+      ctx_keep_right:"ابق في المسار الأيمن", ctx_ramp:"المنحدر قريب", ctx_fork:"مفترق الطرق قريب", ctx_merge:"الاندماج قريب",
       lg_exit_now:"اخرج الآن", lg_ramp_now:"خذ المنحدر الآن",
       lg_lane_now:"استخدم المسار الصحيح الآن",
       lg_merge_prep:"استعد للاندماج", lg_merge_soon:"الاندماج قريب", lg_merge_now:"اندمج الآن",
@@ -1711,37 +1729,71 @@ function getStepWarningMeta(step, route) {
   const text = html.toLowerCase();
   const maneuver = (step?.maneuver || "").toLowerCase();
   const roadText = normalizeRoadText(step, route);
-
+  
   const roadMatch =
-    roadText.match(/\bE311\b/) ||
-    roadText.match(/\bE11\b/) ||
-    roadText.match(/\bE611\b/);
+  roadText.match(/\bE311\b/) ||
+  roadText.match(/\bE11\b/) ||
+  roadText.match(/\bE611\b/) ||
+  roadText.match(/\bE66\b/) ||
+  roadText.match(/\bE44\b/) ||
+  roadText.match(/\bD\d+\b/);
   const roadName = roadMatch ? roadMatch[0] : getRouteSummaryName({ route });
 
+  // Enhanced lane hints
+  const laneHint = extractLaneHint(text);
+  
   if (maneuver.includes("uturn") || text.includes("u-turn"))
-    return { type: "uturn", icon: "↩", shortText: "U-turn ahead", longText: "Prepare for U-turn ahead" };
-  if (text.includes("keep right")) return { type: "lane",  icon: "↗", shortText: `Keep right for ${roadName}`,  longText: `Keep right ahead for exit toward ${roadName}` };
-  if (text.includes("keep left"))  return { type: "lane",  icon: "↖", shortText: `Keep left for ${roadName}`,   longText: `Keep left ahead toward ${roadName}` };
-  if (text.includes("exit"))       return { type: "exit",  icon: "⇢", shortText: `Exit ahead to ${roadName}`,   longText: `Prepare for exit toward ${roadName}` };
-  if (text.includes("ramp"))       return { type: "ramp",  icon: "⇗", shortText: `Ramp ahead to ${roadName}`,   longText: `Take the ramp ahead toward ${roadName}` };
-  if (text.includes("merge"))      return { type: "merge", icon: "⇄", shortText: `Merge ahead`,                 longText: `Merge carefully ahead` };
+    return { type: "uturn", icon: "↩", shortText: "U-turn ahead", longText: "Prepare for U-turn ahead", laneHint };
+  if (text.includes("fork right") || maneuver.includes("fork-right")) 
+    return { type: "fork", icon: "⤴", shortText: `Fork right to ${roadName}`, longText: `Take the right fork toward ${roadName}`, laneHint: laneHint || "Use right lanes" };
+  if (text.includes("fork left") || maneuver.includes("fork-left"))
+    return { type: "fork", icon: "⤳", shortText: `Fork left to ${roadName}`, longText: `Take the left fork toward ${roadName}`, laneHint: laneHint || "Use left lanes" };
+  if (text.includes("keep right")) return { type: "lane",  icon: "↗", shortText: `Keep right for ${roadName}`,  longText: `Keep right ahead for exit toward ${roadName}`, laneHint: laneHint || "Use right lanes" };
+  if (text.includes("keep left"))  return { type: "lane",  icon: "↖", shortText: `Keep left for ${roadName}`,   longText: `Keep left ahead toward ${roadName}`, laneHint: laneHint || "Use left lanes" };
+  if (text.includes("exit"))       return { type: "exit",  icon: "⇢", shortText: `Exit ahead to ${roadName}`,   longText: `Prepare for exit toward ${roadName}`, laneHint: laneHint || "Move to exit lane" };
+  if (text.includes("ramp"))       return { type: "ramp",  icon: "⇗", shortText: `Ramp ahead to ${roadName}`,   longText: `Take the ramp ahead toward ${roadName}`, laneHint: laneHint || "Use right lane" };
+  if (text.includes("merge"))      return { type: "merge", icon: "⇄", shortText: `Merge ahead`,                 longText: `Merge carefully ahead`, laneHint: "Watch for merging traffic" };
+  return null;
+}
+
+function extractLaneHint(text) {
+  // Try to extract lane info from instruction text
+  if (text.includes("3 left lanes") || text.includes("three left"))   return "Use 3 left lanes";
+  if (text.includes("3 right lanes") || text.includes("three right")) return "Use 3 right lanes";
+  if (text.includes("2 left lanes") || text.includes("two left"))     return "Use 2 left lanes";
+  if (text.includes("2 right lanes") || text.includes("two right"))   return "Use 2 right lanes";
+  if (text.includes("leftmost lane"))    return "Use leftmost lane";
+  if (text.includes("rightmost lane"))   return "Use rightmost lane";
+  if (text.includes("left lane"))        return "Use left lane";
+  if (text.includes("right lane"))       return "Use right lane";
+  if (text.includes("middle lane") || text.includes("center lane"))  return "Stay in middle lanes";
+  if (text.includes("any lane"))         return "Any lane";
+  if (text.includes("stay in lane"))     return "Stay in lane";
   return null;
 }
 
 function isComplexInterchangeAhead(steps, currentStepIndex, route) {
-  const lookahead = steps.slice(currentStepIndex, currentStepIndex + 4);
-  const specialCount = lookahead.filter(step => {
-    const text = stripHtml(step?.html_instructions || "").toLowerCase();
-    return (
-      text.includes("exit") ||
-      text.includes("keep right") ||
-      text.includes("keep left") ||
-      text.includes("ramp") ||
-      text.includes("merge")
-    );
-  }).length;
-  const hasHighway = lookahead.some(step => stepLooksLikeHighway(step, route));
-  return hasHighway && specialCount >= 2;
+  let complex = false;
+  let count = 0;
+
+  for (let i = currentStepIndex; i < currentStepIndex + 3; i++) {
+    if (!steps[i]) continue;
+    let text = steps[i].instructions ? steps[i].instructions.toLowerCase() : (stripHtml(steps[i]?.html_instructions || "").toLowerCase());
+    if (text.includes("exit") || text.includes("ramp") || text.includes("merge")) {
+      count++;
+    }
+  }
+
+  if (count >= 2) complex = true;
+
+  return complex;
+}
+
+function showInterchangeWarning() {
+  const interchangeWarn = document.getElementById("drive-interchange-warn");
+  if (interchangeWarn) {
+    interchangeWarn.classList.add("visible");
+  }
 }
 
 function getDrivePriorityWarning(r, stepIndex, userLatLng) {
@@ -1994,10 +2046,30 @@ function buildContextAwareVoicePrompt(step, phase) {
   return t("tw_now_straight");
 }
 
-function speakDriveInstruction(step, phase) {
+function getPriority(type) {
+  if (type === "exit") return 5;
+  if (type === "ramp") return 4;
+  if (type === "merge") return 3;
+  if (type === "lane") return 2;
+  return 1;
+}
+
+let _currentHighestPriority = 0;
+
+function speakDriveInstruction(step, phase, instructionType) {
   if (!voiceEnabled || !step) return;
   const text = buildContextAwareVoicePrompt(step, phase);
+  
+  // TASK 3: Kill straight voice
+  if (text && text.toLowerCase().includes("straight")) return;
+  
   if (!text || text === "Continue straight") return;
+  
+  // TASK 2: Priority system - only show instruction if it's highest priority
+  const priority = getPriority(instructionType);
+  if (priority < _currentHighestPriority) return;
+  _currentHighestPriority = priority;
+  
   const now = Date.now();
   if (Date.now() - lastSpokenAt < 3500 && lastSpokenText === text) return;
   if (text === lastSpokenText && now - lastSpokenAt < 4500) return;
@@ -2011,6 +2083,23 @@ function speakDriveInstruction(step, phase) {
   } catch (e) { console.warn("speech failed", e); }
 }
 
+let _lastInterchangeWarningAt = 0;
+
+function speakInterchangeWarning() {
+  const now = Date.now();
+  if (now - _lastInterchangeWarningAt < 30000) return; // Don't repeat within 30s
+  _lastInterchangeWarningAt = now;
+  
+  try {
+    if ("speechSynthesis" in window) {
+      const text = t("interchange_warn") || "Complex interchange ahead. Stay focused.";
+      const utter = new SpeechSynthesisUtterance(normalizeVoiceText(text));
+      utter.rate = 0.95; utter.pitch = 1.0; utter.lang = voiceLang();
+      window.speechSynthesis.speak(utter);
+    }
+  } catch (e) { console.warn("interchange voice failed", e); }
+}
+
 function getVoicePromptFromManeuver(vm) {
   if (!vm) return "";
   const m = (vm.maneuver || "").toLowerCase();
@@ -2021,6 +2110,7 @@ function getVoicePromptFromManeuver(vm) {
   if (m.includes("keep-left"))  return t("ctx_keep_left");
   if (m.includes("keep-right")) return t("ctx_keep_right");
   if (m.includes("ramp"))       return t("ctx_ramp");
+  if (m.includes("fork"))       return t("ctx_fork") || "Take the fork";
   if (m.includes("merge"))      return t("ctx_merge");
   return stripHtml(vm.instruction || "");
 }
@@ -2092,22 +2182,33 @@ function getHeldTimedWarning(timedWarning) {
 function buildLaneGuidanceText(meta, phase) {
   const type = meta?.type || "";
   const base = meta?.shortText || "";
+  const laneHint = meta?.laneHint || "";
 
   if (type === "exit") {
-    if (phase === "prepare") return base.replace("ahead", "").trim();
-    if (phase === "soon")    return base;
+    if (phase === "prepare") return laneHint ? `${laneHint} — exit ahead` : base.replace("ahead", "").trim();
+    if (phase === "soon")    return laneHint ? `${laneHint} — exit soon` : base;
     if (phase === "now")     return t("lg_exit_now");
   }
 
   if (type === "ramp") {
-    if (phase === "prepare") return base.replace("ahead", "").trim();
-    if (phase === "soon")    return base;
+    if (phase === "prepare") return laneHint ? `${laneHint} — ramp ahead` : base.replace("ahead", "").trim();
+    if (phase === "soon")    return laneHint ? `${laneHint} — ramp soon` : base;
     if (phase === "now")     return t("lg_ramp_now");
   }
 
+  if (type === "fork") {
+    if (phase === "prepare") return laneHint ? `${laneHint} — fork ahead` : base;
+    if (phase === "soon")    return laneHint ? `${laneHint} — fork soon` : base;
+    if (phase === "now") {
+      if (base.toLowerCase().includes("left"))  return "Fork left now";
+      if (base.toLowerCase().includes("right")) return "Fork right now";
+      return "Take the fork now";
+    }
+  }
+
   if (type === "lane") {
-    if (phase === "prepare") return base;
-    if (phase === "soon")    return base;
+    if (phase === "prepare") return laneHint || base;
+    if (phase === "soon")    return laneHint || base;
     if (phase === "now") {
       if (base.toLowerCase().includes("left"))  return "Keep left now";
       if (base.toLowerCase().includes("right")) return "Keep right now";
@@ -2116,12 +2217,12 @@ function buildLaneGuidanceText(meta, phase) {
   }
 
   if (type === "merge") {
-    if (phase === "prepare") return "Prepare to merge";
-    if (phase === "soon")    return "Merge ahead";
+    if (phase === "prepare") return laneHint || "Prepare to merge";
+    if (phase === "soon")    return laneHint || "Merge ahead";
     if (phase === "now")     return "Merge now";
   }
 
-  return base;
+  return laneHint || base;
 }
 
 function getDriveLaneGuidance(r, stepIndex, userLatLng) {
@@ -2136,16 +2237,16 @@ function getDriveLaneGuidance(r, stepIndex, userLatLng) {
     const meta = getStepWarningMeta(step, r.route);
     if (!meta) continue;
 
-    if (!["lane", "exit", "ramp", "merge"].includes(meta.type)) continue;
+    if (!["lane", "exit", "ramp", "merge", "fork"].includes(meta.type)) continue;
 
     const meters = getDistanceToStepEndMeters(step, ulng);
     const phase = getWarningPhaseForType(meters, meta.type);
     if (phase === "none") continue;
 
-    const priority =
-      meta.type === "exit" || meta.type === "ramp" ? 3 :
-      meta.type === "lane" ? 2 :
-      meta.type === "merge" ? 1 : 0;
+  const priority =
+  meta.type === "exit" || meta.type === "ramp" || meta.type === "fork" ? 3 :
+  meta.type === "lane" ? 2 :
+  meta.type === "merge" ? 1 : 0;
 
     candidates.push({
       stepIndex: i,
@@ -2797,14 +2898,38 @@ function updateDriveUI() {
 
   document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
 
+  // Complex interchange warning (TASK 4)
+  const steps = r.route.legs[0].steps;
+  const interchangeWarn = document.getElementById("drive-interchange-warn");
+  if (interchangeWarn) {
+    const isComplex = isComplexInterchangeAhead(steps, currentStepIndex, r.route);
+    const wasVisible = interchangeWarn.classList.contains("visible");
+    
+    if (isComplex) {
+      showInterchangeWarning();
+    } else {
+      interchangeWarn.classList.remove("visible");
+    }
+    
+    // Voice alert when entering complex interchange (only once)
+    if (isComplex && !wasVisible && voiceEnabled) {
+      speakInterchangeWarning();
+    }
+  }
+
   // Lane guidance block — driven by getDriveLaneGuidance (priority: exit/ramp > lane > merge)
   const laneBlock       = document.getElementById("drive-lane-block");
   const laneIcon        = document.getElementById("drive-lane-icon");
   const laneInstruction = document.getElementById("drive-lane-instruction");
   const laneDistance    = document.getElementById("drive-lane-distance");
 
+  // TASK 5: Lane Display Control — show ONLY when phase is "soon" or "now" AND instruction is exit/ramp/merge
   if (laneBlock && laneIcon && laneInstruction && laneDistance) {
-    if (laneGuidance) {
+    const shouldShowLane = laneGuidance && 
+      (laneGuidance.phase === "soon" || laneGuidance.phase === "now") &&
+      ["exit", "ramp", "merge"].includes(laneGuidance.type);
+    
+    if (shouldShowLane) {
       laneBlock.style.display = "flex";
       laneBlock.className = "drive-lane-block";
 
@@ -2825,14 +2950,17 @@ function updateDriveUI() {
     }
   }
 
+  // Reset priority at start of each update cycle
+  _currentHighestPriority = 0;
+
   // Voice — ONE engine, priority: exit/ramp > lane/merge > timedWarning > none
   const currentStep = selectedRoute?.route?.legs?.[0]?.steps?.[currentStepIndex];
   if (laneGuidance && ["exit", "ramp"].includes(laneGuidance.type)) {
-    speakDriveInstruction(currentStep, laneGuidance.phase);
+    speakDriveInstruction(currentStep, laneGuidance.phase, laneGuidance.type);
   } else if (laneGuidance && ["lane", "merge"].includes(laneGuidance.type)) {
-    speakDriveInstruction(currentStep, laneGuidance.phase);
+    speakDriveInstruction(currentStep, laneGuidance.phase, laneGuidance.type);
   } else if (timedWarning) {
-    speakDriveInstruction(currentStep, timedWarning.phase);
+    speakDriveInstruction(currentStep, timedWarning.phase, timedWarning.type);
   }
   // else: no speech on straight segments — silence is better than spam
 
@@ -3283,36 +3411,15 @@ function getUpcomingMeaningfulStep(steps, currentIndex, routeObj) {
 
 function getWarningPhaseForType(distanceMeters, type = "") {
   if (distanceMeters == null) return "none";
+  
+  let phase = "";
 
-  // EXIT / RAMP — предупреждать раньше всех
-  if (type === "exit" || type === "ramp") {
-    if (distanceMeters <= 100) return "now";
-    if (distanceMeters <= 500) return "soon";
-    if (distanceMeters <= 1200) return "prepare";
-    return "none";
-  }
+  if (distanceMeters > 800) phase = "prepare";
+  else if (distanceMeters > 300) phase = "soon";
+  else if (distanceMeters > 80) phase = "now";
+  else return "none"; // ignore too late
 
-  // LANE / MERGE — ближе, чем exit
-  if (type === "lane" || type === "merge") {
-    if (distanceMeters <= 80) return "now";
-    if (distanceMeters <= 300) return "soon";
-    if (distanceMeters <= 700) return "prepare";
-    return "none";
-  }
-
-  // U-TURN — отдельные более консервативные пороги
-  if (type === "uturn") {
-    if (distanceMeters <= 60) return "now";
-    if (distanceMeters <= 180) return "soon";
-    if (distanceMeters <= 350) return "prepare";
-    return "none";
-  }
-
-  // default
-  if (distanceMeters <= 50) return "now";
-  if (distanceMeters <= 150) return "soon";
-  if (distanceMeters <= 300) return "prepare";
-  return "none";
+  return phase;
 }
 
 // ============================================================
