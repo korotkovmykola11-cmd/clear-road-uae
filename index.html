@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -2833,9 +2833,8 @@ function updateDriveUI() {
     speakDriveInstruction(currentStep, laneGuidance.phase);
   } else if (timedWarning) {
     speakDriveInstruction(currentStep, timedWarning.phase);
-  } else {
-    speakDriveInstruction(currentStep, "none");
   }
+  // else: no speech on straight segments — silence is better than spam
 
   lastWarningPhase = timedWarning?.phase || "";
 }
