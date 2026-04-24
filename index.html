@@ -4749,6 +4749,10 @@ window.initMap = initMap;
 //  ТЗ-1 PATCH — ROUTE DECISION CORE LOCK
 //  Scope: no redesign, no CSS/layout changes. Logic only.
 // ============================================================
+// ============================================================
+//  ТЗ-2: Decision Engine Strengthening
+//  Scope: score + WHY + trade-off only. No redesign/CSS/layout changes.
+// ============================================================
 function _tz1Minutes(route) {
   if (!route) return 0;
   if (typeof route.durationMin === "number") return route.durationMin;
@@ -4780,87 +4784,188 @@ function _tz1RouteName(route) {
   }
 }
 
-function _tz1BuildWhy(best, routes) {
-  const others = (routes || []).filter(function(r) { return r && best && r.index !== best.index; });
-  const road = _tz1RouteName(best);
+function _tz2Number(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function _tz2Delay(route) {
+  return Math.max(0, _tz2Number(route && route.delayMinutes, 0));
+}
+
+function _tz2Complexity(route) {
+  return Math.max(0, _tz2Number(route && route.complexity, 0));
+}
+
+function _tz2Turns(route) {
+  return Math.max(0, _tz2Number(route && (route.turnsCount || route.stopsCount || route.complexity), 0));
+}
+
+function _tz2TollCost(route) {
+  return Math.max(0, _tz2Number(route && (route.tollCost || (route.hasToll ? 4 : 0)), 0));
+}
+
+function _tz2HighwayShare(route) {
+  return Math.max(0, Math.min(1, _tz2Number(route && route.highwayShare, 0)));
+}
+
+function _tz2TrafficLabel(route) {
+  const rank = _tz1TrafficRank(route && route.traffic);
+  if (rank <= 1) return "light traffic";
+  if (rank === 2) return "moderate traffic";
+  return "heavy traffic";
+}
+
+function _tz2BuildScoreBreakdown(route) {
+  const durationMin = _tz1Minutes(route);
+  const trafficRank = _tz1TrafficRank(route && route.traffic);
+  const delayMin = _tz2Delay(route);
+  const turns = _tz2Turns(route);
+  const complexity = _tz2Complexity(route);
+  const tollCost = _tz2TollCost(route);
+  const highwayShare = _tz2HighwayShare(route);
+  const stressScore = typeof calculateDriveStress === "function" ? calculateDriveStress(route) : 0;
+
+  const timeCost = durationMin;
+  const trafficPenalty = trafficRank * 4 + delayMin * 1.7;
+  const complexityPenalty = complexity * 1.35;
+  const turnsPenalty = turns * 0.55;
+  const tollPenalty = tollCost > 0 ? 4 + Math.min(8, tollCost * 0.45) : 0;
+  const stressPenalty = stressScore ? stressScore * 0.65 : 0;
+  const stabilityBonus = highwayShare >= 0.45 && trafficRank <= 2 ? -3 : highwayShare < 0.2 && complexity > 8 ? 2 : 0;
+
+  const total = timeCost + trafficPenalty + complexityPenalty + turnsPenalty + tollPenalty + stressPenalty + stabilityBonus;
+  const stabilityScore = Math.max(0, Math.min(100, Math.round(100 - trafficRank * 11 - delayMin * 2.2 - complexity * 1.6 - turns * 0.55 + highwayShare * 12)));
+
+  return {
+    timeCost,
+    trafficPenalty,
+    complexityPenalty,
+    turnsPenalty,
+    tollPenalty,
+    stressPenalty,
+    stabilityBonus,
+    total,
+    stabilityScore,
+    durationMin,
+    trafficRank,
+    delayMin,
+    turns,
+    complexity,
+    tollCost,
+    highwayShare,
+    stressScore
+  };
+}
+
+function _tz2CompareMetric(best, others, getter, direction) {
+  if (!best || !others || !others.length) return null;
+  const bestValue = getter(best);
+  const values = others.map(getter).filter(Number.isFinite);
+  if (!values.length) return null;
+  const target = direction === "lower" ? Math.min.apply(null, values) : Math.max.apply(null, values);
+  return { bestValue, target, diff: direction === "lower" ? target - bestValue : bestValue - target };
+}
+
+function _tz2BuildWhy(best, routes) {
   if (!best) return "Route is being calculated";
+  const others = (routes || []).filter(function(r) { return r && r.index !== best.index; });
+  const road = _tz1RouteName(best);
   if (!others.length) return "Best available route via " + road;
 
-  const bestMin = _tz1Minutes(best);
-  const bestTraffic = _tz1TrafficRank(best.traffic);
-  const bestDelay = best.delayMinutes || 0;
-  const bestStops = best.stopsCount || best.complexity || 0;
-  const bestComplexity = best.complexity || 0;
-
-  const fastestOther = others.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
-  const minOtherTraffic = Math.min.apply(null, others.map(function(r) { return _tz1TrafficRank(r.traffic); }));
-  const minOtherDelay = Math.min.apply(null, others.map(function(r) { return r.delayMinutes || 0; }));
-  const minOtherStops = Math.min.apply(null, others.map(function(r) { return r.stopsCount || r.complexity || 0; }));
-  const minOtherComplexity = Math.min.apply(null, others.map(function(r) { return r.complexity || 0; }));
-
   const reasons = [];
+  const time = _tz2CompareMetric(best, others, _tz1Minutes, "lower");
+  const delay = _tz2CompareMetric(best, others, _tz2Delay, "lower");
+  const traffic = _tz2CompareMetric(best, others, function(r) { return _tz1TrafficRank(r.traffic); }, "lower");
+  const turns = _tz2CompareMetric(best, others, _tz2Turns, "lower");
+  const tolls = _tz2CompareMetric(best, others, _tz2TollCost, "lower");
+  const stability = _tz2CompareMetric(best, others, function(r) { return _tz2BuildScoreBreakdown(r).stabilityScore; }, "higher");
 
-  if (fastestOther && bestMin <= _tz1Minutes(fastestOther)) {
-    const gain = _tz1Minutes(fastestOther) - bestMin;
-    reasons.push(gain > 0 ? gain + " min faster" : "Fastest option");
-  }
-
-  if (bestTraffic < minOtherTraffic) reasons.push("less traffic");
-  if (bestDelay + 1 < minOtherDelay) reasons.push("less delay");
-  if (bestStops < minOtherStops) reasons.push("fewer stops");
-  if (bestComplexity < minOtherComplexity) reasons.push("simpler drive");
-
-  if (best.tollCost === 0 && others.some(function(r) { return (r.tollCost || 0) > 0 && Math.abs(_tz1Minutes(r) - bestMin) <= 3; })) {
-    reasons.push("no tolls");
-  }
+  if (time && time.diff >= 2) reasons.push(time.diff + " min faster");
+  if (traffic && traffic.diff >= 1) reasons.push("lighter traffic");
+  if (delay && delay.diff >= 3) reasons.push(delay.diff + " min less delay");
+  if (turns && turns.diff >= 3) reasons.push("fewer turns");
+  if (tolls && tolls.diff > 0) reasons.push("lower toll cost");
+  if (stability && stability.diff >= 8) reasons.push("more stable flow");
 
   if (!reasons.length) {
-    reasons.push("best overall balance");
+    const b = _tz2BuildScoreBreakdown(best);
+    if (b.tollCost === 0 && others.some(function(r) { return _tz2TollCost(r) > 0 && Math.abs(_tz1Minutes(r) - b.durationMin) <= 4; })) {
+      reasons.push("no tolls with similar ETA");
+    } else if (b.highwayShare >= 0.45 && b.trafficRank <= 2) {
+      reasons.push("stable highway flow");
+    } else {
+      reasons.push("best overall balance");
+    }
   }
 
   return reasons.slice(0, 2).join(" · ") + " via " + road;
 }
 
+function _tz2BuildTradeOff(route, best, routes) {
+  if (!route) return "";
+  const others = (routes || []).filter(function(r) { return r && r.index !== route.index; });
+  const fastest = (routes || []).slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
+  const lowestToll = (routes || []).slice().sort(function(a, b) { return _tz2TollCost(a) - _tz2TollCost(b); })[0];
+  const simplest = (routes || []).slice().sort(function(a, b) { return _tz2Turns(a) - _tz2Turns(b); })[0];
+  const currentMin = _tz1Minutes(route);
+
+  if (fastest && route.index !== fastest.index) {
+    const extra = currentMin - _tz1Minutes(fastest);
+    if (extra > 0 && extra <= 5 && _tz2Turns(route) + 2 < _tz2Turns(fastest)) return "+" + extra + " min, but simpler drive";
+    if (extra > 0 && _tz2TollCost(route) < _tz2TollCost(fastest)) return "+" + extra + " min, but lower tolls";
+  }
+
+  if (lowestToll && route.index === lowestToll.index && _tz2TollCost(route) === 0 && fastest && fastest.index !== route.index) {
+    const extra = currentMin - _tz1Minutes(fastest);
+    if (extra > 0) return "No tolls, but +" + extra + " min";
+  }
+
+  if (simplest && route.index === simplest.index && fastest && fastest.index !== route.index) {
+    const extra = currentMin - _tz1Minutes(fastest);
+    if (extra > 0 && extra <= 4) return "Slightly longer, but calmer";
+  }
+
+  if (best && route.index === best.index && others.length) {
+    const second = others.slice().sort(function(a, b) { return (a.score || 0) - (b.score || 0); })[0];
+    if (second) {
+      const diff = _tz1Minutes(route) - _tz1Minutes(second);
+      if (diff < 0 && _tz2Turns(route) > _tz2Turns(second) + 2) return "Faster, but more turns";
+      if (diff <= 1 && _tz2TollCost(route) > _tz2TollCost(second)) return "Best balance, but tolls apply";
+    }
+  }
+
+  return "Balanced time, traffic and driving effort";
+}
+
 function calculateRouteScore(r, allRoutes) {
-  const durationMin = _tz1Minutes(r);
-  const trafficLevel = _tz1TrafficRank(r.traffic);
-  const stopsCount = r.stopsCount || r.complexity || 0;
-  const incidentsCount = r.incidentsCount || (r.delayMinutes >= 8 ? 1 : 0);
-  const complexity = r.complexity || 0;
-  const tolls = !!(r.hasToll || (r.tollCost || 0) > 0);
-
-  const trafficPenalty = trafficLevel * 3;
-  const stopsPenalty = stopsCount * 1.2;
-  const incidentsPenalty = incidentsCount * 4;
-  const complexityPenalty = complexity * 1.4;
-  const tollPenalty = tolls ? 3 : 0;
-  const delayPenalty = (r.delayMinutes || 0) * 1.8;
-  const highwayStabilityBonus = (r.highwayShare || 0) >= 0.45 ? -2 : 0;
-
-  const stressScore = typeof calculateDriveStress === "function" ? calculateDriveStress(r) : Math.round((trafficPenalty + complexityPenalty + delayPenalty) * 10) / 10;
-  const score = durationMin + trafficPenalty + stopsPenalty + incidentsPenalty + complexityPenalty + tollPenalty + delayPenalty + highwayStabilityBonus;
-  const stabilityScore = Math.max(0, Math.min(100, Math.round(100 - trafficPenalty * 4 - delayPenalty * 2 - complexityPenalty * 1.5)));
+  const breakdown = _tz2BuildScoreBreakdown(r);
+  const score = Math.round(breakdown.total * 10) / 10;
+  const tolls = breakdown.tollCost > 0;
 
   return {
     id: r.id || ("route-" + r.index),
     googleRouteIndex: r.index,
     title: _tz1RouteName(r),
-    durationMin,
+    durationMin: breakdown.durationMin,
     distanceKm: r.distance ? Math.round((r.distance / 1000) * 10) / 10 : 0,
-    trafficLevel,
-    stopsCount,
-    incidentsCount,
+    trafficLevel: breakdown.trafficRank,
+    trafficLabel: _tz2TrafficLabel(r),
+    stopsCount: breakdown.turns,
+    turnsCount: breakdown.turns,
+    incidentsCount: breakdown.delayMin >= 8 ? 1 : 0,
     tolls,
     score,
-    trafficPenalty,
-    stopsPenalty,
-    incidentsPenalty,
-    complexityPenalty,
-    tollPenalty,
-    delayPenalty,
-    stressScore,
-    drivePersonality: typeof getDrivePersonality === "function" ? getDrivePersonality({ ...r, stressScore }) : "Steady drive",
-    stabilityScore
+    scoreBreakdown: breakdown,
+    trafficPenalty: breakdown.trafficPenalty,
+    stopsPenalty: breakdown.turnsPenalty,
+    incidentsPenalty: breakdown.delayMin >= 8 ? 4 : 0,
+    complexityPenalty: breakdown.complexityPenalty,
+    tollPenalty: breakdown.tollPenalty,
+    delayPenalty: breakdown.delayMin * 1.7,
+    stressScore: breakdown.stressScore,
+    drivePersonality: typeof getDrivePersonality === "function" ? getDrivePersonality({ ...r, stressScore: breakdown.stressScore }) : "Steady drive",
+    stabilityScore: breakdown.stabilityScore
   };
 }
 
@@ -4868,9 +4973,7 @@ function selectBestRoute(routes) {
   if (!Array.isArray(routes) || !routes.length) return null;
 
   const scoredRoutes = routes.map(function(route) {
-    if (typeof route.score !== "number") {
-      Object.assign(route, calculateRouteScore(route, routes));
-    }
+    Object.assign(route, calculateRouteScore(route, routes));
     return route;
   });
 
@@ -4878,10 +4981,10 @@ function selectBestRoute(routes) {
   const safeFilters = typeof userFilters === "object" && userFilters ? userFilters : {};
 
   const ranked = scoredRoutes.slice().sort(function(a, b) {
-    const prefPenaltyA = pref === "fastest" ? _tz1Minutes(a) : pref === "no_tolls" && a.tolls ? 10 : 0;
-    const prefPenaltyB = pref === "fastest" ? _tz1Minutes(b) : pref === "no_tolls" && b.tolls ? 10 : 0;
-    const filterPenaltyA = (safeFilters.avoid_highways && a.highway ? 6 : 0) + (safeFilters.fewer_turns ? (a.complexity || 0) * 0.5 : 0);
-    const filterPenaltyB = (safeFilters.avoid_highways && b.highway ? 6 : 0) + (safeFilters.fewer_turns ? (b.complexity || 0) * 0.5 : 0);
+    const prefPenaltyA = pref === "fastest" ? _tz1Minutes(a) * 0.7 : pref === "no_tolls" && a.tolls ? 18 : 0;
+    const prefPenaltyB = pref === "fastest" ? _tz1Minutes(b) * 0.7 : pref === "no_tolls" && b.tolls ? 18 : 0;
+    const filterPenaltyA = (safeFilters.avoid_highways && a.highway ? 8 : 0) + (safeFilters.fewer_turns ? _tz2Turns(a) * 0.8 : 0);
+    const filterPenaltyB = (safeFilters.avoid_highways && b.highway ? 8 : 0) + (safeFilters.fewer_turns ? _tz2Turns(b) * 0.8 : 0);
     return (a.score + prefPenaltyA + filterPenaltyA) - (b.score + prefPenaltyB + filterPenaltyB) || _tz1Minutes(a) - _tz1Minutes(b);
   });
 
@@ -4897,16 +5000,17 @@ function calculateConfidence(best, allRoutes) {
   const scoreDiff = Math.abs((second.score || 0) - (best.score || 0));
   const timeDiff = Math.abs(_tz1Minutes(second) - _tz1Minutes(best));
   const trafficDiff = Math.abs(_tz1TrafficRank(second.traffic) - _tz1TrafficRank(best.traffic));
+  const stabilityDiff = Math.abs((second.stabilityScore || 0) - (best.stabilityScore || 0));
 
-  if (scoreDiff >= 10 || (timeDiff >= 5 && trafficDiff >= 1)) return "HIGH";
-  if (scoreDiff >= 5 || timeDiff >= 3 || trafficDiff >= 1) return "MEDIUM";
+  if (scoreDiff >= 12 || (timeDiff >= 5 && trafficDiff >= 1) || stabilityDiff >= 18) return "HIGH";
+  if (scoreDiff >= 6 || timeDiff >= 3 || trafficDiff >= 1 || stabilityDiff >= 10) return "MEDIUM";
   return "LOW";
 }
 
 function _tz1ConfidencePercent(level) {
-  if (level === "HIGH") return 88;
-  if (level === "MEDIUM") return 68;
-  return 52;
+  if (level === "HIGH") return 90;
+  if (level === "MEDIUM") return 70;
+  return 55;
 }
 
 function renderResults() {
@@ -4922,7 +5026,6 @@ function renderResults() {
 
   if (quickAccess) quickAccess.classList.add("hidden");
 
-  // ТЗ-1: always recompute scores, keep ALL routes, select best separately.
   analyzedRoutes = analyzedRoutes.map(function(route) {
     return Object.assign(route, calculateRouteScore(route, analyzedRoutes));
   });
@@ -4932,7 +5035,8 @@ function renderResults() {
   selectedRoute = _bestRoute;
 
   analyzedRoutes.forEach(function(route) {
-    route.why = _tz1BuildWhy(route, analyzedRoutes);
+    route.why = _tz2BuildWhy(route, analyzedRoutes);
+    route.tradeOff = _tz2BuildTradeOff(route, _bestRoute, analyzedRoutes);
     route.confidence = calculateConfidence(route, analyzedRoutes);
     if (typeof getRouteRole === "function" && _bestRoute && _fastestRoute) {
       route.role = getRouteRole(route, _bestRoute, _fastestRoute, analyzedRoutes);
@@ -4951,7 +5055,8 @@ function renderResults() {
   const confPct = _tz1ConfidencePercent(conf);
   const routeName = _tz1RouteName(best);
   const distKm = best.distanceKm || (best.distance ? Math.round((best.distance / 1000) * 10) / 10 : 0);
-  const whyLine = _tz1BuildWhy(best, analyzedRoutes);
+  const whyLine = best.why || _tz2BuildWhy(best, analyzedRoutes);
+  const tradeOff = best.tradeOff || _tz2BuildTradeOff(best, best, analyzedRoutes);
   const now = new Date();
   const arrival = new Date(now.getTime() + _tz1Minutes(best) * 60000);
   const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -4962,7 +5067,7 @@ function renderResults() {
   h += '<div class="dh-headline">Leave now <span class="dh-check">&#10003;</span></div>';
   h += '<div class="dh-eta">' + _tz1Minutes(best) + '<span class="dh-min">min</span></div>';
   h += '<div class="dh-route-line">Best route now via ' + _tz1EscapeHTML(routeName) + '</div>';
-  h += '<div class="ai-advice-line" id="ai-advice-line"><span>AI</span>' + _tz1EscapeHTML(whyLine) + '</div>';
+  h += '<div class="ai-advice-line" id="ai-advice-line"><span>AI</span>' + _tz1EscapeHTML(whyLine) + '<br><span>TRADE</span>' + _tz1EscapeHTML(tradeOff) + '</div>';
   h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + (typeof t === "function" ? t("why_voice_button") : "Why this route") + '</button></div>';
   h += '<div class="dh-wait-hint" id="dh-wait-hint" style="display:none"><div class="dh-wait-title">BETTER TIMING</div><div class="dh-wait-times" id="dh-wait-times"></div><div class="dh-wait-save" id="dh-wait-save"></div></div>';
   h += '<div class="dh-conf-slim">';
@@ -4993,15 +5098,16 @@ function renderResults() {
       const diff = _tz1Minutes(route) - _tz1Minutes(best);
       const diffText = diff === 0 ? 'same time' : (diff > 0 ? '+' + diff + ' min' : diff + ' min');
       const roleCls = route.tolls ? 'faster' : route.traffic === 'low' ? 'no-tolls' : 'relaxed';
-      const insight = _tz1BuildWhy(route, analyzedRoutes);
+      const insight = route.why || _tz2BuildWhy(route, analyzedRoutes);
+      const altTrade = route.tradeOff || _tz2BuildTradeOff(route, best, analyzedRoutes);
       h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')">';
       h += '<div class="alt-bar ' + roleCls + '"></div>';
       h += '<div class="alt-body">';
       h += '<div class="alt-time-p">' + _tz1Minutes(route) + '<span> min</span></div>';
-      h += '<div class="alt-label-p">via ' + _tz1EscapeHTML(_tz1RouteName(route)) + ' · ' + _tz1EscapeHTML(diffText) + '</div>';
+      h += '<div class="alt-label-p">via ' + _tz1EscapeHTML(_tz1RouteName(route)) + ' · ' + _tz1EscapeHTML(diffText) + ' · ' + _tz1EscapeHTML(altTrade) + '</div>';
       h += '<div class="alt-insight">' + _tz1EscapeHTML(insight) + '</div>';
       h += '</div>';
-      h += '<div class="alt-end"><div class="alt-end-time">' + _tz1EscapeHTML(route.traffic || 'traffic') + '</div><div class="alt-end-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
+      h += '<div class="alt-end"><div class="alt-end-time">' + _tz1EscapeHTML(route.trafficLabel || route.traffic || 'traffic') + '</div><div class="alt-end-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
       h += '</div>';
     });
     h += '</div></div>';
