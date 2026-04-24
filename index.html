@@ -1301,6 +1301,7 @@ let lastStableStepIndex = 0;
 
 let _bestRoute = null;
 let _fastestRoute = null;
+let currentDecision = null;
 let _parkingType = "unknown";
 let _predictiveData = null;  // Day 6.5: {laterMin, nowMin, saving}
 let _departureDecision = null;
@@ -4216,6 +4217,7 @@ function clearRoutes() {
   selectedRoute = null;
   _bestRoute = null;
   _fastestRoute = null;
+  currentDecision = null;
   activeDriveRouteIndex = null;
   activeDriveRouteSnapshot = null;
 }
@@ -4298,8 +4300,20 @@ function calculateRoutes() {
       return;
     }
 
-    _bestRoute = selectBestRoute(analyzedRoutes);
+    currentDecision = selectBestRouteDecision(analyzedRoutes);
+    const decisionCheck = validateAIDecision(currentDecision);
+    if (!decisionCheck.ok) {
+      document.getElementById("results").innerHTML = `<div class="error">${decisionCheck.message}</div>`;
+      return;
+    }
+
+    _bestRoute = currentDecision.bestRoute;
     _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+    selectedRoute = _bestRoute;
+
+    analyzedRoutes = applyWhyToRoutes(analyzedRoutes, _bestRoute);
+    currentDecision = selectBestRouteDecision(analyzedRoutes);
+    _bestRoute = currentDecision.bestRoute;
     selectedRoute = _bestRoute;
 
     analyzedRoutes.forEach(r => {
@@ -5811,41 +5825,131 @@ function validateWhyRoutes(routes) {
 function calculateRouteScore(r, allRoutes) {
   return scoreRoute(r, allRoutes);
 }
-function selectBestRoute(routes) {
-  if (!Array.isArray(routes) || !routes.length) return null;
 
-  const scoredRoutes = routes.map(function(route) {
-    Object.assign(route, calculateRouteScore(route, routes));
-    return route;
-  });
+// ============================================================
+//  ТЗ-5 — AI DECISION LAYER
+//  Builds one official decision object without changing the UI contract.
+// ============================================================
+function tz5SafeScore(route) {
+  return Number.isFinite(route && route.score) ? route.score : 999999;
+}
 
+function tz5PreferencePenalty(route) {
   const pref = typeof getUserPreference === "function" ? getUserPreference() : "balanced";
-  const safeFilters = typeof userFilters === "object" && userFilters ? userFilters : {};
+  if (pref === "fastest") return _tz1Minutes(route) * 0.7;
+  if (pref === "no_tolls" && route && route.tolls) return 18;
+  return 0;
+}
 
-  const ranked = scoredRoutes.slice().sort(function(a, b) {
-    const prefPenaltyA = pref === "fastest" ? _tz1Minutes(a) * 0.7 : pref === "no_tolls" && a.tolls ? 18 : 0;
-    const prefPenaltyB = pref === "fastest" ? _tz1Minutes(b) * 0.7 : pref === "no_tolls" && b.tolls ? 18 : 0;
-    const filterPenaltyA = (safeFilters.avoid_highways && a.highway ? 8 : 0) + (safeFilters.fewer_turns ? _tz2Turns(a) * 0.8 : 0);
-    const filterPenaltyB = (safeFilters.avoid_highways && b.highway ? 8 : 0) + (safeFilters.fewer_turns ? _tz2Turns(b) * 0.8 : 0);
-    return (a.score + prefPenaltyA + filterPenaltyA) - (b.score + prefPenaltyB + filterPenaltyB) || _tz1Minutes(a) - _tz1Minutes(b);
+function tz5FilterPenalty(route) {
+  const safeFilters = typeof userFilters === "object" && userFilters ? userFilters : {};
+  return (safeFilters.avoid_highways && route && route.highway ? 8 : 0) +
+         (safeFilters.fewer_turns ? _tz2Turns(route) * 0.8 : 0);
+}
+
+function tz5DecisionScore(route) {
+  return tz5SafeScore(route) + tz5PreferencePenalty(route) + tz5FilterPenalty(route);
+}
+
+function tz5RankRoutes(routes) {
+  const safeRoutes = Array.isArray(routes) ? routes.filter(Boolean) : [];
+  return safeRoutes.slice().sort(function(a, b) {
+    return tz5DecisionScore(a) - tz5DecisionScore(b) || _tz1Minutes(a) - _tz1Minutes(b);
+  });
+}
+
+function calculateDecisionConfidence(bestRoute, alternatives) {
+  if (!bestRoute || !Array.isArray(alternatives) || !alternatives.length) {
+    return { level: "HIGH", percent: 90, margin: 100, reason: "Only valid route available" };
+  }
+
+  const second = alternatives[0];
+  const bestScore = tz5DecisionScore(bestRoute);
+  const secondScore = tz5DecisionScore(second);
+  const margin = Math.max(0, secondScore - bestScore);
+  const marginPercent = bestScore > 0 ? Math.round((margin / bestScore) * 100) : 100;
+  const timeDiff = Math.abs(_tz1Minutes(second) - _tz1Minutes(bestRoute));
+  const trafficDiff = Math.abs(_tz1TrafficRank(second.traffic) - _tz1TrafficRank(bestRoute.traffic));
+  const stabilityDiff = Math.abs((second.stabilityScore || 0) - (bestRoute.stabilityScore || 0));
+
+  let level = "LOW";
+  if (margin >= 12 || marginPercent >= 22 || (timeDiff >= 5 && trafficDiff >= 1) || stabilityDiff >= 18) level = "HIGH";
+  else if (margin >= 6 || marginPercent >= 10 || timeDiff >= 3 || trafficDiff >= 1 || stabilityDiff >= 10) level = "MEDIUM";
+
+  return {
+    level,
+    percent: _tz1ConfidencePercent(level),
+    margin: Math.round(margin * 10) / 10,
+    marginPercent,
+    reason: level === "HIGH" ? "Clear score advantage" : level === "MEDIUM" ? "Useful but not dominant advantage" : "Routes are close"
+  };
+}
+
+function buildAIDecision(routes) {
+  const scoredRoutes = scoreRoutes(Array.isArray(routes) ? routes : []);
+  const ranked = tz5RankRoutes(scoredRoutes);
+  const bestRoute = ranked[0] || null;
+  const alternatives = bestRoute ? ranked.filter(function(route) { return route && route.index !== bestRoute.index; }) : [];
+  const confidence = calculateDecisionConfidence(bestRoute, alternatives);
+
+  if (bestRoute) {
+    bestRoute.isBestRoute = true;
+    bestRoute.aiSelected = true;
+    bestRoute.decisionRank = 1;
+    bestRoute.decisionScore = tz5DecisionScore(bestRoute);
+  }
+
+  alternatives.forEach(function(route, index) {
+    route.isBestRoute = false;
+    route.aiSelected = false;
+    route.decisionRank = index + 2;
+    route.decisionScore = tz5DecisionScore(route);
   });
 
-  return ranked[0];
+  return {
+    bestRoute,
+    alternatives,
+    rankedRoutes: ranked,
+    confidence,
+    selectedRouteId: bestRoute ? bestRoute.id : null,
+    selectedRouteIndex: bestRoute ? bestRoute.index : null,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+function validateAIDecision(decision) {
+  if (!decision || !decision.bestRoute) return { ok: false, message: "AI decision has no best route" };
+  if (!Array.isArray(decision.alternatives)) return { ok: false, message: "AI decision alternatives are missing" };
+  if (!decision.confidence || typeof decision.confidence.level !== "string" || !Number.isFinite(decision.confidence.percent)) {
+    return { ok: false, message: "AI decision confidence is invalid" };
+  }
+  return { ok: true, message: "OK" };
+}
+
+function selectBestRouteDecision(routes) {
+  return buildAIDecision(routes);
+}
+
+function selectBestRoute(routes) {
+  return buildAIDecision(routes).bestRoute;
 }
 
 function calculateConfidence(best, allRoutes) {
   if (!best || !Array.isArray(allRoutes) || allRoutes.length < 2) return "HIGH";
-  const sorted = allRoutes.slice().sort(function(a, b) { return (a.score || 0) - (b.score || 0); });
-  const second = sorted.find(function(r) { return r.index !== best.index; });
-  if (!second) return "HIGH";
+  const decision = buildAIDecision(allRoutes);
+  if (decision.bestRoute && best.index === decision.bestRoute.index) return decision.confidence.level;
 
-  const scoreDiff = Math.abs((second.score || 0) - (best.score || 0));
-  const timeDiff = Math.abs(_tz1Minutes(second) - _tz1Minutes(best));
-  const trafficDiff = Math.abs(_tz1TrafficRank(second.traffic) - _tz1TrafficRank(best.traffic));
-  const stabilityDiff = Math.abs((second.stabilityScore || 0) - (best.stabilityScore || 0));
+  const bestDecisionScore = tz5DecisionScore(best);
+  const sorted = tz5RankRoutes(allRoutes).filter(function(route) { return route.index !== best.index; });
+  const nearest = sorted[0];
+  if (!nearest) return "HIGH";
 
-  if (scoreDiff >= 12 || (timeDiff >= 5 && trafficDiff >= 1) || stabilityDiff >= 18) return "HIGH";
-  if (scoreDiff >= 6 || timeDiff >= 3 || trafficDiff >= 1 || stabilityDiff >= 10) return "MEDIUM";
+  const margin = Math.abs(tz5DecisionScore(nearest) - bestDecisionScore);
+  const timeDiff = Math.abs(_tz1Minutes(nearest) - _tz1Minutes(best));
+  const trafficDiff = Math.abs(_tz1TrafficRank(nearest.traffic) - _tz1TrafficRank(best.traffic));
+
+  if (margin >= 12 || (timeDiff >= 5 && trafficDiff >= 1)) return "HIGH";
+  if (margin >= 6 || timeDiff >= 3 || trafficDiff >= 1) return "MEDIUM";
   return "LOW";
 }
 
@@ -5872,11 +5976,21 @@ function renderResults() {
     return Object.assign(route, calculateRouteScore(route, analyzedRoutes));
   });
 
-  _bestRoute = selectBestRoute(analyzedRoutes);
+  currentDecision = selectBestRouteDecision(analyzedRoutes);
+  const decisionCheck = validateAIDecision(currentDecision);
+  if (!decisionCheck.ok) {
+    container.innerHTML = '<div class="error">' + _tz1EscapeHTML(decisionCheck.message) + '</div>';
+    return;
+  }
+
+  _bestRoute = currentDecision.bestRoute;
   _fastestRoute = analyzedRoutes.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
   selectedRoute = _bestRoute;
 
   analyzedRoutes = applyWhyToRoutes(analyzedRoutes, _bestRoute);
+  currentDecision = selectBestRouteDecision(analyzedRoutes);
+  _bestRoute = currentDecision.bestRoute;
+  selectedRoute = _bestRoute;
 
   analyzedRoutes.forEach(function(route) {
     route.tradeOff = _tz2BuildTradeOff(route, _bestRoute, analyzedRoutes);
@@ -5894,8 +6008,9 @@ function renderResults() {
     return;
   }
 
-  const conf = calculateConfidence(best, analyzedRoutes);
-  const confPct = _tz1ConfidencePercent(conf);
+  const decisionConfidence = currentDecision && currentDecision.confidence ? currentDecision.confidence : calculateDecisionConfidence(best, analyzedRoutes.filter(function(route) { return route.index !== best.index; }));
+  const conf = decisionConfidence.level || calculateConfidence(best, analyzedRoutes);
+  const confPct = Number.isFinite(decisionConfidence.percent) ? decisionConfidence.percent : _tz1ConfidencePercent(conf);
   const routeName = _tz1RouteName(best);
   const distKm = best.distanceKm || (best.distance ? Math.round((best.distance / 1000) * 10) / 10 : 0);
   const whyLine = best.why || _tz2BuildWhy(best, analyzedRoutes);
@@ -5906,7 +6021,7 @@ function renderResults() {
 
   let h = "";
   h += '<div class="decision-hero">';
-  h += '<div class="dh-overline">AI BEST ROUTE</div>';
+  h += '<div class="dh-overline" data-decision-id="' + _tz1EscapeHTML((currentDecision && currentDecision.selectedRouteId) || '') + '">AI BEST ROUTE</div>';
   h += '<div class="dh-headline">Leave now <span class="dh-check">&#10003;</span></div>';
   h += '<div class="dh-eta">' + _tz1Minutes(best) + '<span class="dh-min">min</span></div>';
   h += '<div class="dh-route-line">Best route now via ' + _tz1EscapeHTML(routeName) + '</div>';
