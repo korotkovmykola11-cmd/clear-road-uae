@@ -2824,7 +2824,7 @@ function speakCurrentDecision() {
   const now = Date.now();
   if (now - lastDecisionVoiceAt < 1200) return;
   lastDecisionVoiceAt = now;
-  speakText(buildDecisionVoiceText(selectedRoute || _bestRoute, "manual"));
+  speakText(buildDecisionVoiceText((currentDecision && currentDecision.bestRoute) || selectedRoute || _bestRoute, "manual"));
 }
 
 function stripHtml(value) {
@@ -5156,11 +5156,11 @@ function openRouteDetails(index) {
   const r = analyzedRoutes.find(x => x.index === index);
   if (!r) return;
 
-  const best = _bestRoute;
+  const best = currentDecision && currentDecision.bestRoute ? currentDecision.bestRoute : _bestRoute;
   if (!best) return;
 
   const isBest = r.index === best.index;
-  const whyPoints = generateNeutralWhy(r, best);
+  const whyPoints = Array.isArray(r.whyPoints) && r.whyPoints.length ? r.whyPoints : generateNeutralWhy(r, best);
   const segments = buildRouteSegments(r);
 
   const distKm = (r.distance / 1000).toFixed(1);
@@ -5972,6 +5972,10 @@ function renderResults() {
 
   if (quickAccess) quickAccess.classList.add("hidden");
 
+  // ============================================================
+  //  ТЗ-6 — DECISION UI BINDING
+  //  UI is driven by currentDecision, not by old manual route selection.
+  // ============================================================
   analyzedRoutes = analyzedRoutes.map(function(route) {
     return Object.assign(route, calculateRouteScore(route, analyzedRoutes));
   });
@@ -5989,12 +5993,18 @@ function renderResults() {
 
   analyzedRoutes = applyWhyToRoutes(analyzedRoutes, _bestRoute);
   currentDecision = selectBestRouteDecision(analyzedRoutes);
+  const refreshedDecisionCheck = validateAIDecision(currentDecision);
+  if (!refreshedDecisionCheck.ok) {
+    container.innerHTML = '<div class="error">' + _tz1EscapeHTML(refreshedDecisionCheck.message) + '</div>';
+    return;
+  }
+
   _bestRoute = currentDecision.bestRoute;
   selectedRoute = _bestRoute;
 
   analyzedRoutes.forEach(function(route) {
     route.tradeOff = _tz2BuildTradeOff(route, _bestRoute, analyzedRoutes);
-    route.confidence = calculateConfidence(route, analyzedRoutes);
+    route.confidence = currentDecision && currentDecision.confidence ? currentDecision.confidence.level : calculateConfidence(route, analyzedRoutes);
     if (typeof getRouteRole === "function" && _bestRoute && _fastestRoute) {
       route.role = getRouteRole(route, _bestRoute, _fastestRoute, analyzedRoutes);
     } else {
@@ -6002,33 +6012,36 @@ function renderResults() {
     }
   });
 
-  const best = _bestRoute;
+  const best = currentDecision.bestRoute;
+  const decisionAlternatives = Array.isArray(currentDecision.alternatives) ? currentDecision.alternatives : [];
+
   if (!best) {
     container.innerHTML = '<div class="error">No best route selected.</div>';
     return;
   }
 
-  const decisionConfidence = currentDecision && currentDecision.confidence ? currentDecision.confidence : calculateDecisionConfidence(best, analyzedRoutes.filter(function(route) { return route.index !== best.index; }));
-  const conf = decisionConfidence.level || calculateConfidence(best, analyzedRoutes);
+  const decisionConfidence = currentDecision.confidence || calculateDecisionConfidence(best, decisionAlternatives);
+  const conf = String(decisionConfidence.level || calculateConfidence(best, analyzedRoutes)).toUpperCase();
   const confPct = Number.isFinite(decisionConfidence.percent) ? decisionConfidence.percent : _tz1ConfidencePercent(conf);
   const routeName = _tz1RouteName(best);
   const distKm = best.distanceKm || (best.distance ? Math.round((best.distance / 1000) * 10) / 10 : 0);
-  const whyLine = best.why || _tz2BuildWhy(best, analyzedRoutes);
+  const whyLine = Array.isArray(best.whyPoints) && best.whyPoints.length ? best.whyPoints.join(" · ") : (best.why || _tz2BuildWhy(best, analyzedRoutes));
   const tradeOff = best.tradeOff || _tz2BuildTradeOff(best, best, analyzedRoutes);
   const now = new Date();
   const arrival = new Date(now.getTime() + _tz1Minutes(best) * 60000);
   const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const decisionId = currentDecision.selectedRouteId || best.id || ("route-" + best.index);
 
   let h = "";
-  h += '<div class="decision-hero">';
-  h += '<div class="dh-overline" data-decision-id="' + _tz1EscapeHTML((currentDecision && currentDecision.selectedRouteId) || '') + '">AI BEST ROUTE</div>';
+  h += '<div class="decision-hero" data-bound-to="currentDecision" data-best-route-index="' + _tz1EscapeHTML(best.index) + '">';
+  h += '<div class="dh-overline" data-decision-id="' + _tz1EscapeHTML(decisionId) + '">AI BEST ROUTE</div>';
   h += '<div class="dh-headline">Leave now <span class="dh-check">&#10003;</span></div>';
   h += '<div class="dh-eta">' + _tz1Minutes(best) + '<span class="dh-min">min</span></div>';
   h += '<div class="dh-route-line">Best route now via ' + _tz1EscapeHTML(routeName) + '</div>';
   h += '<div class="ai-advice-line" id="ai-advice-line"><span>AI</span>' + _tz1EscapeHTML(whyLine) + '<br><span>TRADE</span>' + _tz1EscapeHTML(tradeOff) + '</div>';
   h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + (typeof t === "function" ? t("why_voice_button") : "Why this route") + '</button></div>';
   h += '<div class="dh-wait-hint" id="dh-wait-hint" style="display:none"><div class="dh-wait-title">BETTER TIMING</div><div class="dh-wait-times" id="dh-wait-times"></div><div class="dh-wait-save" id="dh-wait-save"></div></div>';
-  h += '<div class="dh-conf-slim">';
+  h += '<div class="dh-conf-slim" data-confidence-source="currentDecision.confidence">';
   h += '<span class="dh-conf-label">AI Confidence</span>';
   h += '<span class="dh-conf-level ' + conf.toLowerCase() + '">' + conf + '</span>';
   h += '<span class="dh-conf-pct">' + confPct + '%</span>';
@@ -6043,22 +6056,19 @@ function renderResults() {
   h += '<button class="cta-details" onclick="openRouteDetails(' + best.index + ')">DETAILS</button>';
   h += '</div>';
 
-  const alternatives = analyzedRoutes
-    .filter(function(route) { return route.index !== best.index; })
-    .sort(function(a, b) { return (a.score || 0) - (b.score || 0); })
-    .slice(0, 2);
+  const alternatives = decisionAlternatives.slice(0, 2);
 
   if (alternatives.length) {
-    h += '<div class="other-routes expanded" id="other-routes-section">';
+    h += '<div class="other-routes expanded" id="other-routes-section" data-source="currentDecision.alternatives">';
     h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Alternatives kept: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
     h += '<div class="alt-row">';
     alternatives.forEach(function(route) {
       const diff = _tz1Minutes(route) - _tz1Minutes(best);
       const diffText = diff === 0 ? 'same time' : (diff > 0 ? '+' + diff + ' min' : diff + ' min');
       const roleCls = route.tolls ? 'faster' : route.traffic === 'low' ? 'no-tolls' : 'relaxed';
-      const insight = route.why || _tz2BuildWhy(route, analyzedRoutes);
+      const insight = Array.isArray(route.whyPoints) && route.whyPoints.length ? route.whyPoints.join(" · ") : (route.why || _tz2BuildWhy(route, analyzedRoutes));
       const altTrade = route.tradeOff || _tz2BuildTradeOff(route, best, analyzedRoutes);
-      h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')">';
+      h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')" data-decision-rank="' + _tz1EscapeHTML(route.decisionRank || '') + '">';
       h += '<div class="alt-bar ' + roleCls + '"></div>';
       h += '<div class="alt-body">';
       h += '<div class="alt-time-p">' + _tz1Minutes(route) + '<span> min</span></div>';
