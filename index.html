@@ -2506,6 +2506,8 @@ function getStepWarningMeta(step, route) {
     return { type: "fork", icon: "⤴", shortText: `Fork right to ${roadName}`, longText: `Take the right fork toward ${roadName}`, laneHint: laneHint || "Use right lanes" };
   if (text.includes("fork left") || maneuver.includes("fork-left"))
     return { type: "fork", icon: "⤳", shortText: `Fork left to ${roadName}`, longText: `Take the left fork toward ${roadName}`, laneHint: laneHint || "Use left lanes" };
+  if (text.includes("fork") || maneuver.includes("fork"))
+    return { type: "fork", icon: "⤴", shortText: `Fork ahead to ${roadName}`, longText: `Prepare for fork toward ${roadName}`, laneHint: laneHint || "Choose lane early" };
   if (text.includes("keep right")) return { type: "lane",  icon: "↗", shortText: `Keep right for ${roadName}`,  longText: `Keep right ahead for exit toward ${roadName}`, laneHint: laneHint || "Use right lanes" };
   if (text.includes("keep left"))  return { type: "lane",  icon: "↖", shortText: `Keep left for ${roadName}`,   longText: `Keep left ahead toward ${roadName}`, laneHint: laneHint || "Use left lanes" };
   if (text.includes("exit"))       return { type: "exit",  icon: "⇢", shortText: `Exit ahead to ${roadName}`,   longText: `Prepare for exit toward ${roadName}`, laneHint: laneHint || "Move to exit lane" };
@@ -2530,21 +2532,41 @@ function extractLaneHint(text) {
   return null;
 }
 
-function isComplexInterchangeAhead(steps, currentStepIndex, route) {
-  let complex = false;
-  let count = 0;
+function isComplexInterchangeAhead(steps, currentStepIndex, route, userLatLng = lastKnownUserLatLng) {
+  if (!Array.isArray(steps) || !steps.length) return false;
 
-  for (let i = currentStepIndex; i < currentStepIndex + 3; i++) {
-    if (!steps[i]) continue;
-    let text = steps[i].instructions ? steps[i].instructions.toLowerCase() : (stripHtml(steps[i]?.html_instructions || "").toLowerCase());
-    if (text.includes("exit") || text.includes("ramp") || text.includes("merge")) {
-      count++;
+  const startIndex = Math.max(0, currentStepIndex || 0);
+  let accumulatedMeters = 0;
+  let actionCount = 0;
+  let exitLikeCount = 0;
+  let mergeLikeCount = 0;
+  let highwayActionCount = 0;
+
+  for (let i = startIndex; i < Math.min(steps.length, startIndex + 7); i++) {
+    const step = steps[i];
+    if (!step) continue;
+
+    const stepMeters = i === startIndex
+      ? (getDistanceToStepEndMeters(step, userLatLng) ?? (step.distance?.value || 0))
+      : (step.distance?.value || 0);
+
+    accumulatedMeters += Math.max(0, stepMeters || 0);
+    if (accumulatedMeters > 2400) break;
+
+    const meta = getStepWarningMeta(step, route);
+    if (!meta) continue;
+
+    if (["exit", "ramp", "fork", "lane", "merge"].includes(meta.type)) {
+      actionCount++;
+      if (["exit", "ramp", "fork"].includes(meta.type)) exitLikeCount++;
+      if (["merge", "lane"].includes(meta.type)) mergeLikeCount++;
+      if (stepLooksLikeHighway(step, route)) highwayActionCount++;
     }
   }
 
-  if (count >= 2) complex = true;
-
-  return complex;
+  // UAE reality: several exit/ramp/fork/merge actions close together usually means
+  // a complex interchange where the driver needs lane focus before the actual exit.
+  return exitLikeCount >= 2 || (actionCount >= 3 && mergeLikeCount >= 1) || (actionCount >= 2 && highwayActionCount >= 2);
 }
 
 function showInterchangeWarning() {
@@ -2641,10 +2663,10 @@ function getWarningPhase(distanceMeters) {
   return getWarningPhaseForType(distanceMeters, "");
 }
 
-function buildTimedWarning(priorityWarning, step, userLatLng) {
+function buildTimedWarning(priorityWarning, step, userLatLng, effectiveMeters = null) {
   if (!priorityWarning || !step) return null;
 
-  const meters = getDistanceToStepEndMeters(step, userLatLng);
+  const meters = Number.isFinite(effectiveMeters) ? effectiveMeters : getDistanceToStepEndMeters(step, userLatLng);
   const phase = getWarningPhaseForType(meters, priorityWarning.type);
 
   if (phase === "none") return null;
@@ -3239,14 +3261,49 @@ function toggleFollowMode() {
 }
 
 function getDriveTimedWarning(r, stepIndex) {
-  const steps = r.route.legs[0].steps;
+  const steps = r?.route?.legs?.[0]?.steps || [];
   const ulng  = lastKnownUserLatLng;
+  if (!steps.length) return null;
 
-  // CURRENT step only — never advance to next step here
-  const curWarning = getStepWarningMeta(steps[stepIndex], r.route);
-  if (curWarning && steps[stepIndex]) {
-    const timed = buildTimedWarning(curWarning, steps[stepIndex], ulng);
-    if (timed) return timed;
+  const candidates = [];
+  const phaseRank    = { now: 3, soon: 2, prepare: 1, none: 0 };
+  const typePriority = { exit: 6, ramp: 6, fork: 6, lane: 5, merge: 4, uturn: 3, interchange: 1 };
+
+  for (let i = stepIndex; i < Math.min(steps.length, stepIndex + 6); i++) {
+    const step = steps[i];
+    const meta = getStepWarningMeta(step, r.route);
+    if (!meta) continue;
+
+    const meters = getEffectiveDistanceToStepMeters(steps, stepIndex, i, ulng);
+    const timed = buildTimedWarning(meta, step, ulng, meters);
+    if (!timed) continue;
+
+    candidates.push({
+      timed,
+      phaseScore: phaseRank[timed.phase] || 0,
+      typeScore: typePriority[timed.type] || 0,
+      meters: Number.isFinite(meters) ? meters : 999999
+    });
+  }
+
+  if (candidates.length) {
+    candidates.sort(function(a, b) {
+      if (b.typeScore !== a.typeScore) return b.typeScore - a.typeScore;
+      if (b.phaseScore !== a.phaseScore) return b.phaseScore - a.phaseScore;
+      return a.meters - b.meters;
+    });
+    return candidates[0].timed;
+  }
+
+  if (isComplexInterchangeAhead(steps, stepIndex, r.route, ulng)) {
+    return {
+      type: "interchange",
+      icon: "⚠",
+      phase: "prepare",
+      shortText: "Complex interchange ahead",
+      longText: "Complex interchange ahead — stay focused for lane choice",
+      distanceText: "Ahead"
+    };
   }
 
   return null;
@@ -3403,7 +3460,7 @@ function getDriveLaneGuidance(r, stepIndex, userLatLng) {
     }
 
     const heldPriority =
-      _laneGuidanceHeld.type === "exit" || _laneGuidanceHeld.type === "ramp" ? 3 :
+      _laneGuidanceHeld.type === "exit" || _laneGuidanceHeld.type === "ramp" || _laneGuidanceHeld.type === "fork" ? 3 :
       _laneGuidanceHeld.type === "lane" ? 2 :
       _laneGuidanceHeld.type === "merge" ? 1 : 0;
 
@@ -4782,32 +4839,35 @@ function getUpcomingMeaningfulStep(steps, currentIndex, routeObj) {
 
 function getWarningPhaseForType(distanceMeters, type = "") {
   if (distanceMeters == null || !isFinite(distanceMeters)) return "none";
+  const meters = Math.max(0, Number(distanceMeters));
   const t = String(type || "").toLowerCase();
   const isExitLike = ["exit", "ramp", "fork"].includes(t);
   const isLaneLike = ["lane", "merge"].includes(t);
   const isUTurn = t === "uturn";
-  if (distanceMeters <= 25) return "none";
+
+  // Do not suppress the final command at very short distance: GPS jitter is handled
+  // by step selection, while the driver still needs a clear "now" instruction.
   if (isExitLike) {
-    if (distanceMeters <= 180) return "now";
-    if (distanceMeters <= 700) return "soon";
-    if (distanceMeters <= 1600) return "prepare";
+    if (meters <= 180) return "now";
+    if (meters <= 700) return "soon";
+    if (meters <= 1400) return "prepare";
     return "none";
   }
   if (isLaneLike) {
-    if (distanceMeters <= 140) return "now";
-    if (distanceMeters <= 520) return "soon";
-    if (distanceMeters <= 1100) return "prepare";
+    if (meters <= 140) return "now";
+    if (meters <= 520) return "soon";
+    if (meters <= 1100) return "prepare";
     return "none";
   }
   if (isUTurn) {
-    if (distanceMeters <= 120) return "now";
-    if (distanceMeters <= 450) return "soon";
-    if (distanceMeters <= 900) return "prepare";
+    if (meters <= 120) return "now";
+    if (meters <= 450) return "soon";
+    if (meters <= 900) return "prepare";
     return "none";
   }
-  if (distanceMeters <= 100) return "now";
-  if (distanceMeters <= 350) return "soon";
-  if (distanceMeters <= 800) return "prepare";
+  if (meters <= 100) return "now";
+  if (meters <= 350) return "soon";
+  if (meters <= 800) return "prepare";
   return "none";
 }
 
