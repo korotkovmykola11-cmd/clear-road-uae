@@ -274,6 +274,26 @@
       .dh-route-line em { color: var(--text); font-style: normal; }
       .dh-route-line span { color: var(--text2); }
 
+      .ai-advice-line {
+        margin: -4px 0 12px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: hsla(72,96%,56%,.08);
+        border: 1px solid hsla(72,96%,56%,.18);
+        color: hsla(30,10%,96%,.92);
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+      .ai-advice-line span {
+        color: var(--green);
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        font-size: 10px;
+        margin-right: 6px;
+      }
+      body.rtl .ai-advice-line span { margin-right:0; margin-left:6px; }
+
       /* Signals grid disabled: design reference only, no new visible blocks */
       .dh-signals { display: none !important; }
       .dh-signal { display: none !important; }
@@ -977,6 +997,9 @@ let lastVoiceInstructionKey = "";
 let lastVoiceInstructionAt = 0;
 let hasSpokenStartNavigation = false;
 let hasSpokenDriveDecision = false;
+let lastDriveGpsMoveMeters = 0;
+let lastDriveVoiceStepIndex = -1;
+let lastDriveVoicePhase = "";
 
   // ============================================================
   //  i18n — MULTILANGUAGE  (Day 8 · 9 · 10)
@@ -2463,6 +2486,48 @@ function buildTimingAdviceForVoice(route) {
   return (lower.includes("wait") || lower.includes("consider")) ? "Timing advice: consider waiting. " + insight + "." : "Timing advice: leaving now looks good. " + insight + ".";
 }
 
+
+function getAIAdviceText(route) {
+  const r = route || selectedRoute || _bestRoute;
+  if (!r) return currentLang === "ru" ? "Постройте маршрут — я объясню лучший вариант." : "Build a route — I will explain the best option.";
+  const name = getRouteSummaryName(r);
+  const mins = getDisplayMinutes(r);
+  const alt = getBestComparableAlternative(r);
+  const why = stripHtml(getRouteInsight(r, _bestRoute || r, _fastestRoute) || generateWhyLine(r, analyzedRoutes) || "");
+  const traffic = translateTrafficForVoice(r.traffic || "stable");
+  const stress = stripHtml((getUnifiedRouteMeta(r)?.stressLabel || r.drivePersonality || "steady drive")).toLowerCase();
+
+  let diffText = "";
+  if (alt) {
+    const diff = getDisplayMinutes(alt) - mins;
+    if (currentLang === "ru") {
+      diffText = diff > 0 ? " На " + diff + " мин быстрее ближайшей альтернативы." : " Время похоже на альтернативу, но маршрут стабильнее.";
+    } else {
+      diffText = diff > 0 ? " " + diff + " min faster than the closest alternative." : " Similar time, but the route is more stable.";
+    }
+  }
+
+  if (currentLang === "ru") {
+    return "AI совет: ехать через " + name + " — " + mins + " мин. " +
+      (why ? why + ". " : "") + "Трафик " + traffic + ", характер: " + stress + "." + diffText;
+  }
+  if (currentLang === "ua") {
+    return "AI порада: їхати через " + name + " — " + mins + " хв. " +
+      (why ? why + ". " : "") + "Трафік " + traffic + ", характер: " + stress + "." + diffText;
+  }
+  if (currentLang === "ar") {
+    return "نصيحة الذكاء الاصطناعي: الطريق عبر " + name + "، حوالي " + mins + " دقيقة. " +
+      (why ? why + ". " : "") + "المرور " + traffic + "، والطريق " + stress + "." + diffText;
+  }
+  return "AI advice: take " + name + " — " + mins + " min. " +
+    (why ? why + ". " : "") + "Traffic is " + traffic + ", route feel: " + stress + "." + diffText;
+}
+
+function renderAIAdviceLine(route) {
+  const advice = getAIAdviceText(route);
+  return '<div class="ai-advice-line" id="ai-advice-line"><span>AI</span>' + advice + '</div>';
+}
+
 function buildDecisionVoiceText(route, mode) {
   const r = route || selectedRoute || _bestRoute;
   if (!r) {
@@ -2471,49 +2536,19 @@ function buildDecisionVoiceText(route, mode) {
     if (currentLang === "ar") return "ابنِ المسار أولاً. بعد ذلك سأشرح لماذا هذا الطريق أفضل.";
     return "Build a route first. Then I will explain why this route is better.";
   }
-
-  const mins = getDisplayMinutes(r);
-  const routeName = getRouteSummaryName(r);
-  const conf = calculateConfidence(r, analyzedRoutes);
-  const why = stripHtml(getRouteInsight(r, _bestRoute || r, _fastestRoute) || generateWhyLine(r, analyzedRoutes) || "");
-  const traffic = r.traffic || "stable";
-  const meta = getUnifiedRouteMeta(r) || {};
+  const advice = getAIAdviceText(r);
   const alt = getBestComparableAlternative(r);
-  const comparison = buildAlternativeComparisonForVoice(r, alt);
-  const timing = buildTimingAdviceForVoice(r);
-  const distanceKm = r.distance ? (r.distance / 1000).toFixed(1) : "";
-  const stress = (meta.stressLabel || r.drivePersonality || "steady drive").toLowerCase();
-
-  if (currentLang === "ru") {
-    return "AI объяснение. Я выбираю маршрут через " + routeName + ". Примерное время: " + mins + " минут" + (distanceKm ? ", расстояние " + distanceKm + " километра" : "") + ". " +
-      (why ? "Главная причина: " + why + ". " : "") +
-      "Характер маршрута: " + stress + ". Трафик: " + translateTrafficForVoice(traffic) + ". " +
-      (comparison ? comparison + " " : "") +
-      (timing ? timing + " " : "") +
-      "Уверенность решения: " + translateConfidenceForVoice(conf) + ".";
+  const conf = calculateConfidence(r, analyzedRoutes);
+  let altLine = "";
+  if (alt) {
+    const diff = getDisplayMinutes(alt) - getDisplayMinutes(r);
+    if (currentLang === "ru") altLine = diff > 0 ? " Ближайшая альтернатива дольше примерно на " + diff + " минут." : " Альтернатива не быстрее, поэтому оставляю этот маршрут.";
+    else altLine = diff > 0 ? " The closest alternative is about " + diff + " minutes longer." : " The alternative is not faster, so I keep this route.";
   }
-  if (currentLang === "ua") {
-    return "AI пояснення. Я обираю маршрут через " + routeName + ". Орієнтовний час: " + mins + " хвилин" + (distanceKm ? ", відстань " + distanceKm + " кілометра" : "") + ". " +
-      (why ? "Головна причина: " + why + ". " : "") +
-      "Характер маршруту: " + stress + ". Трафік: " + translateTrafficForVoice(traffic) + ". " +
-      (comparison ? comparison + " " : "") +
-      (timing ? timing + " " : "") +
-      "Впевненість рішення: " + translateConfidenceForVoice(conf) + ".";
-  }
-  if (currentLang === "ar") {
-    return "شرح الذكاء الاصطناعي. أختار الطريق عبر " + routeName + ". الوقت المتوقع حوالي " + mins + " دقيقة" + (distanceKm ? "، والمسافة " + distanceKm + " كيلومتر" : "") + ". " +
-      (why ? "السبب الرئيسي: " + why + ". " : "") +
-      "طبيعة الطريق: " + stress + ". حالة المرور: " + translateTrafficForVoice(traffic) + ". " +
-      (comparison ? comparison + " " : "") +
-      (timing ? timing + " " : "") +
-      "ثقة القرار: " + translateConfidenceForVoice(conf) + ".";
-  }
-  return "AI explanation. I choose the route via " + routeName + ". Estimated time is " + mins + " minutes" + (distanceKm ? ", distance " + distanceKm + " kilometers" : "") + ". " +
-    (why ? "Main reason: " + why + ". " : "") +
-    "Route character: " + stress + ". Traffic is " + translateTrafficForVoice(traffic) + ". " +
-    (comparison ? comparison + " " : "") +
-    (timing ? timing + " " : "") +
-    "Decision confidence is " + translateConfidenceForVoice(conf) + ".";
+  if (currentLang === "ru") return advice + altLine + " Уверенность решения: " + translateConfidenceForVoice(conf) + ".";
+  if (currentLang === "ua") return advice + altLine + " Впевненість рішення: " + translateConfidenceForVoice(conf) + ".";
+  if (currentLang === "ar") return advice + altLine + " ثقة القرار: " + translateConfidenceForVoice(conf) + ".";
+  return advice + altLine + " Decision confidence is " + translateConfidenceForVoice(conf) + ".";
 }
 
 function buildRerouteVoiceText(decision, altRoute) {
@@ -2674,7 +2709,9 @@ function buildTurnVoiceText(step, phase, distanceText) {
 }
 
 function maybeSpeakDriveNavigation(routeObj, stepIndex, timedWarning, laneGuidance) {
-  if (!voiceEnabled || !routeObj) return;
+  if (!voiceEnabled || !routeObj || !lastKnownUserLatLng) return;
+  if (!document.getElementById("drive-mode")?.classList.contains("active")) return;
+
   const steps = getRouteStepsForVoice(routeObj);
   const step = steps[stepIndex];
   if (!step) return;
@@ -2698,15 +2735,21 @@ function maybeSpeakDriveNavigation(routeObj, stepIndex, timedWarning, laneGuidan
     if (!phase) return;
   }
 
+  // Do not speak from GPS jitter. "Prepare" needs real movement; "now" can speak close to maneuver.
+  if (phase !== "now" && lastDriveGpsMoveMeters < 25) return;
+
   const key = stepIndex + ":" + phase + ":" + type;
   const now = Date.now();
-  if (key === lastVoiceInstructionKey && now - lastVoiceInstructionAt < 25000) return;
+  if (key === lastVoiceInstructionKey && now - lastVoiceInstructionAt < 45000) return;
+  if (lastDriveVoiceStepIndex === stepIndex && lastDriveVoicePhase === phase && now - lastVoiceInstructionAt < 45000) return;
 
   const text = buildTurnVoiceText(step, phase, distanceText);
   if (!text) return;
 
   lastVoiceInstructionKey = key;
   lastVoiceInstructionAt = now;
+  lastDriveVoiceStepIndex = stepIndex;
+  lastDriveVoicePhase = phase;
   speakText(text, phase === "now" ? "urgent" : "normal");
 }
 
@@ -3215,26 +3258,31 @@ function handleLiveDrivePosition(pos) {
 
   const rawLatLng = getUserLatLngFromPosition(pos);
   const userLatLng = smoothUserPosition(rawLatLng);
+  const prevLatLng = lastKnownUserLatLng;
 
-  updateUserHeading(lastKnownUserLatLng, userLatLng);
+  lastDriveGpsMoveMeters = prevLatLng
+    ? google.maps.geometry.spherical.computeDistanceBetween(prevLatLng, userLatLng)
+    : 999;
 
-  if (!hasUserMoved(lastKnownUserLatLng, userLatLng)) {
-    updateDriveUserMarker(userLatLng);
-    updateDriveCamera(userLatLng);
-    return;
-  }
-
+  updateUserHeading(prevLatLng, userLatLng);
   lastKnownUserLatLng = userLatLng;
+
   updateDriveUserMarker(userLatLng);
   updateDriveCamera(userLatLng);
 
-  currentStepIndex = findBestCurrentStepIndex(selectedRoute, userLatLng, currentStepIndex);
+  const nextStepIndex = findBestCurrentStepIndex(selectedRoute, userLatLng, currentStepIndex);
+  if (nextStepIndex !== currentStepIndex) {
+    currentStepIndex = nextStepIndex;
+    lastWarningPhase = "";
+    lastDriveVoiceStepIndex = -1;
+    lastDriveVoicePhase = "";
+  }
 
   updateDriveUI();
 
   if (isUserOffRoute(userLatLng, selectedRoute)) {
     if (!offRouteSince) offRouteSince = Date.now();
-    if (Date.now() - offRouteSince > 4000) {
+    if (Date.now() - offRouteSince > 6000) {
       handleOffRouteRecalculation(userLatLng);
       offRouteSince = 0;
       return;
@@ -3244,7 +3292,7 @@ function handleLiveDrivePosition(pos) {
   }
 
   const now = Date.now();
-  if (currentStepIndex >= 2 && now - lastRerouteCheckAt > 15000) {
+  if (currentStepIndex >= 2 && now - lastRerouteCheckAt > 20000) {
     lastRerouteCheckAt = now;
 
     const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
@@ -3332,12 +3380,42 @@ function handleOffRouteRecalculation(userLatLng) {
 }
 
 function startLiveDriveTracking() {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) {
+    const st = document.getElementById("drive-status");
+    if (st) st.textContent = "GPS not supported";
+    return;
+  }
   stopLiveDriveTracking();
+
+  const st = document.getElementById("drive-status");
+  if (st) st.textContent = "Waiting for GPS…";
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      handleLiveDrivePosition(pos);
+      const st2 = document.getElementById("drive-status");
+      if (st2) st2.textContent = "GPS active";
+    },
+    function(err) {
+      console.error("Initial Drive GPS error:", err);
+      const st2 = document.getElementById("drive-status");
+      if (st2) st2.textContent = "GPS blocked or unavailable";
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+  );
+
   driveWatchId = navigator.geolocation.watchPosition(
-    handleLiveDrivePosition,
-    (err) => { console.error("Drive GPS error:", err); },
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 7000 }
+    function(pos) {
+      handleLiveDrivePosition(pos);
+      const st3 = document.getElementById("drive-status");
+      if (st3 && selectedRoute) st3.textContent = "GPS active · Step " + (currentStepIndex + 1) + "/" + selectedRoute.route.legs[0].steps.length;
+    },
+    function(err) {
+      console.error("Drive GPS error:", err);
+      const st4 = document.getElementById("drive-status");
+      if (st4) st4.textContent = "GPS error: allow location";
+    },
+    { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
   );
 }
 
@@ -3578,12 +3656,8 @@ function updateDriveUI() {
     }
   }
 
-  _currentHighestPriority = 0;
-  const currentStep = selectedRoute?.route?.legs?.[0]?.steps?.[currentStepIndex];
-  if (laneGuidance && ["exit", "ramp", "fork", "lane", "merge"].includes(laneGuidance.type)) speakDriveInstruction(currentStep, laneGuidance.phase, laneGuidance.type);
-  else if (timedWarning) speakDriveInstruction(currentStep, timedWarning.phase, timedWarning.type);
-
-  // Full voice fix: also speak normal turn-by-turn maneuvers, not only lane/exit warnings.
+  // Voice is driven only from confirmed GPS updates.
+  // This prevents random commands from render/startup/repaint.
   maybeSpeakDriveNavigation(r, currentStepIndex, timedWarning, laneGuidance);
 
   lastWarningPhase = timedWarning?.phase || laneGuidance?.phase || "";
@@ -4344,6 +4418,7 @@ function renderResults() {
   h += '<div class="dh-headline">' + decisionLabel + ' <span class="dh-check">&#10003;</span></div>';
   h += '<div class="dh-eta">' + getDisplayMinutes(best) + '<span class="dh-min">min</span></div>';
   h += '<div class="dh-route-line">' + routeLineText + "</div>";
+  h += renderAIAdviceLine(best);
   h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + t("why_voice_button") + '</button></div>';
   if (chipsHtml) h += '<div class="dh-chips">' + chipsHtml + "</div>";
   // inline wait-hint shell — populated by renderPredictiveDecision()
