@@ -5108,6 +5108,303 @@ document.querySelectorAll(".filter-btn").forEach(b =>
 // ============================================================
 
 window.initMap = initMap;
+
+// ============================================================
+//  ТЗ-1 PATCH — ROUTE DECISION CORE LOCK
+//  Scope: no redesign, no CSS/layout changes. Logic only.
+// ============================================================
+function _tz1Minutes(route) {
+  if (!route) return 0;
+  if (typeof route.durationMin === "number") return route.durationMin;
+  if (typeof route.time === "number") return Math.round(route.time / 60);
+  return 0;
+}
+
+function _tz1TrafficRank(level) {
+  if (level === "low" || level === "stable") return 1;
+  if (level === "medium" || level === "moderate") return 2;
+  if (level === "high" || level === "heavy") return 3;
+  return 2;
+}
+
+function _tz1EscapeHTML(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function _tz1RouteName(route) {
+  try {
+    return getRouteSummaryName(route);
+  } catch (e) {
+    return route && route.displayIndex ? "Route " + route.displayIndex : "route";
+  }
+}
+
+function _tz1BuildWhy(best, routes) {
+  const others = (routes || []).filter(function(r) { return r && best && r.index !== best.index; });
+  const road = _tz1RouteName(best);
+  if (!best) return "Route is being calculated";
+  if (!others.length) return "Best available route via " + road;
+
+  const bestMin = _tz1Minutes(best);
+  const bestTraffic = _tz1TrafficRank(best.traffic);
+  const bestDelay = best.delayMinutes || 0;
+  const bestStops = best.stopsCount || best.complexity || 0;
+  const bestComplexity = best.complexity || 0;
+
+  const fastestOther = others.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
+  const minOtherTraffic = Math.min.apply(null, others.map(function(r) { return _tz1TrafficRank(r.traffic); }));
+  const minOtherDelay = Math.min.apply(null, others.map(function(r) { return r.delayMinutes || 0; }));
+  const minOtherStops = Math.min.apply(null, others.map(function(r) { return r.stopsCount || r.complexity || 0; }));
+  const minOtherComplexity = Math.min.apply(null, others.map(function(r) { return r.complexity || 0; }));
+
+  const reasons = [];
+
+  if (fastestOther && bestMin <= _tz1Minutes(fastestOther)) {
+    const gain = _tz1Minutes(fastestOther) - bestMin;
+    reasons.push(gain > 0 ? gain + " min faster" : "Fastest option");
+  }
+
+  if (bestTraffic < minOtherTraffic) reasons.push("less traffic");
+  if (bestDelay + 1 < minOtherDelay) reasons.push("less delay");
+  if (bestStops < minOtherStops) reasons.push("fewer stops");
+  if (bestComplexity < minOtherComplexity) reasons.push("simpler drive");
+
+  if (best.tollCost === 0 && others.some(function(r) { return (r.tollCost || 0) > 0 && Math.abs(_tz1Minutes(r) - bestMin) <= 3; })) {
+    reasons.push("no tolls");
+  }
+
+  if (!reasons.length) {
+    reasons.push("best overall balance");
+  }
+
+  return reasons.slice(0, 2).join(" · ") + " via " + road;
+}
+
+function calculateRouteScore(r, allRoutes) {
+  const durationMin = _tz1Minutes(r);
+  const trafficLevel = _tz1TrafficRank(r.traffic);
+  const stopsCount = r.stopsCount || r.complexity || 0;
+  const incidentsCount = r.incidentsCount || (r.delayMinutes >= 8 ? 1 : 0);
+  const complexity = r.complexity || 0;
+  const tolls = !!(r.hasToll || (r.tollCost || 0) > 0);
+
+  const trafficPenalty = trafficLevel * 3;
+  const stopsPenalty = stopsCount * 1.2;
+  const incidentsPenalty = incidentsCount * 4;
+  const complexityPenalty = complexity * 1.4;
+  const tollPenalty = tolls ? 3 : 0;
+  const delayPenalty = (r.delayMinutes || 0) * 1.8;
+  const highwayStabilityBonus = (r.highwayShare || 0) >= 0.45 ? -2 : 0;
+
+  const stressScore = typeof calculateDriveStress === "function" ? calculateDriveStress(r) : Math.round((trafficPenalty + complexityPenalty + delayPenalty) * 10) / 10;
+  const score = durationMin + trafficPenalty + stopsPenalty + incidentsPenalty + complexityPenalty + tollPenalty + delayPenalty + highwayStabilityBonus;
+  const stabilityScore = Math.max(0, Math.min(100, Math.round(100 - trafficPenalty * 4 - delayPenalty * 2 - complexityPenalty * 1.5)));
+
+  return {
+    id: r.id || ("route-" + r.index),
+    googleRouteIndex: r.index,
+    title: _tz1RouteName(r),
+    durationMin,
+    distanceKm: r.distance ? Math.round((r.distance / 1000) * 10) / 10 : 0,
+    trafficLevel,
+    stopsCount,
+    incidentsCount,
+    tolls,
+    score,
+    trafficPenalty,
+    stopsPenalty,
+    incidentsPenalty,
+    complexityPenalty,
+    tollPenalty,
+    delayPenalty,
+    stressScore,
+    drivePersonality: typeof getDrivePersonality === "function" ? getDrivePersonality({ ...r, stressScore }) : "Steady drive",
+    stabilityScore
+  };
+}
+
+function selectBestRoute(routes) {
+  if (!Array.isArray(routes) || !routes.length) return null;
+
+  const scoredRoutes = routes.map(function(route) {
+    if (typeof route.score !== "number") {
+      Object.assign(route, calculateRouteScore(route, routes));
+    }
+    return route;
+  });
+
+  const pref = typeof getUserPreference === "function" ? getUserPreference() : "balanced";
+  const safeFilters = typeof userFilters === "object" && userFilters ? userFilters : {};
+
+  const ranked = scoredRoutes.slice().sort(function(a, b) {
+    const prefPenaltyA = pref === "fastest" ? _tz1Minutes(a) : pref === "no_tolls" && a.tolls ? 10 : 0;
+    const prefPenaltyB = pref === "fastest" ? _tz1Minutes(b) : pref === "no_tolls" && b.tolls ? 10 : 0;
+    const filterPenaltyA = (safeFilters.avoid_highways && a.highway ? 6 : 0) + (safeFilters.fewer_turns ? (a.complexity || 0) * 0.5 : 0);
+    const filterPenaltyB = (safeFilters.avoid_highways && b.highway ? 6 : 0) + (safeFilters.fewer_turns ? (b.complexity || 0) * 0.5 : 0);
+    return (a.score + prefPenaltyA + filterPenaltyA) - (b.score + prefPenaltyB + filterPenaltyB) || _tz1Minutes(a) - _tz1Minutes(b);
+  });
+
+  return ranked[0];
+}
+
+function calculateConfidence(best, allRoutes) {
+  if (!best || !Array.isArray(allRoutes) || allRoutes.length < 2) return "HIGH";
+  const sorted = allRoutes.slice().sort(function(a, b) { return (a.score || 0) - (b.score || 0); });
+  const second = sorted.find(function(r) { return r.index !== best.index; });
+  if (!second) return "HIGH";
+
+  const scoreDiff = Math.abs((second.score || 0) - (best.score || 0));
+  const timeDiff = Math.abs(_tz1Minutes(second) - _tz1Minutes(best));
+  const trafficDiff = Math.abs(_tz1TrafficRank(second.traffic) - _tz1TrafficRank(best.traffic));
+
+  if (scoreDiff >= 10 || (timeDiff >= 5 && trafficDiff >= 1)) return "HIGH";
+  if (scoreDiff >= 5 || timeDiff >= 3 || trafficDiff >= 1) return "MEDIUM";
+  return "LOW";
+}
+
+function _tz1ConfidencePercent(level) {
+  if (level === "HIGH") return 88;
+  if (level === "MEDIUM") return 68;
+  return 52;
+}
+
+function renderResults() {
+  const container = document.getElementById("results");
+  const quickAccess = document.getElementById("quick-access");
+
+  if (!container) return;
+  if (!Array.isArray(analyzedRoutes) || !analyzedRoutes.length) {
+    container.innerHTML = "";
+    if (quickAccess) quickAccess.classList.remove("hidden");
+    return;
+  }
+
+  if (quickAccess) quickAccess.classList.add("hidden");
+
+  // ТЗ-1: always recompute scores, keep ALL routes, select best separately.
+  analyzedRoutes = analyzedRoutes.map(function(route) {
+    return Object.assign(route, calculateRouteScore(route, analyzedRoutes));
+  });
+
+  _bestRoute = selectBestRoute(analyzedRoutes);
+  _fastestRoute = analyzedRoutes.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
+  selectedRoute = _bestRoute;
+
+  analyzedRoutes.forEach(function(route) {
+    route.why = _tz1BuildWhy(route, analyzedRoutes);
+    route.confidence = calculateConfidence(route, analyzedRoutes);
+    if (typeof getRouteRole === "function" && _bestRoute && _fastestRoute) {
+      route.role = getRouteRole(route, _bestRoute, _fastestRoute, analyzedRoutes);
+    } else {
+      route.role = _bestRoute && route.index === _bestRoute.index ? "recommended" : "alternative";
+    }
+  });
+
+  const best = _bestRoute;
+  if (!best) {
+    container.innerHTML = '<div class="error">No best route selected.</div>';
+    return;
+  }
+
+  const conf = calculateConfidence(best, analyzedRoutes);
+  const confPct = _tz1ConfidencePercent(conf);
+  const routeName = _tz1RouteName(best);
+  const distKm = best.distanceKm || (best.distance ? Math.round((best.distance / 1000) * 10) / 10 : 0);
+  const whyLine = _tz1BuildWhy(best, analyzedRoutes);
+  const now = new Date();
+  const arrival = new Date(now.getTime() + _tz1Minutes(best) * 60000);
+  const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  let h = "";
+  h += '<div class="decision-hero">';
+  h += '<div class="dh-overline">AI BEST ROUTE</div>';
+  h += '<div class="dh-headline">Leave now <span class="dh-check">&#10003;</span></div>';
+  h += '<div class="dh-eta">' + _tz1Minutes(best) + '<span class="dh-min">min</span></div>';
+  h += '<div class="dh-route-line">Best route now via ' + _tz1EscapeHTML(routeName) + '</div>';
+  h += '<div class="ai-advice-line" id="ai-advice-line"><span>AI</span>' + _tz1EscapeHTML(whyLine) + '</div>';
+  h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + (typeof t === "function" ? t("why_voice_button") : "Why this route") + '</button></div>';
+  h += '<div class="dh-wait-hint" id="dh-wait-hint" style="display:none"><div class="dh-wait-title">BETTER TIMING</div><div class="dh-wait-times" id="dh-wait-times"></div><div class="dh-wait-save" id="dh-wait-save"></div></div>';
+  h += '<div class="dh-conf-slim">';
+  h += '<span class="dh-conf-label">AI Confidence</span>';
+  h += '<span class="dh-conf-level ' + conf.toLowerCase() + '">' + conf + '</span>';
+  h += '<span class="dh-conf-pct">' + confPct + '%</span>';
+  h += '<div class="dh-conf-bar"><div class="dh-conf-fill" style="width:' + confPct + '%"></div></div>';
+  h += '</div>';
+  h += '</div>';
+
+  h += '<div class="predictive-card" id="predictive-card" style="display:none"><div class="pc-icon">&#9200;</div><div class="pc-content"><div class="pc-title">BETTER OPTION AHEAD</div><div class="pc-main" id="pc-main"></div><div class="pc-sub" id="pc-sub"></div></div><div class="pc-save" id="pc-save"></div></div>';
+
+  h += '<div class="cta-row">';
+  h += '<button class="cta-start" onclick="startDrive(' + best.index + ')">&#9650; START DRIVING<small>via ' + _tz1EscapeHTML(routeName) + '</small></button>';
+  h += '<button class="cta-details" onclick="openRouteDetails(' + best.index + ')">DETAILS</button>';
+  h += '</div>';
+
+  const alternatives = analyzedRoutes
+    .filter(function(route) { return route.index !== best.index; })
+    .sort(function(a, b) { return (a.score || 0) - (b.score || 0); })
+    .slice(0, 2);
+
+  if (alternatives.length) {
+    h += '<div class="other-routes expanded" id="other-routes-section">';
+    h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Alternatives kept: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
+    h += '<div class="alt-row">';
+    alternatives.forEach(function(route) {
+      const diff = _tz1Minutes(route) - _tz1Minutes(best);
+      const diffText = diff === 0 ? 'same time' : (diff > 0 ? '+' + diff + ' min' : diff + ' min');
+      const roleCls = route.tolls ? 'faster' : route.traffic === 'low' ? 'no-tolls' : 'relaxed';
+      const insight = _tz1BuildWhy(route, analyzedRoutes);
+      h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')">';
+      h += '<div class="alt-bar ' + roleCls + '"></div>';
+      h += '<div class="alt-body">';
+      h += '<div class="alt-time-p">' + _tz1Minutes(route) + '<span> min</span></div>';
+      h += '<div class="alt-label-p">via ' + _tz1EscapeHTML(_tz1RouteName(route)) + ' · ' + _tz1EscapeHTML(diffText) + '</div>';
+      h += '<div class="alt-insight">' + _tz1EscapeHTML(insight) + '</div>';
+      h += '</div>';
+      h += '<div class="alt-end"><div class="alt-end-time">' + _tz1EscapeHTML(route.traffic || 'traffic') + '</div><div class="alt-end-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
+      h += '</div>';
+    });
+    h += '</div></div>';
+  }
+
+  h += '<div class="info-strip">';
+  h += '<div class="info-item"><div class="info-label">Distance</div><div class="info-value">' + distKm + ' km</div></div>';
+  h += '<div class="info-item"><div class="info-label">Est. Arrival</div><div class="info-value">' + _tz1EscapeHTML(arrivalStr) + '</div></div>';
+  h += '<div class="info-item"><div class="info-label">Tolls</div><div class="info-value">' + (best.tollCost > 0 ? 'AED ' + best.tollCost : 'None') + '</div></div>';
+  h += '<div class="info-item"><div class="info-label">Score</div><div class="info-value">' + Math.round(best.score) + '</div></div>';
+  h += '</div>';
+  h += '<div class="predict-tip" id="predict-tip" style="display:none"></div>';
+
+  container.innerHTML = h;
+
+  if (typeof renderPredictiveDecision === "function") {
+    try { renderPredictiveDecision(); } catch (e) { console.warn("predictive render skipped", e); }
+  }
+}
+
+function handleStartNavTap() {
+  if (_bestRoute) {
+    selectedRoute = _bestRoute;
+    startDrive(_bestRoute.index);
+    return;
+  }
+  const startVal = (document.getElementById("start")?.value || "").trim();
+  const endVal = (document.getElementById("end")?.value || "").trim();
+  if (startVal && endVal) calculateRoutes();
+  else if (!endVal) document.getElementById("end")?.focus();
+  else requestGPS();
+}
+
+function startDrive(index) {
+  const chosen = analyzedRoutes.find(function(route) { return route.index === index; }) || _bestRoute;
+  selectedRoute = chosen;
+  if (typeof learnFromRouteChoice === "function") learnFromRouteChoice(chosen);
+  startDriveMode(chosen.index);
+}
 </script>
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
