@@ -903,6 +903,112 @@
       }
       body.rtl .tz9-alt-end { text-align: left; }
 
+
+      /* ===== ТЗ-10: Route Details — useful route explanation modal ===== */
+      .modal-content.tz10-details {
+        background: linear-gradient(180deg, hsl(220 12% 8%), hsl(220 12% 6%));
+      }
+      .tz10-modal-subtitle {
+        margin-top: 5px;
+        color: var(--text2);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      .tz10-summary-strip {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin: 0 0 16px;
+      }
+      .tz10-summary-item {
+        background: hsla(220,11%,10%,.74);
+        border: 1px solid var(--border2);
+        border-radius: 14px;
+        padding: 10px;
+      }
+      .tz10-summary-label {
+        font-size: 9px;
+        color: var(--text3);
+        font-weight: 700;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+      .tz10-summary-value {
+        font-size: 16px;
+        color: var(--text);
+        font-weight: 750;
+        font-variant-numeric: tabular-nums;
+      }
+      .tz10-score-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 16px;
+        padding: 13px 14px;
+        border-radius: 16px;
+        background: hsla(72,96%,56%,.07);
+        border: 1px solid hsla(72,96%,56%,.18);
+      }
+      .tz10-score-main { font-size: 13px; color: var(--text); font-weight: 700; line-height: 1.25; }
+      .tz10-score-sub { font-size: 11px; color: var(--text2); line-height: 1.25; margin-top: 3px; }
+      .tz10-score-number {
+        min-width: 62px;
+        text-align: center;
+        border-radius: 999px;
+        padding: 7px 9px;
+        color: var(--green);
+        background: hsla(72,96%,56%,.10);
+        font-size: 13px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+      .tz10-breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .tz10-breakdown-item {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 11px 12px;
+      }
+      .tz10-breakdown-title { font-size: 11px; color: var(--text2); margin-bottom: 3px; }
+      .tz10-breakdown-value { font-size: 15px; color: var(--text); font-weight: 700; }
+      .tz10-segment-note {
+        margin-top: 10px;
+        color: var(--text3);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .tz10-modal-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .tz10-secondary-btn {
+        width: 100%;
+        padding: 15px;
+        background: var(--surface2);
+        color: var(--text2);
+        border: 1px solid var(--border2);
+        border-radius: 14px;
+        font-size: 13px;
+        font-weight: 750;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        font-family: inherit;
+      }
+      @media (max-width: 430px) {
+        .tz10-summary-strip { grid-template-columns: 1fr 1fr 1fr; }
+        .tz10-summary-value { font-size: 14px; }
+        .tz10-breakdown-grid { grid-template-columns: 1fr; }
+      }
+
       /* ===== MOBILE SAFETY PATCH ===== */
       @media (max-width: 430px) {
         .bottom-nav {
@@ -5283,109 +5389,170 @@ function generateDecisionInsight(route, bestRoute) {
   return `Alternative via ${getRouteSummaryName(route)}`;
 }
 
+function tz10SafeNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function tz10RouteSteps(route) {
+  try {
+    return (route && route.route && route.route.legs && route.route.legs[0] && route.route.legs[0].steps) || [];
+  } catch (e) { return []; }
+}
+
+function tz10StepText(step) {
+  return String((step && (step.instructions || step.html_instructions)) || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tz10RouteDetailsViewModel(r, best) {
+  const steps = tz10RouteSteps(r);
+  const bestMin = best ? _tz1Minutes(best) : _tz1Minutes(r);
+  const thisMin = _tz1Minutes(r);
+  const diff = thisMin - bestMin;
+  const distanceKm = tz8RouteDistanceKm(r) || (r.distance ? Math.round((r.distance / 1000) * 10) / 10 : 0);
+  const delay = tz10SafeNumber(r.delayMinutes, 0);
+  const score = Math.round(tz10SafeNumber(r.decisionScore, tz10SafeNumber(r.score, 0)));
+  const turns = tz10SafeNumber(r.complexity, tz10SafeNumber(r.stopsCount, steps.length));
+  const traffic = toTitleCaseLabel(getTrafficText(r.traffic || r.trafficLevel || r.trafficLabel || "medium"));
+  const highwayPct = Math.round(tz10SafeNumber(r.highwayShare, 0) * 100);
+  const routeTitle = getRouteSummaryName(r);
+  const isBest = best && r.index === best.index;
+  const whyPoints = Array.isArray(r.whyPoints) && r.whyPoints.length ? r.whyPoints : generateNeutralWhy(r, best || r);
+  const trade = isBest ? (r.tradeOff || _tz2BuildTradeOff(r, r, analyzedRoutes)) : generateDecisionInsight(r, best || r);
+  const character = typeof tz9RouteCharacter === "function" ? tz9RouteCharacter(r, best || r) : "ROUTE OPTION";
+  return { steps, bestMin, thisMin, diff, distanceKm, delay, score, turns, traffic, highwayPct, routeTitle, isBest, whyPoints, trade, character };
+}
+
+function tz10RenderRouteBreakdown(vm) {
+  const delayText = vm.delay <= 0 ? "0 min" : "+" + vm.delay + " min";
+  const diffText = vm.diff === 0 ? "Same ETA" : (vm.diff > 0 ? "+" + vm.diff + " min vs best" : vm.diff + " min vs best");
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Route metrics</div>
+      <div class="tz10-breakdown-grid">
+        <div class="tz10-breakdown-item"><div class="tz10-breakdown-title">ETA comparison</div><div class="tz10-breakdown-value">${_tz1EscapeHTML(diffText)}</div></div>
+        <div class="tz10-breakdown-item"><div class="tz10-breakdown-title">Traffic</div><div class="tz10-breakdown-value">${_tz1EscapeHTML(vm.traffic)}</div></div>
+        <div class="tz10-breakdown-item"><div class="tz10-breakdown-title">Delay</div><div class="tz10-breakdown-value">${_tz1EscapeHTML(delayText)}</div></div>
+        <div class="tz10-breakdown-item"><div class="tz10-breakdown-title">Turns / actions</div><div class="tz10-breakdown-value">${_tz1EscapeHTML(vm.turns)}</div></div>
+        <div class="tz10-breakdown-item"><div class="tz10-breakdown-title">Highway share</div><div class="tz10-breakdown-value">${_tz1EscapeHTML(vm.highwayPct)}%</div></div>
+        <div class="tz10-breakdown-item"><div class="tz10-breakdown-title">Route type</div><div class="tz10-breakdown-value">${_tz1EscapeHTML(vm.character)}</div></div>
+      </div>
+    </div>`;
+}
+
+function tz10RenderKeySteps(vm) {
+  const meaningful = vm.steps
+    .map(function(step, i) { return { step, i, text: tz10StepText(step) }; })
+    .filter(function(x) { return x.text && (isMeaningfulManeuver(x.step, { }) || /exit|ramp|merge|keep|left|right|u-turn|fork/i.test(x.text)); })
+    .slice(0, 5);
+  const picked = meaningful.length ? meaningful : vm.steps.slice(0, 4).map(function(step, i) { return { step, i, text: tz10StepText(step) || "Continue on route" }; });
+  if (!picked.length) return "";
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Key driving actions</div>
+      <div class="segment-list">
+        ${picked.map(function(item) {
+          const dist = item.step && item.step.distance && item.step.distance.text ? item.step.distance.text : "";
+          const dur = item.step && item.step.duration && item.step.duration.text ? item.step.duration.text : "";
+          const details = [dist, dur].filter(Boolean).join(" · ") || "route step";
+          return `<div class="segment-item"><div class="segment-icon turns">&#10148;</div><div class="segment-content"><div class="segment-title">${_tz1EscapeHTML(item.text)}</div><div class="segment-details">${_tz1EscapeHTML(details)}</div></div></div>`;
+        }).join("")}
+      </div>
+      <div class="tz10-segment-note">These are the most important visible instructions from the route steps. Full turn-by-turn stays in Drive Mode.</div>
+    </div>`;
+}
+
 function openRouteDetails(index) {
-  const r = analyzedRoutes.find(x => x.index === index);
+  const r = analyzedRoutes.find(function(x) { return x.index === index; });
   if (!r) return;
 
   const best = currentDecision && currentDecision.bestRoute ? currentDecision.bestRoute : _bestRoute;
-  if (!best) return;
-
-  const isBest = r.index === best.index;
-  const whyPoints = Array.isArray(r.whyPoints) && r.whyPoints.length ? r.whyPoints : generateNeutralWhy(r, best);
+  const vm = tz10RouteDetailsViewModel(r, best || r);
   const segments = buildRouteSegments(r);
-
-  const distKm = (r.distance / 1000).toFixed(1);
-  const delayText = (r.delayMinutes || 0) === 0 ? "0 min" : `+${r.delayMinutes} min`;
   const tollText = r.tollCost > 0 ? `${r.tollCost} AED` : "No tolls";
-  const trafficText = toTitleCaseLabel(getTrafficText(r.traffic));
-  const highwayPct = Math.round(r.highwayShare * 100);
+  const delayText = vm.delay === 0 ? "0 min" : `+${vm.delay} min`;
 
-  const compareNote = !isBest
-    ? `<div class="comparison-note">${generateDecisionInsight(r, best)}</div>`
-    : "";
+  const compareNote = !vm.isBest
+    ? `<div class="comparison-note">${_tz1EscapeHTML(vm.trade)}</div>`
+    : `<div class="tz10-score-box"><div><div class="tz10-score-main">Recommended by Decision Engine</div><div class="tz10-score-sub">${_tz1EscapeHTML(vm.trade)}</div></div><div class="tz10-score-number">#1</div></div>`;
 
   const segmentsHtml = segments.length > 0 ? `
     <div class="detail-section">
       <div class="detail-section-title">Route breakdown</div>
       <div class="segment-list">
-        ${segments.map(seg => `
+        ${segments.map(function(seg) { return `
           <div class="segment-item">
             <div class="segment-icon ${seg.type}">${seg.icon}</div>
             <div class="segment-content">
-              <div class="segment-title">${seg.title}</div>
-              <div class="segment-details">${seg.details}</div>
+              <div class="segment-title">${_tz1EscapeHTML(seg.title)}</div>
+              <div class="segment-details">${_tz1EscapeHTML(seg.details)}</div>
             </div>
-          </div>
-        `).join("")}
+          </div>`; }).join("")}
       </div>
     </div>
   ` : "";
 
-  document.getElementById("modal-content").innerHTML = `
+  const modal = document.getElementById("modal-content");
+  if (!modal) return;
+  modal.classList.add("tz10-details");
+  modal.innerHTML = `
     <div class="modal-handle"></div>
 
     <div class="modal-header">
       <div>
-        <h2 class="modal-title">${getRouteSummaryName(r)}</h2>
+        <h2 class="modal-title">${_tz1EscapeHTML(vm.routeTitle)}</h2>
+        <div class="tz10-modal-subtitle">${_tz1EscapeHTML(vm.character)} · ${_tz1EscapeHTML(vm.distanceKm)} km · ${_tz1EscapeHTML(vm.traffic)}</div>
       </div>
-      <span class="modal-role-badge ${isBest ? "recommended" : "alternative"}">
-        ${isBest ? t("modal_recommended") : t("modal_alternative")}
+      <span class="modal-role-badge ${vm.isBest ? "recommended" : "alternative"}">
+        ${vm.isBest ? t("modal_recommended") : t("modal_alternative")}
       </span>
+    </div>
+
+    <div class="tz10-summary-strip">
+      <div class="tz10-summary-item"><div class="tz10-summary-label">ETA</div><div class="tz10-summary-value">${vm.thisMin} min</div></div>
+      <div class="tz10-summary-item"><div class="tz10-summary-label">Distance</div><div class="tz10-summary-value">${vm.distanceKm} km</div></div>
+      <div class="tz10-summary-item"><div class="tz10-summary-label">Score</div><div class="tz10-summary-value">${vm.score}</div></div>
     </div>
 
     ${compareNote}
 
     <div class="modal-why">
-      <div class="modal-why-title">${isBest ? t("modal_why_title") : t("modal_tradeoff")}</div>
+      <div class="modal-why-title">${vm.isBest ? t("modal_why_title") : t("modal_tradeoff")}</div>
       <ul class="modal-why-points">
-        ${whyPoints.map(point => `<li>${point}</li>`).join("")}
+        ${vm.whyPoints.map(function(point) { return `<li>${_tz1EscapeHTML(point)}</li>`; }).join("")}
       </ul>
     </div>
 
     <div class="detail-section">
       <div class="detail-section-title">${t("modal_key_facts")}</div>
       <div class="detail-grid">
-        <div class="detail-item">
-          <div class="detail-label">${t("modal_time")}</div>
-          <div class="detail-value">${getDisplayMinutes(r)} min</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">${t("modal_distance")}</div>
-          <div class="detail-value">${distKm} km</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">${t("modal_delay")}</div>
-          <div class="detail-value">${delayText}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">${t("modal_tolls")}</div>
-          <div class="detail-value" style="font-size:14px">${tollText}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">${t("modal_traffic")}</div>
-          <div class="detail-value" style="font-size:14px">${trafficText}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">${t("modal_turns")}</div>
-          <div class="detail-value">${r.complexity}</div>
-        </div>
-        <div class="detail-item full-width">
-          <div class="detail-label">${t("modal_highway")}</div>
-          <div class="detail-value">${highwayPct}%</div>
-        </div>
+        <div class="detail-item"><div class="detail-label">${t("modal_time")}</div><div class="detail-value">${vm.thisMin} min</div></div>
+        <div class="detail-item"><div class="detail-label">${t("modal_distance")}</div><div class="detail-value">${vm.distanceKm} km</div></div>
+        <div class="detail-item"><div class="detail-label">${t("modal_delay")}</div><div class="detail-value">${_tz1EscapeHTML(delayText)}</div></div>
+        <div class="detail-item"><div class="detail-label">${t("modal_tolls")}</div><div class="detail-value" style="font-size:14px">${_tz1EscapeHTML(tollText)}</div></div>
+        <div class="detail-item"><div class="detail-label">${t("modal_traffic")}</div><div class="detail-value" style="font-size:14px">${_tz1EscapeHTML(vm.traffic)}</div></div>
+        <div class="detail-item"><div class="detail-label">${t("modal_turns")}</div><div class="detail-value">${_tz1EscapeHTML(vm.turns)}</div></div>
+        <div class="detail-item full-width"><div class="detail-label">${t("modal_highway")}</div><div class="detail-value">${vm.highwayPct}%</div></div>
       </div>
     </div>
 
+    ${tz10RenderRouteBreakdown(vm)}
     ${segmentsHtml}
+    ${tz10RenderKeySteps(vm)}
 
-    <button class="modal-cta" onclick="startDrive(${r.index})">
-      ${isBest ? `${t("modal_go")} ${getRouteSummaryName(r)}` : `${t("modal_try")} ${getRouteSummaryName(r)}`}
-    </button>
+    <div class="tz10-modal-actions">
+      <button class="tz10-secondary-btn" onclick="closeModal({target:document.getElementById('modal-overlay')})">Close</button>
+      <button class="modal-cta" onclick="startDrive(${r.index})">${vm.isBest ? `${t("modal_go")} ${_tz1EscapeHTML(vm.routeTitle)}` : `${t("modal_try")} ${_tz1EscapeHTML(vm.routeTitle)}`}</button>
+    </div>
   `;
 
   document.getElementById("modal-overlay").classList.add("visible");
 }
-
 function closeModal(event) {
   if (event.target.id === "modal-overlay" || event.target.classList.contains("modal-cta")) {
   document.getElementById("modal-overlay").classList.remove("visible");
