@@ -1307,6 +1307,8 @@ let _departureDecision = null;
 let _rerouteDecision = null;
 let _delayedStartTimer = null;
 let _delayedStartUntil = null;
+let activeDriveRouteIndex = null;
+let activeDriveRouteSnapshot = null;
 
 let userProfile = {
   prefersNoTolls: false,
@@ -3167,6 +3169,7 @@ function handleOffRouteRecalculation(userLatLng) {
 
     _bestRoute = selectBestRoute(analyzedRoutes);
     _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+    selectedRoute = _bestRoute;
 
     analyzedRoutes.forEach(r => {
       r.role = getRouteRole(r, _bestRoute, _fastestRoute, analyzedRoutes);
@@ -3250,13 +3253,104 @@ function stopLiveDriveTracking() {
   lastStableStepIndex = 0;
 }
 
+
+// ============================================================
+//  ТЗ3 — DRIVE MODE ROUTE BINDING
+//  Keeps Decision Engine, selectedRoute and Drive Mode locked
+//  to the same Google route index. Does not change UI/CSS.
+// ============================================================
+function getCanonicalRouteByIndex(index) {
+  if (!Array.isArray(analyzedRoutes) || !analyzedRoutes.length) return null;
+  const normalizedIndex = Number(index);
+  if (Number.isFinite(normalizedIndex)) {
+    const exact = analyzedRoutes.find(function(route) { return Number(route.index) === normalizedIndex; });
+    if (exact) return exact;
+  }
+  return null;
+}
+
+function resolveDriveRoute(index) {
+  const exact = getCanonicalRouteByIndex(index);
+  if (exact) return exact;
+
+  if (selectedRoute) {
+    const selected = getCanonicalRouteByIndex(selectedRoute.index);
+    if (selected) return selected;
+  }
+
+  if (_bestRoute) {
+    const best = getCanonicalRouteByIndex(_bestRoute.index);
+    if (best) return best;
+  }
+
+  return Array.isArray(analyzedRoutes) && analyzedRoutes.length ? analyzedRoutes[0] : null;
+}
+
+function setActiveDriveRoute(route, source) {
+  const canonical = route ? getCanonicalRouteByIndex(route.index) || route : null;
+  if (!canonical) return null;
+
+  selectedRoute = canonical;
+  activeDriveRouteIndex = canonical.index;
+  activeDriveRouteSnapshot = {
+    source: source || "unknown",
+    index: canonical.index,
+    title: canonical.title || _tz1RouteName(canonical),
+    durationMin: canonical.durationMin || _tz1Minutes(canonical),
+    score: canonical.score || null,
+    updatedAt: Date.now()
+  };
+
+  return canonical;
+}
+
+function validateSelectedDriveRoute(route, source) {
+  const canonical = setActiveDriveRoute(route, source);
+  if (!canonical) return null;
+
+  if (currentDirectionsResult && currentDirectionsResult.routes && currentDirectionsResult.routes[canonical.index] !== canonical.route) {
+    const fixedIndex = currentDirectionsResult.routes.findIndex(function(googleRoute) { return googleRoute === canonical.route; });
+    if (fixedIndex >= 0 && fixedIndex !== canonical.index) {
+      canonical.index = fixedIndex;
+      activeDriveRouteIndex = fixedIndex;
+    }
+  }
+
+  return canonical;
+}
+
+function renderSelectedRouteOnDriveMap(route) {
+  const r = validateSelectedDriveRoute(route, "renderSelectedRouteOnDriveMap");
+  if (!r || !driveMap || !currentDirectionsResult) return false;
+
+  if (driveRenderer) driveRenderer.setMap(null);
+
+  driveRenderer = new google.maps.DirectionsRenderer({
+    map: driveMap,
+    directions: currentDirectionsResult,
+    routeIndex: r.index,
+    polylineOptions: {
+      strokeColor: "#2d6a4f",
+      strokeWeight: 6
+    }
+  });
+
+  return true;
+}
+
+function updateDriveRouteStatusLabel(route, prefix) {
+  const st = document.getElementById("drive-status");
+  if (!st || !route) return;
+  const label = route.title || _tz1RouteName(route) || ("Route " + (route.index + 1));
+  st.textContent = (prefix || "AI route locked") + " · " + label;
+}
+
 function startDriveMode(index) {
   clearDelayedStartTimer();
 
-  const r = analyzedRoutes.find(x => x.index === index);
+  const r = validateSelectedDriveRoute(resolveDriveRoute(index), "startDriveMode");
   if (!r || !currentDirectionsResult) return;
 
-  selectedRoute = r;
   currentStepIndex = 0;
   betterRouteIndex = null;
   _rerouteDecision = null;
@@ -3298,31 +3392,23 @@ function startDriveMode(index) {
     });
   }
 
-  if (driveRenderer) driveRenderer.setMap(null);
-
-  driveRenderer = new google.maps.DirectionsRenderer({
-    map: driveMap,
-    directions: currentDirectionsResult,
-    routeIndex: r.index,
-    polylineOptions: {
-      strokeColor: "#2d6a4f",
-      strokeWeight: 6
-    }
-  });
-
+  renderSelectedRouteOnDriveMap(r);
+  updateDriveRouteStatusLabel(r, "AI route locked");
   updateDriveUI();
+
   if (voiceEnabled) {
     setTimeout(function() {
-      if (!hasSpokenDriveDecision) {
+      if (!hasSpokenDriveDecision && selectedRoute && selectedRoute.index === r.index) {
         hasSpokenDriveDecision = true;
         speakText(buildDecisionVoiceText(selectedRoute, "drive_start"), "normal");
       }
     }, 350);
     setTimeout(function() {
-      speakStartNavigation(selectedRoute);
+      if (selectedRoute && selectedRoute.index === r.index) speakStartNavigation(selectedRoute);
     }, 1800);
   }
-  driveMap.fitBounds(r.route.bounds);
+
+  if (r.route && r.route.bounds) driveMap.fitBounds(r.route.bounds);
 
   if (driveInterval) {
     clearInterval(driveInterval);
@@ -3403,7 +3489,7 @@ function getCleanDriveMainInstruction(r, stepIndex, vm) {
 }
 
 function updateDriveUI() {
-  const r = selectedRoute;
+  const r = validateSelectedDriveRoute(selectedRoute || _bestRoute, "updateDriveUI");
   if (!r) return;
   if (lastKnownUserLatLng) currentStepIndex = findBestCurrentStepIndex(r, lastKnownUserLatLng, currentStepIndex);
 
@@ -3502,9 +3588,9 @@ function dismissAlert() {
 function switchToAlternative() {
   if (betterRouteIndex !== null) {
     const chosen = analyzedRoutes.find(r => r.index === betterRouteIndex);
-    learnFromRouteChoice(chosen);
+    if (chosen && typeof learnFromRouteChoice === "function") learnFromRouteChoice(chosen);
     dismissAlert();
-    startDriveMode(betterRouteIndex);
+    startDrive(betterRouteIndex);
   }
   // (legacy — kept for HTML onclick compatibility)
 }
@@ -3614,6 +3700,8 @@ function clearRoutes() {
   selectedRoute = null;
   _bestRoute = null;
   _fastestRoute = null;
+  activeDriveRouteIndex = null;
+  activeDriveRouteSnapshot = null;
 }
 
 // ============================================================
@@ -3672,6 +3760,7 @@ function calculateRoutes() {
 
     _bestRoute = selectBestRoute(analyzedRoutes);
     _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
+    selectedRoute = _bestRoute;
 
     analyzedRoutes.forEach(r => {
       r.role = getRouteRole(r, _bestRoute, _fastestRoute, analyzedRoutes);
@@ -5129,9 +5218,9 @@ function renderResults() {
 }
 
 function handleStartNavTap() {
-  if (_bestRoute) {
-    selectedRoute = _bestRoute;
-    startDrive(_bestRoute.index);
+  const routeToStart = resolveDriveRoute(selectedRoute ? selectedRoute.index : (_bestRoute && _bestRoute.index));
+  if (routeToStart) {
+    startDrive(routeToStart.index);
     return;
   }
   const startVal = (document.getElementById("start")?.value || "").trim();
@@ -5142,8 +5231,8 @@ function handleStartNavTap() {
 }
 
 function startDrive(index) {
-  const chosen = analyzedRoutes.find(function(route) { return route.index === index; }) || _bestRoute;
-  selectedRoute = chosen;
+  const chosen = validateSelectedDriveRoute(resolveDriveRoute(index), "startDrive");
+  if (!chosen) return;
   if (typeof learnFromRouteChoice === "function") learnFromRouteChoice(chosen);
   startDriveMode(chosen.index);
 }
