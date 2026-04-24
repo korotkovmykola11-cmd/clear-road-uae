@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -648,6 +648,73 @@
       /* ===== LANGUAGE BAR ===== */
       /* (already defined above in controls-strip) */
 
+
+
+      /* ===== FIX-1: visible language + AI voice controls ===== */
+      .top-utility-bar {
+        position: relative;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: -6px 14px 8px;
+        padding: 8px 10px;
+        background: hsla(220,11%,10%,.68);
+        border: 1px solid hsla(220,10%,20%,.55);
+        border-radius: 999px;
+        backdrop-filter: blur(18px) saturate(130%);
+        -webkit-backdrop-filter: blur(18px) saturate(130%);
+      }
+      .top-utility-bar .lang-bar {
+        display: flex !important;
+        gap: 4px;
+        margin-left: 0;
+      }
+      .ai-voice-btn,
+      .decision-voice-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid hsla(72,96%,56%,.22);
+        background: hsla(72,96%,56%,.10);
+        color: var(--green);
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        cursor: pointer;
+        font-family: inherit;
+        white-space: nowrap;
+      }
+      .ai-voice-btn:active,
+      .decision-voice-btn:active { transform: scale(.98); }
+      .decision-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 12px;
+      }
+      .decision-voice-btn {
+        width: 100%;
+        border-radius: 14px;
+        padding: 10px 12px;
+        background: hsla(210,90%,60%,.10);
+        border-color: hsla(210,90%,60%,.20);
+        color: var(--blue);
+      }
+      .nav-item.disabled,
+      .nav-item[aria-disabled="true"] {
+        opacity: .38;
+        pointer-events: none;
+        cursor: not-allowed;
+      }
+      body.rtl .top-utility-bar,
+      body.rtl .decision-actions { flex-direction: row-reverse; }
+
       /* ===== RTL ===== */
       body.rtl { direction:rtl; }
       body.rtl .route-row  { flex-direction:row-reverse; }
@@ -710,6 +777,17 @@
     <div class="live-badge"><span class="live-dot"></span> LIVE TRAFFIC</div>
   </div>
 
+  <!-- FIX-1: visible language + AI voice controls -->
+  <div class="top-utility-bar" id="top-utility-bar">
+    <div class="lang-bar visible-lang-bar" id="visible-lang-bar" aria-label="Language selector">
+      <button type="button" class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
+      <button type="button" class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+      <button type="button" class="lang-btn" data-lang="ua" onclick="setLang('ua')">UA</button>
+      <button type="button" class="lang-btn" data-lang="ar" onclick="setLang('ar')">AR</button>
+    </div>
+    <button type="button" class="ai-voice-btn" onclick="speakCurrentDecision()" data-i18n="ai_voice_button">AI Voice</button>
+  </div>
+
   <!-- CONTROLS STRIP (pref / filter / lang) -->
   <div class="controls-strip">
     <div class="pref-bar" id="pref-bar">
@@ -762,15 +840,15 @@
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
       <span class="nav-label" data-i18n="nav_drive">Drive</span>
     </div>
-    <div class="nav-item">
+    <div class="nav-item disabled" aria-disabled="true">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17v-6c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v6H4v2h16v-2h-2zm-2 0H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6zm-4 5c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2z"/></svg>
       <span class="nav-label" data-i18n="nav_alerts">Alerts</span>
     </div>
-    <div class="nav-item">
+    <div class="nav-item disabled" aria-disabled="true">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
       <span class="nav-label" data-i18n="nav_saved">Saved</span>
     </div>
-    <div class="nav-item">
+    <div class="nav-item disabled" aria-disabled="true">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       <span class="nav-label" data-i18n="nav_profile">Profile</span>
     </div>
@@ -933,7 +1011,9 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       modal_turns:"Turns", modal_highway:"Highway share",
       modal_go:"Go via", modal_try:"Try",
       pred_best_now:"Best time to go now", pred_good_time:"Good time — light delays",
-      pred_consider:"Consider waiting — traffic building up", pred_stable:"Conditions are stable"
+      pred_consider:"Consider waiting — traffic building up", pred_stable:"Conditions are stable",
+      ai_voice_button:"AI Voice",
+      why_voice_button:"Why this route"
     },
     ru: {
       from:"Откуда:", to:"Куда:",
@@ -989,7 +1069,9 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       modal_turns:"Повороты", modal_highway:"Доля шоссе",
       modal_go:"Ехать через", modal_try:"Попробовать",
       pred_best_now:"Сейчас лучшее время выехать", pred_good_time:"Хорошее время — небольшие задержки",
-      pred_consider:"Лучше подождать — трафик нарастает", pred_stable:"Обстановка стабильна"
+      pred_consider:"Лучше подождать — трафик нарастает", pred_stable:"Обстановка стабильна",
+      ai_voice_button:"AI голос",
+      why_voice_button:"Почему маршрут"
     },
     ua: {
       from:"Звідки:", to:"Куди:",
@@ -1045,7 +1127,9 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       modal_turns:"Повороти", modal_highway:"Частка автотраси",
       modal_go:"Їхати через", modal_try:"Спробувати",
       pred_best_now:"Зараз найкращий час виїхати", pred_good_time:"Гарний час — невеликі затримки",
-      pred_consider:"Краще зачекати — трафік зростає", pred_stable:"Обстановка стабільна"
+      pred_consider:"Краще зачекати — трафік зростає", pred_stable:"Обстановка стабільна",
+      ai_voice_button:"AI голос",
+      why_voice_button:"Чому маршрут"
     },
     ar: {
       from:"من:", to:"إلى:",
@@ -1101,7 +1185,9 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       modal_turns:"المنعطفات", modal_highway:"حصة الطريق السريع",
       modal_go:"انطلق عبر", modal_try:"جرب",
       pred_best_now:"الوقت الأفضل للانطلاق الآن", pred_good_time:"وقت جيد — تأخيرات خفيفة",
-      pred_consider:"يفضل الانتظار — الازدحام يتصاعد", pred_stable:"الأوضاع مستقرة"
+      pred_consider:"يفضل الانتظار — الازدحام يتصاعد", pred_stable:"الأوضاع مستقرة",
+      ai_voice_button:"صوت AI",
+      why_voice_button:"لماذا هذا الطريق"
     }
   };
 
@@ -2258,12 +2344,104 @@ function getVoicePromptFromManeuver(vm) {
 }
 
 
+function speakText(text) {
+  if (!text) return;
+  if (!("speechSynthesis" in window)) {
+    alert(text);
+    return;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(normalizeVoiceText(text));
+    utter.rate = currentLang === "ar" ? 0.92 : 0.98;
+    utter.pitch = 1.0;
+    utter.lang = voiceLang();
+    window.speechSynthesis.speak(utter);
+    lastSpokenText = text;
+    lastSpokenAt = Date.now();
+  } catch (e) {
+    console.warn("speech failed", e);
+    alert(text);
+  }
+}
+
+function buildDecisionVoiceText(route) {
+  const r = route || selectedRoute || _bestRoute;
+  if (!r) {
+    if (currentLang === "ru") return "Сначала постройте маршрут. Затем я объясню, почему выбран лучший вариант.";
+    if (currentLang === "ua") return "Спочатку побудуйте маршрут. Потім я поясню, чому обрано найкращий варіант.";
+    if (currentLang === "ar") return "ابنِ المسار أولاً. بعد ذلك سأشرح لماذا هذا الطريق أفضل.";
+    return "Build a route first. Then I will explain why this route is better.";
+  }
+
+  const mins = getDisplayMinutes(r);
+  const routeName = getRouteSummaryName(r);
+  const meta = getUnifiedRouteMeta(r);
+  const conf = calculateConfidence(r, analyzedRoutes);
+  const why = stripHtml(getRouteInsight(r, _bestRoute || r, _fastestRoute) || generateWhyLine(r, analyzedRoutes) || "");
+  const traffic = r.traffic || "stable";
+
+  if (currentLang === "ru") {
+    return "Рекомендую этот маршрут через " + routeName + ". Время в пути примерно " + mins + " минут. " +
+      (why ? "Причина: " + why + ". " : "") +
+      "Уверенность решения: " + translateConfidenceForVoice(conf) + ". Трафик: " + translateTrafficForVoice(traffic) + ".";
+  }
+  if (currentLang === "ua") {
+    return "Рекомендую цей маршрут через " + routeName + ". Час у дорозі приблизно " + mins + " хвилин. " +
+      (why ? "Причина: " + why + ". " : "") +
+      "Впевненість рішення: " + translateConfidenceForVoice(conf) + ". Трафік: " + translateTrafficForVoice(traffic) + ".";
+  }
+  if (currentLang === "ar") {
+    return "أوصي بهذا الطريق عبر " + routeName + ". مدة الرحلة حوالي " + mins + " دقيقة. " +
+      (why ? "السبب: " + why + ". " : "") +
+      "ثقة القرار: " + translateConfidenceForVoice(conf) + ". حالة المرور: " + translateTrafficForVoice(traffic) + ".";
+  }
+  return "I recommend this route via " + routeName + ". Estimated time is " + mins + " minutes. " +
+    (why ? "Reason: " + why + ". " : "") +
+    "Decision confidence is " + translateConfidenceForVoice(conf) + ". Traffic is " + translateTrafficForVoice(traffic) + ".";
+}
+
+function speakCurrentDecision() {
+  voiceEnabled = true;
+  speakText(buildDecisionVoiceText(selectedRoute || _bestRoute));
+}
+
+function stripHtml(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function translateConfidenceForVoice(conf) {
+  const c = String(conf || "").toUpperCase();
+  if (currentLang === "ru") return c === "HIGH" ? "высокая" : c === "MEDIUM" ? "средняя" : "низкая";
+  if (currentLang === "ua") return c === "HIGH" ? "висока" : c === "MEDIUM" ? "середня" : "низька";
+  if (currentLang === "ar") return c === "HIGH" ? "عالية" : c === "MEDIUM" ? "متوسطة" : "منخفضة";
+  return c === "HIGH" ? "high" : c === "MEDIUM" ? "medium" : "low";
+}
+
+function translateTrafficForVoice(traffic) {
+  const tr = String(traffic || "stable");
+  if (currentLang === "ru") return tr === "high" ? "плотный" : tr === "medium" ? "умеренный" : "стабильный";
+  if (currentLang === "ua") return tr === "high" ? "щільний" : tr === "medium" ? "помірний" : "стабільний";
+  if (currentLang === "ar") return tr === "high" ? "كثيف" : tr === "medium" ? "متوسط" : "مستقر";
+  return tr === "high" ? "heavy" : tr === "medium" ? "moderate" : "stable";
+}
+
 function toggleVoice() {
   voiceEnabled = !voiceEnabled;
 
   if (!voiceEnabled && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
+    return;
   }
+
+  // In Drive Mode, Voice button now gives the AI decision explanation first,
+  // not only left/right turn instructions.
+  speakCurrentDecision();
 }
 
 function toggleFollowMode() {
@@ -3846,6 +4024,7 @@ function renderResults() {
   h += '<div class="dh-headline">' + decisionLabel + ' <span class="dh-check">&#10003;</span></div>';
   h += '<div class="dh-eta">' + getDisplayMinutes(best) + '<span class="dh-min">min</span></div>';
   h += '<div class="dh-route-line">' + routeLineText + "</div>";
+  h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + t("why_voice_button") + '</button></div>';
   if (chipsHtml) h += '<div class="dh-chips">' + chipsHtml + "</div>";
   // inline wait-hint shell — populated by renderPredictiveDecision()
   h += '<div class="dh-wait-hint" id="dh-wait-hint" style="display:none">';
@@ -4534,7 +4713,7 @@ document.querySelectorAll(".filter-btn").forEach(b =>
 // ============================================================
 
 window.initMap = initMap;
-</script>   
+</script>
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
