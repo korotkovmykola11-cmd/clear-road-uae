@@ -1309,6 +1309,11 @@ let _delayedStartTimer = null;
 let _delayedStartUntil = null;
 let activeDriveRouteIndex = null;
 let activeDriveRouteSnapshot = null;
+let _rerouteDismissedUntil = 0;
+let _rerouteDismissedIndex = null;
+let _rerouteLastShownAt = 0;
+let _rerouteLastSignature = "";
+
 
 let userProfile = {
   prefersNoTolls: false,
@@ -2802,46 +2807,86 @@ function getUpcomingCondition(r, stepIndex) {
 }
 
 function getRerouteDecision(currentRoute, alternativeRoute) {
-  const timeGain = getDisplayMinutes(currentRoute) - getDisplayMinutes(alternativeRoute);
+  if (!currentRoute || !alternativeRoute) {
+    return { action: "stay", confidence: "low", title: "Stay on current route", detail: "Missing route data" };
+  }
+
+  const currentMin = getDisplayMinutes(currentRoute);
+  const altMin = getDisplayMinutes(alternativeRoute);
+  const timeGain = currentMin - altMin;
+
   const currentDelay = currentRoute.delayMinutes || 0;
   const altDelay = alternativeRoute.delayMinutes || 0;
   const delayGain = currentDelay - altDelay;
+
+  const currentScore = Number.isFinite(currentRoute.score) ? currentRoute.score : calculateRouteScore(currentRoute);
+  const altScore = Number.isFinite(alternativeRoute.score) ? alternativeRoute.score : calculateRouteScore(alternativeRoute);
+  const scoreGain = currentScore - altScore;
+
   const trafficBetter = trafficRank(alternativeRoute.traffic) < trafficRank(currentRoute.traffic);
   const simplerDrive = (alternativeRoute.complexity || 0) < (currentRoute.complexity || 0);
+  const calmerDrive = (alternativeRoute.stressLevel || 0) < (currentRoute.stressLevel || 0);
+  const fewerStops = (alternativeRoute.stopsCount || 0) < (currentRoute.stopsCount || 0);
+  const tollImprovement = !!currentRoute.tolls && !alternativeRoute.tolls;
 
-  if (timeGain >= 4) {
+  const reasons = [];
+  if (timeGain > 0) reasons.push(timeGain + " min faster");
+  if (delayGain > 0) reasons.push(delayGain + " min less delay");
+  if (trafficBetter) reasons.push("lighter traffic");
+  if (simplerDrive) reasons.push("simpler drive");
+  if (calmerDrive) reasons.push("calmer route");
+  if (fewerStops) reasons.push("fewer stops");
+  if (tollImprovement) reasons.push("no tolls");
+  if (!reasons.length && scoreGain > 0) reasons.push("better total score");
+
+  const reasonText = reasons.slice(0, 3).join(" · ") || "No strong advantage";
+  const via = getRouteSummaryName(alternativeRoute);
+
+  if (timeGain >= 4 || scoreGain >= 10) {
     return {
       action: "switch",
       confidence: "high",
-      title: `Switch now → save ${timeGain} min`,
-      detail: `Faster${alternativeRoute.drivePersonality ? " · " + alternativeRoute.drivePersonality.toLowerCase() : ""} via ${getRouteSummaryName(alternativeRoute)}`
+      title: timeGain >= 4 ? ("Switch now → save " + timeGain + " min") : "Switch now → better route score",
+      detail: reasonText + " via " + via,
+      timeGain,
+      delayGain,
+      scoreGain
     };
   }
 
-  if (timeGain >= 2 && (trafficBetter || delayGain >= 2)) {
+  if ((timeGain >= 2 && (trafficBetter || delayGain >= 2 || scoreGain >= 5)) || scoreGain >= 7) {
     return {
       action: "switch",
       confidence: "high",
-      title: `Switch now → smoother and faster`,
-      detail: `${timeGain} min faster with calmer traffic and ${(alternativeRoute.drivePersonality || "steady drive").toLowerCase()}`
+      title: "Switch recommended",
+      detail: reasonText + " via " + via,
+      timeGain,
+      delayGain,
+      scoreGain
     };
   }
 
-  if (timeGain >= 1 && (trafficBetter || simplerDrive || delayGain >= 1)) {
+  if ((timeGain >= 1 && (trafficBetter || simplerDrive || calmerDrive || delayGain >= 1)) || scoreGain >= 4) {
     return {
       action: "suggest",
       confidence: "medium",
-      title: `Alternative may be better`,
-      detail: `${timeGain} min gain or ${(alternativeRoute.drivePersonality || "easier drive").toLowerCase()} ahead`
+      title: "Alternative may be better",
+      detail: reasonText + " via " + via,
+      timeGain,
+      delayGain,
+      scoreGain
     };
   }
 
-  if (timeGain >= 0 && trafficBetter && delayGain >= 2) {
+  if (timeGain >= 0 && (trafficBetter || calmerDrive || tollImprovement) && scoreGain >= 2) {
     return {
       action: "suggest",
       confidence: "medium",
-      title: `Calmer route available`,
-      detail: `Similar time, but calmer and lower-stress ahead`
+      title: "Calmer route available",
+      detail: reasonText + " via " + via,
+      timeGain,
+      delayGain,
+      scoreGain
     };
   }
 
@@ -2849,7 +2894,10 @@ function getRerouteDecision(currentRoute, alternativeRoute) {
     action: "stay",
     confidence: "low",
     title: "Stay on current route",
-    detail: "No strong reroute advantage"
+    detail: "No strong reroute advantage",
+    timeGain,
+    delayGain,
+    scoreGain
   };
 }
 
@@ -2859,7 +2907,7 @@ function renderDriveAlertDecision(decision, altRoute) {
 
   if (!alert || !message) return;
 
-  if (!decision || decision.action === "stay") {
+  if (!decision || decision.action === "stay" || !altRoute) {
     alert.classList.remove("visible");
     return;
   }
@@ -2868,6 +2916,18 @@ function renderDriveAlertDecision(decision, altRoute) {
                           decision.confidence === "medium" ? "medium" : "low";
 
   const actionLabel = decision.action === "switch" ? "Switch recommended" : "Alternative suggested";
+  const scoreText = Number.isFinite(decision.scoreGain) ? ("Score +" + Math.round(decision.scoreGain)) : "AI route check";
+
+  _rerouteDecision = {
+    action: decision.action,
+    confidence: decision.confidence,
+    targetIndex: altRoute.index,
+    title: decision.title,
+    detail: decision.detail,
+    scoreGain: decision.scoreGain || 0,
+    timeGain: decision.timeGain || 0,
+    createdAt: Date.now()
+  };
 
   message.innerHTML = `
     <div class="drive-alert-header">
@@ -2879,7 +2939,7 @@ function renderDriveAlertDecision(decision, altRoute) {
     </div>
     <div class="drive-alert-title">${decision.title}</div>
     <div class="drive-alert-detail">${decision.detail}</div>
-    <div class="drive-alert-meta">Via ${getRouteSummaryName(altRoute)}</div>
+    <div class="drive-alert-meta">${scoreText} · Via ${getRouteSummaryName(altRoute)}</div>
   `;
 
   const primaryBtn = alert.querySelector(".drive-alert-btn.primary");
@@ -2888,7 +2948,7 @@ function renderDriveAlertDecision(decision, altRoute) {
   if (primaryBtn && secondaryBtn) {
     primaryBtn.textContent = decision.action === "switch" ? "Switch now" : "Try alternative";
     primaryBtn.className = `drive-alert-btn primary${decision.action === "suggest" ? " suggest" : ""}`;
-    secondaryBtn.textContent = "Stay";
+    secondaryBtn.textContent = "Keep current";
   }
 
   alert.classList.add("visible");
@@ -2896,58 +2956,53 @@ function renderDriveAlertDecision(decision, altRoute) {
 }
 
 function evaluateReroute(currentRoute, allRoutes) {
-  if (allRoutes.length <= 1) return null;
+  if (!currentRoute || !Array.isArray(allRoutes) || allRoutes.length <= 1) return null;
 
-  const alternatives = allRoutes.filter(r => r.index !== currentRoute.index);
+  const now = Date.now();
+  const alternatives = allRoutes.filter(function(route) {
+    if (!route || route.index === currentRoute.index) return false;
+    if (_rerouteDismissedIndex === route.index && now < _rerouteDismissedUntil) return false;
+    return true;
+  });
 
   let bestAlt = null;
   let bestDecision = null;
 
-  for (const alt of alternatives) {
+  alternatives.forEach(function(alt) {
     const decision = getRerouteDecision(currentRoute, alt);
-
-    if (decision.action === "stay") continue;
+    if (!decision || decision.action === "stay") return;
 
     if (!bestAlt) {
       bestAlt = alt;
       bestDecision = decision;
-      continue;
+      return;
     }
 
-    const currentPriority =
-      bestDecision.action === "switch" ? 2 :
-      bestDecision.action === "suggest" ? 1 : 0;
+    const currentPriority = bestDecision.action === "switch" ? 2 : bestDecision.action === "suggest" ? 1 : 0;
+    const newPriority = decision.action === "switch" ? 2 : decision.action === "suggest" ? 1 : 0;
 
-    const newPriority =
-      decision.action === "switch" ? 2 :
-      decision.action === "suggest" ? 1 : 0;
+    const currentScoreGain = Number(bestDecision.scoreGain || 0);
+    const newScoreGain = Number(decision.scoreGain || 0);
+    const currentTimeGain = Number(bestDecision.timeGain || 0);
+    const newTimeGain = Number(decision.timeGain || 0);
 
-    if (newPriority > currentPriority) {
+    if (
+      newPriority > currentPriority ||
+      (newPriority === currentPriority && newScoreGain > currentScoreGain) ||
+      (newPriority === currentPriority && newScoreGain === currentScoreGain && newTimeGain > currentTimeGain)
+    ) {
       bestAlt = alt;
       bestDecision = decision;
-      continue;
     }
-
-    if (newPriority === currentPriority) {
-      const currentGain = getDisplayMinutes(currentRoute) - getDisplayMinutes(bestAlt);
-      const newGain = getDisplayMinutes(currentRoute) - getDisplayMinutes(alt);
-
-      const currentBias = getPersonalizationBias(bestAlt);
-      const newBias = getPersonalizationBias(alt);
-
-      if (newGain > currentGain || (newGain === currentGain && newBias < currentBias)) {
-        bestAlt = alt;
-        bestDecision = decision;
-      }
-    }
-  }
+  });
 
   if (!bestAlt || !bestDecision) return null;
 
   return {
     index: bestAlt.index,
     route: bestAlt,
-    decision: bestDecision
+    decision: bestDecision,
+    signature: currentRoute.index + "→" + bestAlt.index + ":" + bestDecision.action
   };
 }
 
@@ -3120,15 +3175,22 @@ function handleLiveDrivePosition(pos) {
     const reroute = evaluateReroute(selectedRoute, analyzedRoutes);
 
     if (!reroute) {
-      _rerouteDecision = null;
-      betterRouteIndex = null;
-      dismissAlert();
+      if (betterRouteIndex !== null) {
+        betterRouteIndex = null;
+        _rerouteDecision = null;
+        _rerouteLastSignature = "";
+        const alert = document.getElementById("drive-alert");
+        if (alert) alert.classList.remove("visible");
+      }
       return;
     }
 
-    if (reroute.index !== betterRouteIndex) {
-      betterRouteIndex = reroute.index;
-      _rerouteDecision = reroute.decision;
+    const shouldShow = reroute.signature !== _rerouteLastSignature || now - _rerouteLastShownAt > 60000;
+    betterRouteIndex = reroute.index;
+
+    if (shouldShow) {
+      _rerouteLastSignature = reroute.signature;
+      _rerouteLastShownAt = now;
       renderDriveAlertDecision(reroute.decision, reroute.route);
     }
   }
@@ -3354,6 +3416,10 @@ function startDriveMode(index) {
   currentStepIndex = 0;
   betterRouteIndex = null;
   _rerouteDecision = null;
+  _rerouteDismissedUntil = 0;
+  _rerouteDismissedIndex = null;
+  _rerouteLastShownAt = 0;
+  _rerouteLastSignature = "";
   lastRerouteCheckAt = 0;
   lastKnownUserLatLng = null;
   offRouteSince = 0;
@@ -3580,19 +3646,55 @@ function showDriveAlert(message, benefit) {
 }
 
 function dismissAlert() {
-  document.getElementById("drive-alert").classList.remove("visible");
+  const alert = document.getElementById("drive-alert");
+  if (alert) alert.classList.remove("visible");
+
+  if (betterRouteIndex !== null) {
+    _rerouteDismissedIndex = betterRouteIndex;
+    _rerouteDismissedUntil = Date.now() + 90000;
+  }
+
   betterRouteIndex = null;
   _rerouteDecision = null;
+  _rerouteLastSignature = "";
 }
 
 function switchToAlternative() {
-  if (betterRouteIndex !== null) {
-    const chosen = analyzedRoutes.find(r => r.index === betterRouteIndex);
-    if (chosen && typeof learnFromRouteChoice === "function") learnFromRouteChoice(chosen);
-    dismissAlert();
-    startDrive(betterRouteIndex);
+  const targetIndex = _rerouteDecision && Number.isFinite(_rerouteDecision.targetIndex)
+    ? _rerouteDecision.targetIndex
+    : betterRouteIndex;
+
+  if (targetIndex === null || targetIndex === undefined) return;
+
+  const chosen = resolveDriveRoute(targetIndex);
+  if (!chosen) return;
+
+  if (typeof learnFromRouteChoice === "function") learnFromRouteChoice(chosen);
+
+  betterRouteIndex = null;
+  _rerouteDecision = null;
+  _rerouteDismissedIndex = null;
+  _rerouteDismissedUntil = 0;
+  _rerouteLastSignature = "";
+
+  setActiveDriveRoute(chosen, "switchToAlternative");
+  currentStepIndex = 0;
+  lastWarningPhase = "";
+  lastDriveVoiceStepIndex = -1;
+  lastDriveVoicePhase = "";
+
+  renderSelectedRouteOnDriveMap(chosen);
+  updateDriveRouteStatusLabel(chosen, "Switched to AI route");
+  updateDriveUI();
+
+  const alert = document.getElementById("drive-alert");
+  if (alert) alert.classList.remove("visible");
+
+  if (driveMap && chosen.route && chosen.route.bounds) driveMap.fitBounds(chosen.route.bounds);
+
+  if (voiceEnabled) {
+    speakText("Route switched. Continuing via " + getRouteSummaryName(chosen), "normal");
   }
-  // (legacy — kept for HTML onclick compatibility)
 }
 
 function exitDriveMode() {
