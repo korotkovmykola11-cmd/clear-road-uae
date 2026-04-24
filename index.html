@@ -1499,9 +1499,7 @@ function generateUnifiedDecisionWhy(route, allRoutes) {
 //  HELPERS
 // ============================================================
 
-function stripHtml(text) {
-  return (text || "").replace(/<[^>]*>/g, " ").trim();
-}
+
 
 function normalizeRoadText(step, route) {
   const summary = (route.summary || "");
@@ -1688,43 +1686,7 @@ function getStressBadge(stressScore) {
   return { label: "High stress", tone: "high" };
 }
 
-function calculateRouteScore(r, allRoutes) {
-  const fastest = allRoutes.length ? Math.min(...allRoutes.map(x => x.time)) : r.time;
-  const timeScore = (r.time - fastest) / 60;
-  const trafficPenalty = r.traffic === "high" ? 15 : r.traffic === "medium" ? 5 : 0;
-  const complexityPenalty = r.complexity * 0.75;
-  const highwayBonus = r.highwayShare * -3;
-  const delayPenalty = r.delayMinutes * 1.5;
 
-  const stressScore = calculateDriveStress(r);
-  const stressPenalty = stressScore * 0.65;
-
-  const stabilityScore = Math.max(
-    0,
-    100 - trafficPenalty * 3 - r.complexity * 2 - r.delayMinutes * 4 - stressScore * 2
-  );
-
-  const score =
-    timeScore +
-    trafficPenalty +
-    complexityPenalty +
-    highwayBonus +
-    delayPenalty +
-    stressPenalty;
-
-  return {
-    score,
-    timeScore,
-    trafficPenalty,
-    complexityPenalty,
-    highwayBonus,
-    delayPenalty,
-    stressPenalty,
-    stressScore,
-    drivePersonality: getDrivePersonality({ ...r, stressScore }),
-    stabilityScore
-  };
-}
 
 // ============================================================
 // ============================================================
@@ -1761,140 +1723,13 @@ function getRouteRole(r, bestRoute, fastestRoute, allRoutes) {
 //  DECISION LOGIC — SELECT RECOMMENDED ROUTE
 // ============================================================
 
-function selectBestRoute(routes) {
-  if (!routes?.length) return null;
-  if (routes.length === 1) return routes[0];
 
-  const fastest = [...routes].sort((a, b) => a.time - b.time)[0];
-
-  // ── User preference override (minimal injection) ──
-  const pref = getUserPreference();
-
-  if (pref === "fastest") {
-    // avoid_highways modifier: if fastest is highway, accept a non-highway route within 3 min
-    if (userFilters.avoid_highways && fastest.highway) {
-      const closeNoHwy = routes.filter(r => !r.highway && (r.time - fastest.time) / 60 <= 3);
-      if (closeNoHwy.length > 0)
-        return closeNoHwy.sort((a, b) => a.time - b.time || a.complexity - b.complexity)[0];
-    }
-    // Always prefer shortest time; only switch if a peer is essentially the same time
-    // AND has cheaper toll cost (very small difference).
-    const peers = routes.filter(r =>
-      Math.abs(r.time - fastest.time) / 60 <= 1 && r.tollCost < fastest.tollCost
-    );
-    if (peers.length === 0) return fastest;
-    return peers.sort((a, b) => a.tollCost - b.tollCost || a.time - b.time)[0];
-  }
-
-  if (pref === "no_tolls") {
-    // Strongly prefer toll-free, even if up to ~5 min slower than fastest
-    const free = routes.filter(r =>
-      r.tollCost === 0 && (r.time - fastest.time) / 60 <= 5
-    );
-    if (free.length > 0) {
-      // fewer_turns modifier: elevate complexity in sort among toll-free candidates
-      return free.sort((a, b) =>
-        trafficRank(a.traffic) - trafficRank(b.traffic) ||
-        a.delayMinutes - b.delayMinutes ||
-        (a.stressScore || 0) - (b.stressScore || 0) ||
-        (userFilters.fewer_turns ? a.complexity - b.complexity : 0) ||
-        getPersonalizationBias(a) - getPersonalizationBias(b) ||
-        a.tollCost - b.tollCost ||
-        a.complexity - b.complexity ||
-        a.time - b.time
-      )[0];
-    }
-    // Otherwise fall through to balanced logic below
-  }
-
-  // ── Step 1: Build "competitive pool" — routes within 5 min of fastest ──
-  // Anything further is too slow to be considered, regardless of other merits.
-  let pool = routes.filter(r => (r.time - fastest.time) / 60 <= 5);
-  if (pool.length === 0) pool = [fastest];
-
-  // ── Step 2: Strong free-route preference ──
-  // If fastest is paid AND there's a free route within 4 min → prefer free.
-  if (fastest.tollCost > 0) {
-    const competitiveFree = pool.filter(r =>
-      r.tollCost === 0 && (r.time - fastest.time) / 60 <= 4
-    );
-    if (competitiveFree.length > 0) {
-      return competitiveFree.sort((a, b) =>
-        trafficRank(a.traffic) - trafficRank(b.traffic) ||
-        a.delayMinutes - b.delayMinutes ||
-        a.complexity - b.complexity ||
-        a.time - b.time
-      )[0];
-    }
-  }
-
-  // ── Step 3: Drop high-traffic routes if any non-high alternative exists ──
-  // Fastest with unstable traffic should NOT auto-win.
-  const nonHigh = pool.filter(r => r.traffic !== "high");
-  if (nonHigh.length > 0) pool = nonHigh;
-
-  // ── Step 4: Final ranking — filters act as sort modifiers, not overrides ──
-  // avoid_highways: highway routes sorted last (penalty as first comparator)
-  // fewer_turns:    complexity elevated before toll cost
-  return pool.sort((a, b) =>
-    (userFilters.avoid_highways ? (a.highway ? 1 : 0) - (b.highway ? 1 : 0) : 0) ||
-    trafficRank(a.traffic) - trafficRank(b.traffic) ||
-    a.delayMinutes - b.delayMinutes ||
-    (a.stressScore || 0) - (b.stressScore || 0) ||
-    getPersonalizationBias(a) - getPersonalizationBias(b) ||
-    (userFilters.fewer_turns ? a.complexity - b.complexity : 0) ||
-    a.tollCost - b.tollCost ||
-    a.complexity - b.complexity ||
-    a.time - b.time
-  )[0];
-}
 
 // ── Confidence helper: practical, decision-aligned (matches selectBestRoute logic) ──
 // HIGH   = obvious human choice (free vs slightly faster paid, lower traffic, lower delay, or dominant)
 // MEDIUM = real trade-off (faster alt exists but worse on cost/stability)
 // LOW    = routes are genuinely interchangeable on all dimensions
-function calculateConfidence(best, allRoutes) {
-  if (!allRoutes || allRoutes.length < 2) return t("conf_high");
-  const others = allRoutes.filter(r => r.index !== best.index);
-  if (others.length === 0) return t("conf_high");
 
-  const bestMin = getDisplayMinutes(best);
-  const fasterAlts = others.filter(r => getDisplayMinutes(r) < bestMin);
-  const fastestAlt = fasterAlts.length
-    ? fasterAlts.reduce((a, b) => getDisplayMinutes(a) < getDisplayMinutes(b) ? a : b)
-    : null;
-
-  // Case A: nothing is faster — best is dominant on time
-  if (!fastestAlt) return t("conf_high");
-
-  const timeGap = bestMin - getDisplayMinutes(fastestAlt); // min that alt saves
-
-  // Case B: best is free, faster alt is paid, small gap → clear human win
-  if (best.tollCost === 0 && fastestAlt.tollCost > 0 && timeGap <= 3) {
-    return t("conf_high");
-  }
-  // Case C: best clearly avoids worse traffic of the faster alt
-  if (trafficRank(best.traffic) < trafficRank(fastestAlt.traffic) && timeGap <= 5) {
-    return t("conf_high");
-  }
-  // Case D: best clearly avoids higher delay of the faster alt
-  if ((fastestAlt.delayMinutes || 0) - (best.delayMinutes || 0) >= 3 && timeGap <= 5) {
-    return t("conf_high");
-  }
-
-  // Truly similar across the board → LOW (rare)
-  const trulySimilar = others.every(r => {
-    const dt = Math.abs(getDisplayMinutes(r) - bestMin);
-    return dt <= 2
-      && r.tollCost === best.tollCost
-      && trafficRank(r.traffic) === trafficRank(best.traffic)
-      && Math.abs((r.complexity || 0) - (best.complexity || 0)) <= 2;
-  });
-  if (trulySimilar) return t("conf_low");
-
-  // Otherwise: meaningful trade-off
-  return t("conf_medium");
-}
 
 // ============================================================
 //  ROUTE SEGMENTS (for Route Details modal)
@@ -2252,22 +2087,7 @@ function normalizeVoiceText(text) {
     .trim();
 }
 
-function speakText(text, priority = "normal") {
-  if (!voiceEnabled || !("speechSynthesis" in window)) return;
-  if (!text) return;
-  const now = Date.now();
-  const normalized = normalizeVoiceText(text);
-  if (normalized === lastSpokenText && now - lastSpokenAt < 6000) return;
-  if (priority === "urgent") window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(normalized);
-  utterance.lang = voiceLang();
-  utterance.rate = priority === "urgent" ? 1.0 : 0.95;
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  lastSpokenText = normalized;
-  lastSpokenAt = now;
-  window.speechSynthesis.speak(utterance);
-}
+
 
 function getVoicePromptFromTimedWarning(timedWarning) {
   if (!timedWarning) return "";
@@ -3719,27 +3539,7 @@ function exitDriveMode() {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
-function handleStartNavTap() {
-  if (_bestRoute) {
-    startDrive(_bestRoute.index);
-    return;
-  }
-  const startVal = (document.getElementById("start")?.value || "").trim();
-  const endVal   = (document.getElementById("end")?.value   || "").trim();
-  if (startVal && endVal) {
-    calculateRoutes();
-  } else if (!endVal) {
-    document.getElementById("end")?.focus();
-  } else {
-    requestGPS();
-  }
-}
 
-function startDrive(index) {
-  const chosen = analyzedRoutes.find(r => r.index === index);
-  learnFromRouteChoice(chosen);
-  startDriveMode(index);
-}
 
 // ============================================================
 //  MAP INIT
@@ -4358,170 +4158,6 @@ function drawRoutes(result) {
   if (_bestRoute) map.fitBounds(_bestRoute.route.bounds);
 }
 
-function renderResults() {
-  const container = document.getElementById("results");
-  const quickAccess = document.getElementById("quick-access");
-
-  if (!analyzedRoutes.length || !_bestRoute) {
-    container.innerHTML = "";
-    if (quickAccess) quickAccess.classList.remove("hidden");
-    return;
-  }
-
-  if (quickAccess) quickAccess.classList.add("hidden");
-
-  // Respect user-selected route; fall back to best
-  const validSelected = selectedRoute && analyzedRoutes.some(function(r) { return r.index === selectedRoute.index; });
-  const best = validSelected ? selectedRoute : _bestRoute;
-  selectedRoute = best;
-
-  const conf = calculateConfidence(best, analyzedRoutes);
-  const distKm = (best.distance / 1000).toFixed(1);
-  const routeName = getRouteSummaryName(best);
-  const routeMeta = getUnifiedRouteMeta(best);
-  const stress = { label: routeMeta.stressLabel, tone: routeMeta.stressTone };
-  const confPct = conf === "HIGH" ? 93 : conf === "MEDIUM" ? 68 : 42;
-
-  // ---- Decision text ----
-  const timeInsight = generateTimeInsight(best);
-  const isWait = timeInsight.toLowerCase().indexOf("wait") !== -1 || timeInsight.toLowerCase().indexOf("consider") !== -1;
-  const decisionLabel = isWait ? "Leave soon" : "Leave now";
-
-  // ---- Route line: Fastest vs Best ----
-  const routeLinePrefix = (_fastestRoute && best.index === _fastestRoute.index) ? "Fastest route now via " : "Best route now via ";
-  const routeLineText = routeLinePrefix + routeName;
-
-  // ---- Chips: max 2, human text only, no Salik in hero ----
-  var chips2 = [];
-  if (best.traffic === "high")    chips2.push({ label: "Heavy traffic", cls: "chip-amber" });
-  else if (best.traffic === "low") chips2.push({ label: "Light traffic", cls: "chip-green" });
-  if (best.tollCost === 0)        chips2.push({ label: "No tolls", cls: "chip-green" });
-  const chipsHtml = chips2.slice(0, 2).map(function(c) {
-    return '<span class="chip ' + c.cls + '">' + c.label + "</span>";
-  }).join("");
-
-  // ---- Arrival + parking (for info-strip) ----
-  const now = new Date();
-  const arrival = new Date(now.getTime() + getDisplayMinutes(best) * 60000);
-  const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  var parkingLabel = "Easy";
-  try {
-    var dest = document.getElementById("end") ? document.getElementById("end").value : "";
-    if (typeof detectParkingType === "function" && detectParkingType(dest) === "salik_parking") parkingLabel = "Paid";
-  } catch(e) {}
-
-  // ---- Render decision-hero ----
-  var h = "";
-  h += '<div class="decision-hero">';
-  h += '<div class="dh-overline">BEST TIME TO LEAVE</div>';
-  h += '<div class="dh-headline">' + decisionLabel + ' <span class="dh-check">&#10003;</span></div>';
-  h += '<div class="dh-eta">' + getDisplayMinutes(best) + '<span class="dh-min">min</span></div>';
-  h += '<div class="dh-route-line">' + routeLineText + "</div>";
-  h += renderAIAdviceLine(best);
-  h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + t("why_voice_button") + '</button></div>';
-  if (chipsHtml) h += '<div class="dh-chips">' + chipsHtml + "</div>";
-  // inline wait-hint shell — populated by renderPredictiveDecision()
-  h += '<div class="dh-wait-hint" id="dh-wait-hint" style="display:none">';
-  h += '<div class="dh-wait-title">BETTER TIMING</div>';
-  h += '<div class="dh-wait-times" id="dh-wait-times"></div>';
-  h += '<div class="dh-wait-save" id="dh-wait-save"></div>';
-  h += "</div>";
-  // slim confidence strip
-  h += '<div class="dh-conf-slim">';
-  h += '<span class="dh-conf-label">AI Confidence</span>';
-  h += '<span class="dh-conf-level ' + conf.toLowerCase() + '">' + conf + "</span>";
-  h += '<span class="dh-conf-pct">' + confPct + "%</span>";
-  h += '<div class="dh-conf-bar"><div class="dh-conf-fill" style="width:' + confPct + '%"></div></div>';
-  h += "</div>";
-  h += "</div>";
-
-  h += '<div class="predictive-card" id="predictive-card" style="display:none">';
-  h += '<div class="pc-icon">&#9200;</div>';
-  h += '<div class="pc-content">';
-  h += '<div class="pc-title">BETTER OPTION AHEAD</div>';
-  h += '<div class="pc-main" id="pc-main"></div>';
-  h += '<div class="pc-sub" id="pc-sub"></div>';
-  h += "</div>";
-  h += '<div class="pc-save" id="pc-save"></div>';
-  h += "</div>";
-
-  h += '<div class="cta-row">';
-  h += '<button class="cta-start" onclick="startDrive(' + best.index + ')">';
-  h += "&#9650; START DRIVING";
-  h += "<small>via " + routeName + "</small>";
-  h += "</button>";
-  h += '<button class="cta-details" onclick="openRouteDetails(' + best.index + ')">DETAILS</button>';
-  h += "</div>";
-
-  var alternatives = analyzedRoutes
-    .filter(function(r) { return r.index !== best.index; })
-    .sort(function(a, b) {
-      var td = Math.abs(getDisplayMinutes(a) - getDisplayMinutes(best))
-             - Math.abs(getDisplayMinutes(b) - getDisplayMinutes(best));
-      return td || trafficRank(a.traffic) - trafficRank(b.traffic) || a.complexity - b.complexity;
-    });
-
-  var deduped = [];
-  for (var i = 0; i < alternatives.length; i++) {
-    var cand = alternatives[i];
-    var di = -1;
-    for (var j = 0; j < deduped.length; j++) {
-      var e = deduped[j];
-      if (Math.abs(getDisplayMinutes(e) - getDisplayMinutes(cand)) <= 1 &&
-          e.tollCost === cand.tollCost && e.traffic === cand.traffic &&
-          Math.abs(e.complexity - cand.complexity) <= 1) { di = j; break; }
-    }
-    if (di === -1) { deduped.push(cand); }
-    else {
-      var ex = deduped[di];
-      if (trafficRank(cand.traffic) < trafficRank(ex.traffic) ||
-          cand.complexity < ex.complexity || cand.time < ex.time) deduped[di] = cand;
-    }
-  }
-
-  var alts = deduped.slice(0, 2);
-  if (alts.length) {
-h += '<div class="other-routes" id="other-routes-section">';
-  h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>See ' + alts.length + ' alternative' + (alts.length > 1 ? 's' : '') + '</span><span class="arrow">&#9662;</span></button>';
-  h += '<div class="alt-row">';
-    for (var k = 0; k < alts.length; k++) {
-      var r = alts[k];
-      var altTitle = getAlternativeTitle(r, best, _fastestRoute);
-      var roleCls = r.role === "faster_risky" ? "faster"
-                  : r.role === "more_relaxed"  ? "relaxed"
-                  : r.role === "no_tolls"       ? "no-tolls" : "other";
-      var insight = getRouteInsight(r, best, _fastestRoute) || getFallbackAlternativeInsight(r, best);
-      var tollBadge = r.tollCost === 0
-        ? '<span class="alt-badge green">No tolls</span>'
-        : '<span class="alt-badge amber">+' + r.tollCost + " AED</span>";
-      var trafBadge = r.traffic === "high"
-        ? '<span class="alt-badge amber">Heavy traffic</span>'
-        : r.traffic === "low"
-        ? '<span class="alt-badge green">Low traffic</span>'
-        : '<span class="alt-badge">Moderate</span>';
-      h += '<div class="alt-card-p" onclick="openRouteDetails(' + r.index + ')">';
-      h += '<div class="alt-role ' + roleCls + '">' + altTitle + "</div>";
-      h += '<div class="alt-time-p">' + getDisplayMinutes(r) + '<span> min</span></div>';
-      h += '<div class="alt-label-p">via ' + getRouteSummaryName(r) + "</div>";
-      h += '<div class="alt-badges">' + trafBadge + tollBadge + "</div>";
-      if (insight) h += '<div class="alt-insight">' + insight + "</div>";
-      h += "</div>";
-    }
-    h += "</div></div>";
-  }
-
-  h += '<div class="info-strip">';
-  h += '<div class="info-item"><div class="info-label">Distance</div><div class="info-value">' + distKm + " km</div></div>";
-  h += '<div class="info-item"><div class="info-label">Est. Arrival</div><div class="info-value">' + arrivalStr + "</div></div>";
-  h += '<div class="info-item"><div class="info-label">Tolls</div><div class="info-value">' + (best.tollCost > 0 ? "AED " + best.tollCost : "None") + "</div></div>";
-  h += '<div class="info-item"><div class="info-label">Parking</div><div class="info-value">' + parkingLabel + "</div></div>";
-  h += "</div>";
-  h += '<div class="predict-tip" id="predict-tip" style="display:none"></div>';
-
-  container.innerHTML = h;
-  renderPredictiveDecision();
-}
 
 
 // ============================================================
