@@ -971,6 +971,8 @@ let lastKnownUserLatLng = null;
 let smoothedUserLatLng = null;
 let lastWarningPhase = "";
 let voiceEnabled = true;
+let lastDecisionVoiceAt = 0;
+let lastRerouteVoiceAt = 0;
 
   // ============================================================
   //  i18n — MULTILANGUAGE  (Day 8 · 9 · 10)
@@ -2391,7 +2393,63 @@ function speakText(text) {
   }
 }
 
-function buildDecisionVoiceText(route) {
+
+function getBestComparableAlternative(route) {
+  const r = route || selectedRoute || _bestRoute;
+  if (!r || !Array.isArray(analyzedRoutes)) return null;
+  const alternatives = analyzedRoutes
+    .filter(function(x) { return x && x.index !== r.index; })
+    .sort(function(a, b) {
+      const aScore = Math.abs(getDisplayMinutes(a) - getDisplayMinutes(r)) + trafficRank(a.traffic) + (a.complexity || 0) * 0.15;
+      const bScore = Math.abs(getDisplayMinutes(b) - getDisplayMinutes(r)) + trafficRank(b.traffic) + (b.complexity || 0) * 0.15;
+      return aScore - bScore;
+    });
+  return alternatives[0] || null;
+}
+
+function buildAlternativeComparisonForVoice(route, alt) {
+  const r = route || selectedRoute || _bestRoute;
+  if (!r || !alt) return "";
+  const diff = getDisplayMinutes(alt) - getDisplayMinutes(r);
+  const altName = getRouteSummaryName(alt);
+  const altTraffic = translateTrafficForVoice(alt.traffic);
+  const rTraffic = translateTrafficForVoice(r.traffic);
+  const altStress = (getUnifiedRouteMeta(alt)?.stressLabel || alt.drivePersonality || "").toLowerCase();
+  const rStress = (getUnifiedRouteMeta(r)?.stressLabel || r.drivePersonality || "").toLowerCase();
+
+  if (currentLang === "ru") {
+    if (diff < 0) return "Альтернатива через " + altName + " быстрее примерно на " + Math.abs(diff) + " мин, но может быть менее стабильной. Трафик там: " + altTraffic + ".";
+    if (diff > 0) return "Альтернатива через " + altName + " медленнее примерно на " + diff + " мин. Она может быть спокойнее, но сейчас основной маршрут выглядит лучше.";
+    return "Альтернатива через " + altName + " почти такая же по времени, но текущий маршрут выбран из-за более понятного профиля движения.";
+  }
+  if (currentLang === "ua") {
+    if (diff < 0) return "Альтернатива через " + altName + " швидша приблизно на " + Math.abs(diff) + " хв, але може бути менш стабільною. Трафік там: " + altTraffic + ".";
+    if (diff > 0) return "Альтернатива через " + altName + " повільніша приблизно на " + diff + " хв. Вона може бути спокійнішою, але зараз основний маршрут виглядає краще.";
+    return "Альтернатива через " + altName + " майже така сама за часом, але поточний маршрут обрано через більш зрозумілий профіль руху.";
+  }
+  if (currentLang === "ar") {
+    if (diff < 0) return "الطريق البديل عبر " + altName + " أسرع بحوالي " + Math.abs(diff) + " دقيقة، لكنه قد يكون أقل استقراراً. المرور هناك: " + altTraffic + ".";
+    if (diff > 0) return "الطريق البديل عبر " + altName + " أبطأ بحوالي " + diff + " دقيقة. قد يكون أهدأ، لكن الطريق الحالي أفضل الآن.";
+    return "الطريق البديل عبر " + altName + " قريب جداً في الوقت، لكن الطريق الحالي تم اختياره لأنه أوضح وأكثر استقراراً.";
+  }
+  if (diff < 0) return "The alternative via " + altName + " is about " + Math.abs(diff) + " minutes faster, but it may be less stable. Traffic there is " + altTraffic + ".";
+  if (diff > 0) return "The alternative via " + altName + " is about " + diff + " minutes slower. It may be calmer, but the current route looks stronger now.";
+  return "The alternative via " + altName + " is similar in time, but the current route has a clearer driving profile.";
+}
+
+function buildTimingAdviceForVoice(route) {
+  const r = route || selectedRoute || _bestRoute;
+  if (!r) return "";
+  const insight = stripHtml(generateTimeInsight(r) || "");
+  const lower = insight.toLowerCase();
+  if (!insight) return "";
+  if (currentLang === "ru") return lower.includes("wait") || lower.includes("подожд") ? "По времени можно немного подождать: " + insight + "." : "По времени лучше ехать сейчас: " + insight + ".";
+  if (currentLang === "ua") return lower.includes("wait") || lower.includes("подожд") ? "За часом можна трохи зачекати: " + insight + "." : "За часом краще їхати зараз: " + insight + ".";
+  if (currentLang === "ar") return "نصيحة التوقيت: " + insight + ".";
+  return (lower.includes("wait") || lower.includes("consider")) ? "Timing advice: consider waiting. " + insight + "." : "Timing advice: leaving now looks good. " + insight + ".";
+}
+
+function buildDecisionVoiceText(route, mode) {
   const r = route || selectedRoute || _bestRoute;
   if (!r) {
     if (currentLang === "ru") return "Сначала постройте маршрут. Затем я объясню, почему выбран лучший вариант.";
@@ -2402,34 +2460,94 @@ function buildDecisionVoiceText(route) {
 
   const mins = getDisplayMinutes(r);
   const routeName = getRouteSummaryName(r);
-  const meta = getUnifiedRouteMeta(r);
   const conf = calculateConfidence(r, analyzedRoutes);
   const why = stripHtml(getRouteInsight(r, _bestRoute || r, _fastestRoute) || generateWhyLine(r, analyzedRoutes) || "");
   const traffic = r.traffic || "stable";
+  const meta = getUnifiedRouteMeta(r) || {};
+  const alt = getBestComparableAlternative(r);
+  const comparison = buildAlternativeComparisonForVoice(r, alt);
+  const timing = buildTimingAdviceForVoice(r);
+  const distanceKm = r.distance ? (r.distance / 1000).toFixed(1) : "";
+  const stress = (meta.stressLabel || r.drivePersonality || "steady drive").toLowerCase();
 
   if (currentLang === "ru") {
-    return "Рекомендую этот маршрут через " + routeName + ". Время в пути примерно " + mins + " минут. " +
-      (why ? "Причина: " + why + ". " : "") +
-      "Уверенность решения: " + translateConfidenceForVoice(conf) + ". Трафик: " + translateTrafficForVoice(traffic) + ".";
+    return "AI объяснение. Я выбираю маршрут через " + routeName + ". Примерное время: " + mins + " минут" + (distanceKm ? ", расстояние " + distanceKm + " километра" : "") + ". " +
+      (why ? "Главная причина: " + why + ". " : "") +
+      "Характер маршрута: " + stress + ". Трафик: " + translateTrafficForVoice(traffic) + ". " +
+      (comparison ? comparison + " " : "") +
+      (timing ? timing + " " : "") +
+      "Уверенность решения: " + translateConfidenceForVoice(conf) + ".";
   }
   if (currentLang === "ua") {
-    return "Рекомендую цей маршрут через " + routeName + ". Час у дорозі приблизно " + mins + " хвилин. " +
-      (why ? "Причина: " + why + ". " : "") +
-      "Впевненість рішення: " + translateConfidenceForVoice(conf) + ". Трафік: " + translateTrafficForVoice(traffic) + ".";
+    return "AI пояснення. Я обираю маршрут через " + routeName + ". Орієнтовний час: " + mins + " хвилин" + (distanceKm ? ", відстань " + distanceKm + " кілометра" : "") + ". " +
+      (why ? "Головна причина: " + why + ". " : "") +
+      "Характер маршруту: " + stress + ". Трафік: " + translateTrafficForVoice(traffic) + ". " +
+      (comparison ? comparison + " " : "") +
+      (timing ? timing + " " : "") +
+      "Впевненість рішення: " + translateConfidenceForVoice(conf) + ".";
   }
   if (currentLang === "ar") {
-    return "أوصي بهذا الطريق عبر " + routeName + ". مدة الرحلة حوالي " + mins + " دقيقة. " +
-      (why ? "السبب: " + why + ". " : "") +
-      "ثقة القرار: " + translateConfidenceForVoice(conf) + ". حالة المرور: " + translateTrafficForVoice(traffic) + ".";
+    return "شرح الذكاء الاصطناعي. أختار الطريق عبر " + routeName + ". الوقت المتوقع حوالي " + mins + " دقيقة" + (distanceKm ? "، والمسافة " + distanceKm + " كيلومتر" : "") + ". " +
+      (why ? "السبب الرئيسي: " + why + ". " : "") +
+      "طبيعة الطريق: " + stress + ". حالة المرور: " + translateTrafficForVoice(traffic) + ". " +
+      (comparison ? comparison + " " : "") +
+      (timing ? timing + " " : "") +
+      "ثقة القرار: " + translateConfidenceForVoice(conf) + ".";
   }
-  return "I recommend this route via " + routeName + ". Estimated time is " + mins + " minutes. " +
-    (why ? "Reason: " + why + ". " : "") +
-    "Decision confidence is " + translateConfidenceForVoice(conf) + ". Traffic is " + translateTrafficForVoice(traffic) + ".";
+  return "AI explanation. I choose the route via " + routeName + ". Estimated time is " + mins + " minutes" + (distanceKm ? ", distance " + distanceKm + " kilometers" : "") + ". " +
+    (why ? "Main reason: " + why + ". " : "") +
+    "Route character: " + stress + ". Traffic is " + translateTrafficForVoice(traffic) + ". " +
+    (comparison ? comparison + " " : "") +
+    (timing ? timing + " " : "") +
+    "Decision confidence is " + translateConfidenceForVoice(conf) + ".";
+}
+
+function buildRerouteVoiceText(decision, altRoute) {
+  if (!decision || !altRoute || decision.action === "stay") return "";
+  const altName = getRouteSummaryName(altRoute);
+  const mins = getDisplayMinutes(altRoute);
+  const currentMins = selectedRoute ? getDisplayMinutes(selectedRoute) : null;
+  const gain = currentMins != null ? currentMins - mins : null;
+  if (currentLang === "ru") {
+    return (decision.action === "switch" ? "AI совет: лучше сменить маршрут. " : "AI совет: есть альтернатива. ") +
+      "Через " + altName + " около " + mins + " минут. " +
+      (gain != null && gain > 0 ? "Экономия примерно " + gain + " минут. " : "Время примерно такое же, но движение может быть спокойнее. ") +
+      stripHtml(decision.detail || "");
+  }
+  if (currentLang === "ua") {
+    return (decision.action === "switch" ? "AI порада: краще змінити маршрут. " : "AI порада: є альтернатива. ") +
+      "Через " + altName + " близько " + mins + " хвилин. " +
+      (gain != null && gain > 0 ? "Економія приблизно " + gain + " хвилин. " : "Час майже такий самий, але рух може бути спокійнішим. ") +
+      stripHtml(decision.detail || "");
+  }
+  if (currentLang === "ar") {
+    return (decision.action === "switch" ? "نصيحة الذكاء الاصطناعي: من الأفضل تغيير الطريق. " : "نصيحة الذكاء الاصطناعي: يوجد طريق بديل. ") +
+      "عبر " + altName + " حوالي " + mins + " دقيقة. " +
+      (gain != null && gain > 0 ? "التوفير حوالي " + gain + " دقيقة. " : "الوقت قريب، لكن الطريق قد يكون أهدأ. ") +
+      stripHtml(decision.detail || "");
+  }
+  return (decision.action === "switch" ? "AI advice: switch route. " : "AI advice: an alternative is available. ") +
+    "Via " + altName + ", about " + mins + " minutes. " +
+    (gain != null && gain > 0 ? "You may save about " + gain + " minutes. " : "Time is similar, but traffic may be calmer. ") +
+    stripHtml(decision.detail || "");
+}
+
+function speakRerouteDecision(decision, altRoute) {
+  if (!voiceEnabled) return;
+  const now = Date.now();
+  if (now - lastRerouteVoiceAt < 20000) return;
+  const text = buildRerouteVoiceText(decision, altRoute);
+  if (!text) return;
+  lastRerouteVoiceAt = now;
+  speakText(text);
 }
 
 function speakCurrentDecision() {
   voiceEnabled = true;
-  speakText(buildDecisionVoiceText(selectedRoute || _bestRoute));
+  const now = Date.now();
+  if (now - lastDecisionVoiceAt < 1200) return;
+  lastDecisionVoiceAt = now;
+  speakText(buildDecisionVoiceText(selectedRoute || _bestRoute, "manual"));
 }
 
 function stripHtml(value) {
@@ -2770,6 +2888,7 @@ function renderDriveAlertDecision(decision, altRoute) {
   }
 
   alert.classList.add("visible");
+  speakRerouteDecision(decision, altRoute);
 }
 
 function evaluateReroute(currentRoute, allRoutes) {
@@ -3151,6 +3270,11 @@ function startDriveMode(index) {
   });
 
   updateDriveUI();
+  if (voiceEnabled) {
+    setTimeout(function() {
+      speakText(buildDecisionVoiceText(selectedRoute, "drive_start"));
+    }, 350);
+  }
   driveMap.fitBounds(r.route.bounds);
 
   if (driveInterval) {
