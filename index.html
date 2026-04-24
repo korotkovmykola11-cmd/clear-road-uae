@@ -805,6 +805,104 @@
         line-height: 1.35;
       }
 
+
+      /* ===== ТЗ-9: Route Cards UI Cleanup ===== */
+      .other-routes.tz9-clean .see-alts-btn span:first-child {
+        color: var(--text);
+      }
+      .tz9-alt-card {
+        align-items: flex-start !important;
+        gap: 0.875rem !important;
+      }
+      .tz9-route-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: hsla(220,10%,14%,.72);
+        color: var(--text2);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+      }
+      .tz9-route-tag.best-alt { background: hsla(72,96%,56%,.10); color: var(--green); }
+      .tz9-route-main {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 3px;
+      }
+      .tz9-route-time {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .tz9-route-diff {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text2);
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+      .tz9-route-diff.warn { color: var(--amber); }
+      .tz9-route-title {
+        font-size: 13px;
+        font-weight: 650;
+        color: var(--text);
+        line-height: 1.25;
+        margin-bottom: 4px;
+      }
+      .tz9-route-reason {
+        font-size: 12px;
+        color: var(--text2);
+        line-height: 1.28;
+        margin-bottom: 5px;
+      }
+      .tz9-route-meta {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 6px;
+      }
+      .tz9-pill {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--text3);
+        border: 1px solid var(--border2);
+        background: hsla(220,11%,10%,.60);
+        border-radius: 999px;
+        padding: 3px 7px;
+      }
+      .tz9-pill.traffic-low { color: var(--green); border-color: hsla(72,96%,56%,.22); background: hsla(72,96%,56%,.07); }
+      .tz9-pill.traffic-medium { color: var(--amber); border-color: hsla(38,95%,58%,.20); background: hsla(38,95%,58%,.07); }
+      .tz9-pill.traffic-heavy { color: #f87171; border-color: rgba(248,113,113,.22); background: rgba(248,113,113,.07); }
+      .tz9-alt-end {
+        min-width: 64px;
+        text-align: right;
+        padding-top: 2px;
+      }
+      .tz9-score-label {
+        font-size: 9px;
+        color: var(--text3);
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .tz9-score-value {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text2);
+        font-variant-numeric: tabular-nums;
+      }
+      body.rtl .tz9-alt-end { text-align: left; }
+
       /* ===== MOBILE SAFETY PATCH ===== */
       @media (max-width: 430px) {
         .bottom-nav {
@@ -6032,25 +6130,72 @@ function tz8RouteDistanceKm(route) {
   return 0;
 }
 
+// ============================================================
+//  ТЗ-9 — ROUTE CARDS UI CLEANUP
+//  Make alternatives readable in 3 seconds: time, difference, character, WHY.
+// ============================================================
+function tz9RouteCharacter(route, best) {
+  const diff = _tz1Minutes(route) - _tz1Minutes(best);
+  const traffic = String(route && (route.traffic || route.trafficLevel || "")).toLowerCase();
+  const stops = Number.isFinite(route && route.stopsCount) ? route.stopsCount : 0;
+  const complexity = Number.isFinite(route && route.complexityScore) ? route.complexityScore : 0;
+
+  if (diff < 0) return "FASTER OPTION";
+  if (traffic === "low" || traffic === "light") return "CALMER TRAFFIC";
+  if (stops <= 2 && complexity <= 4) return "SMOOTHER DRIVE";
+  if (diff <= 2) return "SIMILAR ETA";
+  if (traffic === "heavy" || traffic === "high") return "TRAFFIC RISK";
+  return "ALTERNATIVE ROUTE";
+}
+
+function tz9TrafficClass(route) {
+  const traffic = String(route && (route.traffic || route.trafficLabel || "medium")).toLowerCase();
+  if (traffic.includes("low") || traffic.includes("light") || traffic.includes("stable")) return "traffic-low";
+  if (traffic.includes("heavy") || traffic.includes("high") || traffic.includes("busy")) return "traffic-heavy";
+  return "traffic-medium";
+}
+
+function tz9CleanReason(route, best, analyzedRoutes) {
+  let reason = "";
+  if (Array.isArray(route && route.whyPoints) && route.whyPoints.length) reason = route.whyPoints[0];
+  else reason = (route && route.why) || (typeof _tz2BuildWhy === "function" ? _tz2BuildWhy(route, analyzedRoutes) : "Alternative route available");
+
+  reason = String(reason || "Alternative route available")
+    .replace(/\s+/g, " ")
+    .replace(/ · /g, ". ")
+    .trim();
+
+  if (reason.length > 92) reason = reason.slice(0, 89).replace(/\s+\S*$/, "") + "…";
+  return reason;
+}
+
 function tz8RenderAlternativeCard(route, best, analyzedRoutes, idx) {
   const diff = _tz1Minutes(route) - _tz1Minutes(best);
-  const diffText = diff === 0 ? "same time" : (diff > 0 ? "+" + diff + " min" : diff + " min");
-  const roleCls = route.tolls ? "faster" : route.traffic === "low" ? "no-tolls" : "relaxed";
-  const insight = Array.isArray(route.whyPoints) && route.whyPoints.length ? route.whyPoints.join(" · ") : (route.why || _tz2BuildWhy(route, analyzedRoutes));
-  const altTrade = route.tradeOff || _tz2BuildTradeOff(route, best, analyzedRoutes);
+  const diffText = diff === 0 ? "same ETA" : (diff > 0 ? "+" + diff + " min" : diff + " min");
+  const roleCls = diff < 0 ? "faster" : route.traffic === "low" ? "no-tolls" : "relaxed";
   const distanceText = tz8RouteDistanceKm(route) ? tz8RouteDistanceKm(route) + " km" : "distance n/a";
   const rank = Number.isFinite(route.decisionRank) ? route.decisionRank : idx + 2;
+  const character = tz9RouteCharacter(route, best);
+  const reason = tz9CleanReason(route, best, analyzedRoutes);
+  const trafficText = route.trafficLabel || route.traffic || "traffic";
+  const scoreValue = Math.round(route.decisionScore || route.score || 0);
+  const bestAltClass = idx === 0 ? " best-alt" : "";
 
   let h = "";
-  h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')" data-decision-rank="' + _tz1EscapeHTML(rank) + '" data-best-alternative="' + (idx === 0 ? 'true' : 'false') + '">';
+  h += '<div class="alt-card-p tz9-alt-card" onclick="openRouteDetails(' + route.index + ')" data-decision-rank="' + _tz1EscapeHTML(rank) + '" data-best-alternative="' + (idx === 0 ? 'true' : 'false') + '">';
   h += '<div class="alt-bar ' + roleCls + '"></div>';
   h += '<div class="alt-body">';
-  h += '<div class="alt-time-p">' + _tz1Minutes(route) + '<span> min</span></div>';
-  h += '<div class="alt-label-p">via ' + _tz1EscapeHTML(_tz1RouteName(route)) + ' · ' + _tz1EscapeHTML(diffText) + ' · ' + _tz1EscapeHTML(altTrade) + '</div>';
-  h += '<div class="alt-distance-p">' + _tz1EscapeHTML(distanceText) + ' · score ' + _tz1EscapeHTML(Math.round(route.score || route.decisionScore || 0)) + '</div>';
-  h += '<div class="alt-insight">' + _tz1EscapeHTML(insight) + '</div>';
+  h += '<div class="tz9-route-tag' + bestAltClass + '">' + (idx === 0 ? 'BEST ALTERNATIVE' : 'ALTERNATIVE ' + (idx + 1)) + '</div>';
+  h += '<div class="tz9-route-main"><div class="tz9-route-time">' + _tz1Minutes(route) + ' min</div><div class="tz9-route-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
+  h += '<div class="tz9-route-title">' + _tz1EscapeHTML(character) + ' · via ' + _tz1EscapeHTML(_tz1RouteName(route)) + '</div>';
+  h += '<div class="tz9-route-reason">' + _tz1EscapeHTML(reason) + '</div>';
+  h += '<div class="tz9-route-meta">';
+  h += '<span class="tz9-pill">' + _tz1EscapeHTML(distanceText) + '</span>';
+  h += '<span class="tz9-pill ' + tz9TrafficClass(route) + '">' + _tz1EscapeHTML(trafficText) + '</span>';
+  h += '<span class="tz9-pill">score ' + _tz1EscapeHTML(scoreValue) + '</span>';
   h += '</div>';
-  h += '<div class="alt-end"><div class="alt-end-time">' + _tz1EscapeHTML(route.trafficLabel || route.traffic || 'traffic') + '</div><div class="alt-end-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
+  h += '</div>';
+  h += '<div class="tz9-alt-end"><div class="tz9-score-label">rank</div><div class="tz9-score-value">#' + _tz1EscapeHTML(rank) + '</div></div>';
   h += '</div>';
   return h;
 }
@@ -6155,8 +6300,8 @@ function renderResults() {
 
   const alternatives = decisionAlternatives;
 
-  h += '<div class="other-routes expanded tz8-visible" id="other-routes-section" data-source="currentDecision.alternatives" data-alternatives-count="' + alternatives.length + '">';
-  h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Alternatives: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
+  h += '<div class="other-routes expanded tz8-visible tz9-clean" id="other-routes-section" data-source="currentDecision.alternatives" data-alternatives-count="' + alternatives.length + '">';
+  h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Compare alternatives: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
 
   if (alternatives.length) {
     h += '<div class="alt-row">';
