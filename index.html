@@ -1,4 +1,4 @@
-   <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -622,6 +622,27 @@
       }
       .drive-interchange-warn.visible { display:block; }
 
+
+      /* ===== ТЗ-1: Drive Mode Reality Fix ===== */
+      .drive-reality-strip {
+        position:absolute; left:16px; right:16px; top:76px;
+        display:flex; align-items:center; justify-content:space-between; gap:10px;
+        padding:10px 12px; border-radius:14px;
+        background:rgba(15,23,42,0.82);
+        border:1px solid rgba(148,163,184,0.16);
+        color:#cbd5e1; font-size:12px; font-weight:700;
+        backdrop-filter:blur(8px); z-index:3;
+      }
+      .drive-reality-strip strong { color:#fff; font-size:13px; }
+      .drive-next { border:1px solid rgba(148,163,184,0.14); }
+      .drive-next-instruction { font-size:19px; line-height:1.18; }
+      .drive-next-distance { font-size:15px; color:#cbd5e1; }
+      .drive-lane-block { margin-top:12px; }
+      .drive-lane-instruction { font-size:15px; line-height:1.2; }
+      .drive-lane-distance { font-size:12px; color:#cbd5e1; }
+      .drive-lane-block.lane-alert { box-shadow:0 0 0 1px rgba(239,68,68,.25), 0 12px 28px rgba(0,0,0,.22); }
+      .drive-ahead-text { line-height:1.25; }
+
       /* ===== MISC ===== */
       .hidden { display:none !important; }
       .loading { display:flex; align-items:center; justify-content:center; padding:40px; color:var(--text2); font-size:15px; }
@@ -880,6 +901,11 @@
 
     <div class="drive-interchange-warn" id="drive-interchange-warn">
       Complex interchange ahead — stay focused
+    </div>
+
+    <div class="drive-reality-strip" id="drive-reality-strip" style="display:none">
+      <span id="drive-reality-main">Next action</span>
+      <strong id="drive-reality-distance">--</strong>
     </div>
 
     <div class="drive-alert" id="drive-alert">
@@ -2559,7 +2585,7 @@ function getDriveLaneGuidance(r, stepIndex, userLatLng) {
 
     if (!["lane", "exit", "ramp", "merge", "fork"].includes(meta.type)) continue;
 
-    const meters = getDistanceToStepEndMeters(step, ulng);
+    const meters = getEffectiveDistanceToStepMeters(steps, stepIndex, i, ulng);
     const phase = getWarningPhaseForType(meters, meta.type);
     if (phase === "none") continue;
 
@@ -3145,146 +3171,145 @@ function getDriveIcon(maneuver) {
   return "↑";
 }
 
+
+function formatDriveMeters(meters) {
+  if (meters == null || !isFinite(meters)) return "Ahead";
+  if (meters <= 25) return "Now";
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function getStepActionText(step, routeObj) {
+  const meta = getStepWarningMeta(step, routeObj?.route || routeObj);
+  const instruction = stripHtml(step?.html_instructions || "");
+  const m = (step?.maneuver || "").toLowerCase();
+  if (meta?.shortText) return meta.shortText;
+  if (m.includes("turn-left")) return "Turn left";
+  if (m.includes("turn-right")) return "Turn right";
+  if (m.includes("uturn")) return "Make a U-turn";
+  if (m.includes("merge")) return "Merge ahead";
+  if (m.includes("ramp")) return "Take the ramp";
+  if (instruction) return instruction;
+  return "Follow the route";
+}
+
+function getEffectiveDistanceToStepMeters(steps, currentIndex, targetIndex, userLatLng) {
+  if (!steps?.[targetIndex]) return null;
+  if (targetIndex === currentIndex) return getDistanceToStepEndMeters(steps[currentIndex], userLatLng);
+  let meters = getDistanceToStepEndMeters(steps[currentIndex], userLatLng);
+  if (meters == null) meters = steps[currentIndex]?.distance?.value || 0;
+  for (let i = currentIndex + 1; i < targetIndex; i++) meters += steps[i]?.distance?.value || 0;
+  meters += Math.min(steps[targetIndex]?.distance?.value || 0, 120);
+  return meters;
+}
+
+function getNextMeaningfulDriveAction(r, stepIndex, userLatLng) {
+  const steps = r?.route?.legs?.[0]?.steps || [];
+  for (let i = stepIndex; i < Math.min(steps.length, stepIndex + 5); i++) {
+    const meta = getStepWarningMeta(steps[i], r.route);
+    if (!meta) continue;
+    const meters = getEffectiveDistanceToStepMeters(steps, stepIndex, i, userLatLng);
+    return { index: i, step: steps[i], meta, meters, distanceText: formatDriveMeters(meters), actionText: meta.shortText || getStepActionText(steps[i], r) };
+  }
+  return null;
+}
+
+function getCleanDriveMainInstruction(r, stepIndex, vm) {
+  const steps = r?.route?.legs?.[0]?.steps || [];
+  const currentStep = steps[stepIndex];
+  const meta = getStepWarningMeta(currentStep, r.route);
+  const currentMeters = getDistanceToStepEndMeters(currentStep, lastKnownUserLatLng);
+  const currentPhase = meta ? getWarningPhaseForType(currentMeters, meta.type) : "none";
+  if (meta && currentPhase !== "none") {
+    return { text: buildLaneGuidanceText(meta, currentPhase) || meta.shortText, distance: formatDriveMeters(currentMeters), icon: meta.icon || getDriveIcon(vm.maneuver || "") };
+  }
+  const upcoming = getNextMeaningfulDriveAction(r, stepIndex, lastKnownUserLatLng);
+  if (upcoming) return { text: upcoming.actionText, distance: upcoming.distanceText, icon: upcoming.meta.icon || getDriveIcon(vm.maneuver || "") };
+  const raw = stripHtml(vm.instruction || "");
+  const isGeneric = !raw || /^(head|continue|follow|drive|go)\b/i.test(raw);
+  const routeName = getRouteSummaryName(r);
+  return { text: isGeneric && routeName ? `Continue via ${routeName}` : raw || "Follow the route", distance: vm.instructionDistance || "", icon: getDriveIcon(vm.maneuver || "") };
+}
+
 function updateDriveUI() {
   const r = selectedRoute;
   if (!r) return;
-
-  if (lastKnownUserLatLng) {
-    currentStepIndex = findBestCurrentStepIndex(r, lastKnownUserLatLng, currentStepIndex);
-  }
+  if (lastKnownUserLatLng) currentStepIndex = findBestCurrentStepIndex(r, lastKnownUserLatLng, currentStepIndex);
 
   const vm = buildDriveViewModel(r, currentStepIndex);
   let timedWarning = getDriveTimedWarning(r, currentStepIndex);
   timedWarning = getHeldTimedWarning(timedWarning);
-
-  const condition = timedWarning
-    ? {
-        type: timedWarning.phase === "now" ? "alert" : "warning",
-        icon: timedWarning.icon,
-        text: timedWarning.longText
-      }
-    : getUpcomingCondition(r, currentStepIndex);
-
+  const laneGuidance = getDriveLaneGuidance(r, currentStepIndex, lastKnownUserLatLng);
   const stress = getStressBadge(r.stressScore || 0);
 
   document.getElementById("drive-eta-time").textContent = vm.eta;
   document.getElementById("drive-distance").textContent = vm.distance;
   document.getElementById("drive-traffic").textContent = vm.trafficText;
 
-  const laneGuidance = getDriveLaneGuidance(r, currentStepIndex, lastKnownUserLatLng);
+  const main = getCleanDriveMainInstruction(r, currentStepIndex, vm);
+  document.getElementById("drive-next-instruction").textContent = main.text;
+  document.getElementById("drive-next-distance").textContent = main.distance;
+  document.getElementById("drive-next-icon").textContent = main.icon;
 
-  // main instruction — только для текущего манёвра или non-lane timed warning
-  let mainInstruction = vm.instruction || "Follow the route";
-  let mainDistance    = vm.instructionDistance || "";
-  let mainIcon        = getDriveIcon(vm.maneuver || "");
+  const realityStrip = document.getElementById("drive-reality-strip");
+  const realityMain = document.getElementById("drive-reality-main");
+  const realityDist = document.getElementById("drive-reality-distance");
+  const nextAction = getNextMeaningfulDriveAction(r, currentStepIndex, lastKnownUserLatLng);
+  if (realityStrip && realityMain && realityDist && nextAction) {
+    realityStrip.style.display = "flex";
+    realityMain.textContent = nextAction.actionText;
+    realityDist.textContent = nextAction.distanceText;
+  } else if (realityStrip) realityStrip.style.display = "none";
 
-  if (timedWarning && !["lane", "exit", "ramp", "merge"].includes(timedWarning.type)) {
-    mainInstruction = timedWarning.shortText   || mainInstruction;
-    mainDistance    = timedWarning.distanceText || mainDistance;
-    mainIcon        = timedWarning.icon         || mainIcon;
-  }
-
-  // если laneGuidance активен и main instruction дублирует его — показываем route step
-  if (
-    laneGuidance &&
-    typeof mainInstruction === "string" &&
-    typeof laneGuidance.text === "string"
-  ) {
-    const mi = mainInstruction.toLowerCase();
-    const duplicated =
-      mi === laneGuidance.text.toLowerCase() ||
-      mi.includes("exit")       ||
-      mi.includes("ramp")       ||
-      mi.includes("keep left")  ||
-      mi.includes("keep right") ||
-      mi.includes("merge");
-
-    if (duplicated) {
-      mainInstruction = vm.instruction || "Continue straight";
-      mainDistance    = vm.instructionDistance || "";
-      mainIcon        = getDriveIcon(vm.maneuver || "");
-    }
-  }
-
-  document.getElementById("drive-next-instruction").textContent = mainInstruction;
-  document.getElementById("drive-next-distance").textContent    = mainDistance;
-  document.getElementById("drive-next-icon").textContent        = mainIcon;
+  let condition;
+  if (timedWarning) {
+    condition = { type: timedWarning.phase === "now" ? "alert" : "warning", icon: timedWarning.icon || "⚠", text: `${timedWarning.shortText || timedWarning.longText || "Action ahead"} · ${timedWarning.distanceText || "Ahead"}` };
+  } else if (laneGuidance) {
+    condition = { type: laneGuidance.phase === "now" ? "alert" : "warning", icon: laneGuidance.icon || "⇢", text: `${laneGuidance.text || laneGuidance.shortText || "Lane guidance"} · ${laneGuidance.distanceText || "Ahead"}` };
+  } else condition = getUpcomingCondition(r, currentStepIndex);
 
   const aheadIcon = document.getElementById("drive-ahead-icon");
   aheadIcon.innerHTML = condition.icon;
   aheadIcon.className = `drive-ahead-icon ${condition.type}`;
-  document.getElementById("drive-ahead-text").textContent =
-    `${condition.text} · ${stress.label.toLowerCase()} · ${r.drivePersonality || "steady drive"}`;
-
+  document.getElementById("drive-ahead-text").textContent = `${condition.text} · ${stress.label.toLowerCase()} · ${r.drivePersonality || "steady drive"}`;
   document.getElementById("drive-status").textContent = `Step ${currentStepIndex + 1}/${vm.totalSteps}`;
 
-  // Complex interchange warning (TASK 4)
   const steps = r.route.legs[0].steps;
   const interchangeWarn = document.getElementById("drive-interchange-warn");
   if (interchangeWarn) {
     const isComplex = isComplexInterchangeAhead(steps, currentStepIndex, r.route);
     const wasVisible = interchangeWarn.classList.contains("visible");
-    
-    if (isComplex) {
-      showInterchangeWarning();
-    } else {
-      interchangeWarn.classList.remove("visible");
-    }
-    
-    // Voice alert when entering complex interchange (only once)
-    if (isComplex && !wasVisible && voiceEnabled) {
-      speakInterchangeWarning();
-    }
+    if (isComplex) showInterchangeWarning(); else interchangeWarn.classList.remove("visible");
+    if (isComplex && !wasVisible && voiceEnabled) speakInterchangeWarning();
   }
 
-  // Lane guidance block — driven by getDriveLaneGuidance (priority: exit/ramp > lane > merge)
-  const laneBlock       = document.getElementById("drive-lane-block");
-  const laneIcon        = document.getElementById("drive-lane-icon");
+  const laneBlock = document.getElementById("drive-lane-block");
+  const laneIcon = document.getElementById("drive-lane-icon");
   const laneInstruction = document.getElementById("drive-lane-instruction");
-  const laneDistance    = document.getElementById("drive-lane-distance");
-
-  // TASK 5: Lane Display Control — show ONLY when phase is "soon" or "now" AND instruction is exit/ramp/merge
+  const laneDistance = document.getElementById("drive-lane-distance");
   if (laneBlock && laneIcon && laneInstruction && laneDistance) {
-    const shouldShowLane = laneGuidance && 
-      (laneGuidance.phase === "soon" || laneGuidance.phase === "now") &&
-      ["exit", "ramp", "merge"].includes(laneGuidance.type);
-    
+    const shouldShowLane = laneGuidance && ["prepare", "soon", "now"].includes(laneGuidance.phase) && ["exit", "ramp", "fork", "lane", "merge"].includes(laneGuidance.type);
     if (shouldShowLane) {
       laneBlock.style.display = "flex";
       laneBlock.className = "drive-lane-block";
-
-      if (laneGuidance.phase === "soon") {
-        laneBlock.classList.add("lane-warn");
-      } else if (laneGuidance.phase === "now") {
-        laneBlock.classList.add("lane-alert");
-      }
-
-      laneIcon.textContent        = laneGuidance.icon || "⇢";
-      laneInstruction.textContent = laneGuidance.text || "";
-      laneDistance.textContent    = laneGuidance.distanceText || "";
+      if (laneGuidance.phase === "prepare" || laneGuidance.phase === "soon") laneBlock.classList.add("lane-warn");
+      if (laneGuidance.phase === "now") laneBlock.classList.add("lane-alert");
+      laneIcon.textContent = laneGuidance.icon || "⇢";
+      laneInstruction.textContent = laneGuidance.text || laneGuidance.shortText || "Use the correct lane";
+      laneDistance.textContent = laneGuidance.distanceText || "Ahead";
     } else {
       laneBlock.style.display = "none";
       laneBlock.className = "drive-lane-block";
       laneInstruction.textContent = "";
-      laneDistance.textContent    = "";
+      laneDistance.textContent = "";
     }
   }
 
-  // Reset priority at start of each update cycle
   _currentHighestPriority = 0;
-
-  // Voice — ONE engine, priority: exit/ramp > lane/merge > timedWarning > none
   const currentStep = selectedRoute?.route?.legs?.[0]?.steps?.[currentStepIndex];
-  if (laneGuidance && ["exit", "ramp"].includes(laneGuidance.type)) {
-    speakDriveInstruction(currentStep, laneGuidance.phase, laneGuidance.type);
-  } else if (laneGuidance && ["lane", "merge"].includes(laneGuidance.type)) {
-    speakDriveInstruction(currentStep, laneGuidance.phase, laneGuidance.type);
-  } else if (timedWarning) {
-    speakDriveInstruction(currentStep, timedWarning.phase, timedWarning.type);
-  }
-  // else: no speech on straight segments — silence is better than spam
-
-  lastWarningPhase = timedWarning?.phase || "";
+  if (laneGuidance && ["exit", "ramp", "fork", "lane", "merge"].includes(laneGuidance.type)) speakDriveInstruction(currentStep, laneGuidance.phase, laneGuidance.type);
+  else if (timedWarning) speakDriveInstruction(currentStep, timedWarning.phase, timedWarning.type);
+  lastWarningPhase = timedWarning?.phase || laneGuidance?.phase || "";
 }
 
 function simulateDriveProgress() {
@@ -3730,16 +3755,34 @@ function getUpcomingMeaningfulStep(steps, currentIndex, routeObj) {
 }
 
 function getWarningPhaseForType(distanceMeters, type = "") {
-  if (distanceMeters == null) return "none";
-  
-  let phase = "";
-
-  if (distanceMeters > 800) phase = "prepare";
-  else if (distanceMeters > 300) phase = "soon";
-  else if (distanceMeters > 80) phase = "now";
-  else return "none"; // ignore too late
-
-  return phase;
+  if (distanceMeters == null || !isFinite(distanceMeters)) return "none";
+  const t = String(type || "").toLowerCase();
+  const isExitLike = ["exit", "ramp", "fork"].includes(t);
+  const isLaneLike = ["lane", "merge"].includes(t);
+  const isUTurn = t === "uturn";
+  if (distanceMeters <= 25) return "none";
+  if (isExitLike) {
+    if (distanceMeters <= 180) return "now";
+    if (distanceMeters <= 700) return "soon";
+    if (distanceMeters <= 1600) return "prepare";
+    return "none";
+  }
+  if (isLaneLike) {
+    if (distanceMeters <= 140) return "now";
+    if (distanceMeters <= 520) return "soon";
+    if (distanceMeters <= 1100) return "prepare";
+    return "none";
+  }
+  if (isUTurn) {
+    if (distanceMeters <= 120) return "now";
+    if (distanceMeters <= 450) return "soon";
+    if (distanceMeters <= 900) return "prepare";
+    return "none";
+  }
+  if (distanceMeters <= 100) return "now";
+  if (distanceMeters <= 350) return "soon";
+  if (distanceMeters <= 800) return "prepare";
+  return "none";
 }
 
 // ============================================================
