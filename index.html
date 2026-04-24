@@ -777,6 +777,34 @@
       body.rtl .alt-row  { direction:rtl; }
     
 
+      /* ===== ТЗ-8: Restore Alternatives + Route Compare UI ===== */
+      .other-routes.tz8-visible .alt-row { display: block !important; }
+      .other-routes.tz8-visible .alt-insight {
+        display: block !important;
+        margin-top: 4px;
+        font-size: 11px;
+        color: var(--text2);
+        line-height: 1.25;
+      }
+      .other-routes.tz8-visible .alt-label-p { white-space: normal; line-height: 1.25; }
+      .other-routes.tz8-visible .alt-card-p[data-best-alternative="true"] {
+        background: hsla(72,96%,56%,.045);
+      }
+      .alt-distance-p {
+        margin-top: 2px;
+        font-size: 10px;
+        color: var(--text3);
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+      .tz8-no-alts {
+        padding: 0.875rem 1.25rem 1rem;
+        border-top: 1px solid var(--border);
+        color: var(--text2);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
       /* ===== MOBILE SAFETY PATCH ===== */
       @media (max-width: 430px) {
         .bottom-nav {
@@ -4777,11 +4805,16 @@ function runPredictiveCheck(origin, destination, nowBestMin) {
 }
 
 function drawRoutes(result) {
-  const alts = analyzedRoutes.filter(r => _bestRoute && r.index !== _bestRoute.index);
-  const ordered = [...alts, ...(_bestRoute ? [_bestRoute] : [])];
+  renderers.forEach(function(renderer) { renderer.setMap(null); });
+  renderers = [];
 
-  ordered.forEach(r => {
-    const isBest = _bestRoute && r.index === _bestRoute.index;
+  const best = currentDecision && currentDecision.bestRoute ? currentDecision.bestRoute : _bestRoute;
+  const alternatives = tz8GetDecisionAlternatives(currentDecision, best, analyzedRoutes);
+  const ordered = alternatives.concat(best ? [best] : []);
+
+  ordered.forEach(function(r) {
+    if (!r || !Number.isFinite(r.index)) return;
+    const isBest = best && r.index === best.index;
     const renderer = new google.maps.DirectionsRenderer({
       map: map,
       directions: result,
@@ -4790,7 +4823,7 @@ function drawRoutes(result) {
       preserveViewport: true,
       polylineOptions: {
         strokeColor: isBest ? "#22d3a0" : "#60a5fa",
-        strokeOpacity: isBest ? 1 : 0.50,
+        strokeOpacity: isBest ? 1 : 0.56,
         strokeWeight: isBest ? 6 : 4,
         zIndex: isBest ? 10 : 1
       }
@@ -4798,7 +4831,7 @@ function drawRoutes(result) {
     renderers.push(renderer);
   });
 
-  if (_bestRoute) map.fitBounds(_bestRoute.route.bounds);
+  if (best && best.route && best.route.bounds) map.fitBounds(best.route.bounds);
 }
 
 
@@ -5959,6 +5992,69 @@ function _tz1ConfidencePercent(level) {
   return 55;
 }
 
+
+// ============================================================
+//  ТЗ-8 — RESTORE ALTERNATIVES + ROUTE COMPARE UI
+//  Alternatives must never disappear from Route Compare.
+// ============================================================
+function tz8SameRoute(a, b) {
+  if (!a || !b) return false;
+  if (a.id && b.id && String(a.id) === String(b.id)) return true;
+  if (Number.isFinite(a.index) && Number.isFinite(b.index) && a.index === b.index) return true;
+  return false;
+}
+
+function tz8GetDecisionAlternatives(decision, best, routes) {
+  const fromDecision = decision && Array.isArray(decision.alternatives) ? decision.alternatives : [];
+  const fallback = Array.isArray(routes) ? routes.filter(function(route) { return !tz8SameRoute(route, best); }) : [];
+  const merged = [];
+
+  fromDecision.concat(fallback).forEach(function(route) {
+    if (!route || tz8SameRoute(route, best)) return;
+    const exists = merged.some(function(item) { return tz8SameRoute(item, route); });
+    if (!exists) merged.push(route);
+  });
+
+  return merged.sort(function(a, b) {
+    const ar = Number.isFinite(a.decisionRank) ? a.decisionRank : 99;
+    const br = Number.isFinite(b.decisionRank) ? b.decisionRank : 99;
+    if (ar !== br) return ar - br;
+    const as = Number.isFinite(a.decisionScore) ? a.decisionScore : (Number.isFinite(a.score) ? a.score : 999999);
+    const bs = Number.isFinite(b.decisionScore) ? b.decisionScore : (Number.isFinite(b.score) ? b.score : 999999);
+    return as - bs;
+  });
+}
+
+function tz8RouteDistanceKm(route) {
+  if (!route) return 0;
+  if (Number.isFinite(route.distanceKm)) return Math.round(route.distanceKm * 10) / 10;
+  if (Number.isFinite(route.distance)) return Math.round((route.distance / 1000) * 10) / 10;
+  return 0;
+}
+
+function tz8RenderAlternativeCard(route, best, analyzedRoutes, idx) {
+  const diff = _tz1Minutes(route) - _tz1Minutes(best);
+  const diffText = diff === 0 ? "same time" : (diff > 0 ? "+" + diff + " min" : diff + " min");
+  const roleCls = route.tolls ? "faster" : route.traffic === "low" ? "no-tolls" : "relaxed";
+  const insight = Array.isArray(route.whyPoints) && route.whyPoints.length ? route.whyPoints.join(" · ") : (route.why || _tz2BuildWhy(route, analyzedRoutes));
+  const altTrade = route.tradeOff || _tz2BuildTradeOff(route, best, analyzedRoutes);
+  const distanceText = tz8RouteDistanceKm(route) ? tz8RouteDistanceKm(route) + " km" : "distance n/a";
+  const rank = Number.isFinite(route.decisionRank) ? route.decisionRank : idx + 2;
+
+  let h = "";
+  h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')" data-decision-rank="' + _tz1EscapeHTML(rank) + '" data-best-alternative="' + (idx === 0 ? 'true' : 'false') + '">';
+  h += '<div class="alt-bar ' + roleCls + '"></div>';
+  h += '<div class="alt-body">';
+  h += '<div class="alt-time-p">' + _tz1Minutes(route) + '<span> min</span></div>';
+  h += '<div class="alt-label-p">via ' + _tz1EscapeHTML(_tz1RouteName(route)) + ' · ' + _tz1EscapeHTML(diffText) + ' · ' + _tz1EscapeHTML(altTrade) + '</div>';
+  h += '<div class="alt-distance-p">' + _tz1EscapeHTML(distanceText) + ' · score ' + _tz1EscapeHTML(Math.round(route.score || route.decisionScore || 0)) + '</div>';
+  h += '<div class="alt-insight">' + _tz1EscapeHTML(insight) + '</div>';
+  h += '</div>';
+  h += '<div class="alt-end"><div class="alt-end-time">' + _tz1EscapeHTML(route.trafficLabel || route.traffic || 'traffic') + '</div><div class="alt-end-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
+  h += '</div>';
+  return h;
+}
+
 function renderResults() {
   const container = document.getElementById("results");
   const quickAccess = document.getElementById("quick-access");
@@ -6013,7 +6109,8 @@ function renderResults() {
   });
 
   const best = currentDecision.bestRoute;
-  const decisionAlternatives = Array.isArray(currentDecision.alternatives) ? currentDecision.alternatives : [];
+  const decisionAlternatives = tz8GetDecisionAlternatives(currentDecision, best, analyzedRoutes);
+  if (currentDecision) currentDecision.alternatives = decisionAlternatives;
 
   if (!best) {
     container.innerHTML = '<div class="error">No best route selected.</div>';
@@ -6056,30 +6153,22 @@ function renderResults() {
   h += '<button class="cta-details" onclick="openRouteDetails(' + best.index + ')">DETAILS</button>';
   h += '</div>';
 
-  const alternatives = decisionAlternatives.slice(0, 2);
+  const alternatives = decisionAlternatives;
+
+  h += '<div class="other-routes expanded tz8-visible" id="other-routes-section" data-source="currentDecision.alternatives" data-alternatives-count="' + alternatives.length + '">';
+  h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Alternatives: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
 
   if (alternatives.length) {
-    h += '<div class="other-routes expanded" id="other-routes-section" data-source="currentDecision.alternatives">';
-    h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Alternatives kept: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
     h += '<div class="alt-row">';
-    alternatives.forEach(function(route) {
-      const diff = _tz1Minutes(route) - _tz1Minutes(best);
-      const diffText = diff === 0 ? 'same time' : (diff > 0 ? '+' + diff + ' min' : diff + ' min');
-      const roleCls = route.tolls ? 'faster' : route.traffic === 'low' ? 'no-tolls' : 'relaxed';
-      const insight = Array.isArray(route.whyPoints) && route.whyPoints.length ? route.whyPoints.join(" · ") : (route.why || _tz2BuildWhy(route, analyzedRoutes));
-      const altTrade = route.tradeOff || _tz2BuildTradeOff(route, best, analyzedRoutes);
-      h += '<div class="alt-card-p" onclick="openRouteDetails(' + route.index + ')" data-decision-rank="' + _tz1EscapeHTML(route.decisionRank || '') + '">';
-      h += '<div class="alt-bar ' + roleCls + '"></div>';
-      h += '<div class="alt-body">';
-      h += '<div class="alt-time-p">' + _tz1Minutes(route) + '<span> min</span></div>';
-      h += '<div class="alt-label-p">via ' + _tz1EscapeHTML(_tz1RouteName(route)) + ' · ' + _tz1EscapeHTML(diffText) + ' · ' + _tz1EscapeHTML(altTrade) + '</div>';
-      h += '<div class="alt-insight">' + _tz1EscapeHTML(insight) + '</div>';
-      h += '</div>';
-      h += '<div class="alt-end"><div class="alt-end-time">' + _tz1EscapeHTML(route.trafficLabel || route.traffic || 'traffic') + '</div><div class="alt-end-diff' + (diff > 0 ? ' warn' : '') + '">' + _tz1EscapeHTML(diffText) + '</div></div>';
-      h += '</div>';
+    alternatives.forEach(function(route, idx) {
+      h += tz8RenderAlternativeCard(route, best, analyzedRoutes, idx);
     });
-    h += '</div></div>';
+    h += '</div>';
+  } else {
+    h += '<div class="tz8-no-alts">Google returned only one route for this request. Route Compare is ready and will show alternatives when the API returns 2–4 routes.</div>';
   }
+
+  h += '</div>';
 
   h += '<div class="info-strip">';
   h += '<div class="info-item"><div class="info-label">Distance</div><div class="info-value">' + distKm + ' km</div></div>';
