@@ -6942,8 +6942,17 @@ function startDrive(index) {
   if (tz6OriginalHandleOffRouteRecalculation) {
     handleOffRouteRecalculation = function(userLatLng) {
       const safeRoute = tz6GetSafeDriveRoute(activeDriveRouteIndex || (selectedRoute && selectedRoute.index));
+      const safeUserLatLng =
+        userLatLng ||
+        ((typeof lastKnownUserLatLng !== "undefined" && lastKnownUserLatLng) ? lastKnownUserLatLng : null) ||
+        ((typeof smoothedUserLatLng !== "undefined" && smoothedUserLatLng) ? smoothedUserLatLng : null);
+
       if (!safeRoute) {
         tz6SetDriveFallback(TZ6_ROUTE_FALLBACK_MESSAGE, null);
+        return;
+      }
+      if (!safeUserLatLng) {
+        tz6SetDriveFallback("Off-route detected · waiting for GPS position", safeRoute);
         return;
       }
       if (!directionsService || typeof directionsService.route !== "function" || !tz6IsGoogleMapsReady()) {
@@ -6951,7 +6960,7 @@ function startDrive(index) {
         return;
       }
       try {
-        return tz6OriginalHandleOffRouteRecalculation.apply(this, arguments);
+        return tz6OriginalHandleOffRouteRecalculation.call(this, safeUserLatLng);
       } catch (e) {
         tz6LogSafe("handleOffRouteRecalculation", e);
         tz6SetDriveFallback("Off-route detected · keep current route", safeRoute);
@@ -11062,9 +11071,14 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
     if (saved && !looksLikePlusCode(text)) return saved;
 
     // For current-position plus codes/reverse geocode strings, use live GPS coordinates instead of routing by text.
-    if (kind === 'start' && userLatLng && isInsideUAE(userLatLng)) {
+    const liveUserLatLng =
+      (typeof lastKnownUserLatLng !== 'undefined' && lastKnownUserLatLng)
+        ? lastKnownUserLatLng
+        : ((typeof smoothedUserLatLng !== 'undefined' && smoothedUserLatLng) ? smoothedUserLatLng : null);
+
+    if (kind === 'start' && liveUserLatLng && isInsideUAE(liveUserLatLng)) {
       if (looksLikePlusCode(text) || /current location|my location|al nuaimi|al nuaimia|ajman/i.test(text)) {
-        return { latLng: toLatLngLiteral(userLatLng), address: text || 'Current location', placeId: null };
+        return { latLng: toLatLngLiteral(liveUserLatLng), address: text || 'Current location', placeId: null };
       }
     }
 
