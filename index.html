@@ -1487,6 +1487,87 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
     return map[currentLang] || "en-US";
   }
 
+  // ============================================================
+  //  ТЗ-1: Native-quality voice selection for EN / RU / UA / AR
+  //  Keeps the existing browser TTS, but never relies on a random
+  //  default voice. It selects the best installed neural/native voice
+  //  and falls back only to the closest language voice.
+  // ============================================================
+  const VOICE_PROFILES = {
+    en: { langs:["en-US","en-GB","en-AU","en-IE"], rate:0.96, pitch:1.0 },
+    ru: { langs:["ru-RU"], rate:0.92, pitch:0.98 },
+    ua: { langs:["uk-UA","uk"], rate:0.92, pitch:0.98 },
+    ar: { langs:["ar-AE","ar-SA","ar","ar-EG"], rate:0.88, pitch:0.96 }
+  };
+
+  let clearRoadVoices = [];
+  let clearRoadVoiceWarningShown = false;
+
+  function refreshVoiceList() {
+    try {
+      clearRoadVoices = (window.speechSynthesis && window.speechSynthesis.getVoices)
+        ? window.speechSynthesis.getVoices()
+        : [];
+    } catch {
+      clearRoadVoices = [];
+    }
+    return clearRoadVoices;
+  }
+
+  function initClearRoadVoices() {
+    refreshVoiceList();
+    try {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.onvoiceschanged = refreshVoiceList;
+        setTimeout(refreshVoiceList, 250);
+        setTimeout(refreshVoiceList, 900);
+      }
+    } catch {}
+  }
+
+  function voiceQualityScore(voice, targetLangs) {
+    const name = String(voice?.name || "").toLowerCase();
+    const lang = String(voice?.lang || "");
+    let score = 0;
+    if (targetLangs.includes(lang)) score += 100;
+    else if (targetLangs.some(l => lang.toLowerCase().startsWith(l.split("-")[0].toLowerCase()))) score += 65;
+    if (/neural|natural|premium|enhanced|online|google|microsoft|azure|apple|siri|samantha|daniel|milena|yuri|oksana|xander|maged|tarik|laila/.test(name)) score += 35;
+    if (voice?.localService) score += 8;
+    if (/default|compact|espeak|festival|pico|basic/.test(name)) score -= 35;
+    return score;
+  }
+
+  function pickBestVoiceForLang(langKey = currentLang) {
+    const profile = VOICE_PROFILES[langKey] || VOICE_PROFILES.en;
+    const voices = clearRoadVoices.length ? clearRoadVoices : refreshVoiceList();
+    if (!voices.length) return null;
+    const ranked = voices
+      .map(v => ({ voice:v, score: voiceQualityScore(v, profile.langs) }))
+      .filter(x => x.score > 0)
+      .sort((a,b) => b.score - a.score);
+    return ranked[0]?.voice || null;
+  }
+
+  function buildNativeUtterance(text, priority = "normal") {
+    const normalized = normalizeVoiceText(stripHtml(text));
+    if (!normalized) return null;
+    const profile = VOICE_PROFILES[currentLang] || VOICE_PROFILES.en;
+    const utter = new SpeechSynthesisUtterance(normalized);
+    const selectedVoice = pickBestVoiceForLang(currentLang);
+    utter.lang = selectedVoice?.lang || profile.langs[0] || voiceLang();
+    if (selectedVoice) utter.voice = selectedVoice;
+    utter.rate = priority === "urgent" ? Math.max(0.86, profile.rate - 0.03) : profile.rate;
+    utter.pitch = profile.pitch;
+    utter.volume = 1.0;
+    if (!selectedVoice && !clearRoadVoiceWarningShown) {
+      clearRoadVoiceWarningShown = true;
+      console.warn("Clear Road UAE: native voice is not installed for", currentLang, "— using browser fallback.");
+    }
+    return utter;
+  }
+
+  initClearRoadVoices();
+
   function setLang(lang) {
     if (!i18n[lang]) return;
     currentLang = lang;
@@ -1496,6 +1577,8 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
     );
     document.body.classList.toggle("rtl", lang === "ar");
     document.documentElement.setAttribute("lang", lang);
+    refreshVoiceList();
+    clearRoadVoiceWarningShown = false;
     applyLangDom();
   }
 
@@ -2741,10 +2824,20 @@ function getHeldLaneGuidance(nextGuidance) {
 }
 
 function normalizeVoiceText(text) {
-  return (text || "")
-    .replace(/\bE311\b/g, "E three one one")
-    .replace(/\bE611\b/g, "E six one one")
-    .replace(/\bE11\b/g, "E eleven")
+  let value = String(text || "");
+  const roadNames = {
+    en: { E311:"E three one one", E611:"E six one one", E11:"E eleven" },
+    ru: { E311:"Е три один один", E611:"Е шесть один один", E11:"Е одиннадцать" },
+    ua: { E311:"Е три один один", E611:"Е шість один один", E11:"Е одинадцять" },
+    ar: { E311:"إي ثلاثة واحد واحد", E611:"إي ستة واحد واحد", E11:"إي أحد عشر" }
+  };
+  const names = roadNames[currentLang] || roadNames.en;
+  return value
+    .replace(/\bE311\b/g, names.E311)
+    .replace(/\bE611\b/g, names.E611)
+    .replace(/\bE11\b/g, names.E11)
+    .replace(/\s*[·•]\s*/g, ", ")
+    .replace(/\s*→\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -2840,8 +2933,8 @@ function speakDriveInstruction(step, phase, instructionType) {
   if (text === lastSpokenText && now - lastSpokenAt < 4500) return;
   try {
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(normalizeVoiceText(text));
-    utter.rate = 1.0; utter.pitch = 1.0; utter.lang = voiceLang();
+    const utter = buildNativeUtterance(text, "urgent");
+    if (!utter) return;
     window.speechSynthesis.speak(utter);
     lastSpokenText = text;
     lastSpokenAt = now;
@@ -2858,8 +2951,8 @@ function speakInterchangeWarning() {
   try {
     if ("speechSynthesis" in window) {
       const text = t("interchange_warn") || "Complex interchange ahead. Stay focused.";
-      const utter = new SpeechSynthesisUtterance(normalizeVoiceText(text));
-      utter.rate = 0.95; utter.pitch = 1.0; utter.lang = voiceLang();
+      const utter = buildNativeUtterance(text, "urgent");
+      if (!utter) return;
       window.speechSynthesis.speak(utter);
     }
   } catch (e) { console.warn("interchange voice failed", e); }
@@ -2898,11 +2991,8 @@ function speakText(text, priority = "normal") {
     if (priority === "urgent") window.speechSynthesis.cancel();
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
 
-    const utter = new SpeechSynthesisUtterance(normalized);
-    utter.rate = currentLang === "ar" ? 0.92 : 0.98;
-    utter.pitch = 1.0;
-    utter.volume = 1.0;
-    utter.lang = voiceLang();
+    const utter = buildNativeUtterance(normalized, priority);
+    if (!utter) return;
 
     lastSpokenText = normalized;
     lastSpokenAt = now;
@@ -9564,7 +9654,6 @@ function startDrive(index) {
   };
 })();
 </script>
-</body>
 
 <!-- ============================================================
      ТЗ-10 — AI ASSISTANT / VOICE ADVICE LAYER
