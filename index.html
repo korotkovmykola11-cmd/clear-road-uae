@@ -13464,6 +13464,150 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
   console.log('[TZ8] Real AI Logic Engine installed', TZ8_VERSION);
 })();
 
+
+
+/* ============================================================
+   QA FIX: ROUTE EMPTY STATE LIFECYCLE
+   Scope: only lifecycle IDLE -> LOADING -> READY -> ERROR
+   Does not change design, languages, filters, Drive Mode, score or WHY logic.
+   ============================================================ */
+(function installRouteEmptyStateFix(){
+  'use strict';
+
+  const FIX_VERSION = 'FIX_ROUTE_EMPTY_STATE_2026_04_25';
+  window.__CLEAR_ROAD_EMPTY_STATE_FIX__ = FIX_VERSION;
+
+  function $(id){ return document.getElementById(id); }
+  function value(id){ const el = $(id); return el && el.value ? el.value.trim() : ''; }
+
+  window.routeLifecycleState = window.routeLifecycleState || 'IDLE';
+  window.routeRequestStarted = false;
+
+  function clearRouteVisuals(){
+    try {
+      if (Array.isArray(renderers)) {
+        renderers.forEach(function(r){ try { if (r && typeof r.setMap === 'function') r.setMap(null); } catch(_){} });
+        renderers = [];
+      }
+    } catch(_) {}
+  }
+
+  function resetRouteData(){
+    clearRouteVisuals();
+    try { currentDirectionsResult = null; } catch(_) {}
+    try { analyzedRoutes = []; } catch(_) {}
+    try { selectedRoute = null; } catch(_) {}
+    try { _bestRoute = null; } catch(_) {}
+    try { _fastestRoute = null; } catch(_) {}
+    try { currentDecision = null; } catch(_) {}
+    try { activeDriveRouteIndex = null; } catch(_) {}
+    try { activeDriveRouteSnapshot = null; } catch(_) {}
+  }
+
+  function enterIdleState(){
+    window.routeLifecycleState = 'IDLE';
+    window.routeRequestStarted = false;
+    resetRouteData();
+    const results = $('results');
+    if (results) results.innerHTML = '';
+  }
+
+  function hasRouteInputs(){
+    return !!(value('start') && value('end'));
+  }
+
+  const previousCalculateRoutes = window.calculateRoutes || (typeof calculateRoutes === 'function' ? calculateRoutes : null);
+  window.calculateRoutes = function calculateRoutesEmptyStateGuard(){
+    if (!hasRouteInputs()) {
+      enterIdleState();
+      return Promise.resolve(null);
+    }
+    window.routeLifecycleState = 'LOADING';
+    window.routeRequestStarted = true;
+    if (typeof previousCalculateRoutes === 'function') {
+      return previousCalculateRoutes.apply(this, arguments);
+    }
+    return Promise.resolve(null);
+  };
+  try { calculateRoutes = window.calculateRoutes; } catch(_) {}
+
+  function installInputGuards(){
+    const end = $('end');
+    const start = $('start');
+    [start, end].forEach(function(input){
+      if (!input || input.dataset.emptyStateGuard === '1') return;
+      input.dataset.emptyStateGuard = '1';
+      input.addEventListener('input', function(){
+        if (!hasRouteInputs()) enterIdleState();
+      });
+      input.addEventListener('change', function(){
+        if (!hasRouteInputs()) enterIdleState();
+      });
+    });
+  }
+
+  const previousSetUserPreference = window.setUserPreference || (typeof setUserPreference === 'function' ? setUserPreference : null);
+  if (typeof previousSetUserPreference === 'function') {
+    window.setUserPreference = function setUserPreferenceEmptyStateGuard(value){
+      const out = previousSetUserPreference.apply(this, arguments);
+      if (!hasRouteInputs()) enterIdleState();
+      return out;
+    };
+    try { setUserPreference = window.setUserPreference; } catch(_) {}
+  }
+
+  const previousToggleFilter = window.toggleFilter || (typeof toggleFilter === 'function' ? toggleFilter : null);
+  if (typeof previousToggleFilter === 'function') {
+    window.toggleFilter = function toggleFilterEmptyStateGuard(key){
+      const out = previousToggleFilter.apply(this, arguments);
+      if (!hasRouteInputs()) enterIdleState();
+      return out;
+    };
+    try { toggleFilter = window.toggleFilter; } catch(_) {}
+  }
+
+  const previousRenderResults = window.renderResults || (typeof renderResults === 'function' ? renderResults : null);
+  if (typeof previousRenderResults === 'function') {
+    window.renderResults = function renderResultsEmptyStateGuard(){
+      if (!hasRouteInputs()) {
+        enterIdleState();
+        return null;
+      }
+      window.routeLifecycleState = 'READY';
+      return previousRenderResults.apply(this, arguments);
+    };
+    try { renderResults = window.renderResults; } catch(_) {}
+  }
+
+  function boot(){
+    installInputGuards();
+    if (!hasRouteInputs()) enterIdleState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+  setTimeout(boot, 250);
+  setTimeout(boot, 1000);
+
+  window.clearRoadEmptyStateAudit = function(){
+    return {
+      version: FIX_VERSION,
+      lifecycle: window.routeLifecycleState,
+      hasStart: !!value('start'),
+      hasEnd: !!value('end'),
+      requestStarted: !!window.routeRequestStarted,
+      routes: Array.isArray(analyzedRoutes) ? analyzedRoutes.length : 0,
+      hasDecision: !!currentDecision,
+      hasSelectedRoute: !!selectedRoute,
+      resultsText: $('results') ? $('results').innerText.trim() : ''
+    };
+  };
+
+  console.log('[QA FIX] Route empty state lifecycle installed', FIX_VERSION);
+})();
 </script>
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
