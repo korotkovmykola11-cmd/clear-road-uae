@@ -13464,149 +13464,156 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
   console.log('[TZ8] Real AI Logic Engine installed', TZ8_VERSION);
 })();
 
+</script>
 
 
-/* ============================================================
-   QA FIX: ROUTE EMPTY STATE LIFECYCLE
-   Scope: only lifecycle IDLE -> LOADING -> READY -> ERROR
-   Does not change design, languages, filters, Drive Mode, score or WHY logic.
-   ============================================================ */
-(function installRouteEmptyStateFix(){
+<script id="cr-fix-route-empty-state-final-v2">
+(function crFixRouteEmptyStateFinalV2(){
   'use strict';
-
-  const FIX_VERSION = 'FIX_ROUTE_EMPTY_STATE_2026_04_25';
-  window.__CLEAR_ROAD_EMPTY_STATE_FIX__ = FIX_VERSION;
+  const VERSION = 'CR_FIX_ROUTE_EMPTY_STATE_FINAL_V2_2026_04_25';
+  const FALLBACK_TEXT_RE = /Route data unavailable\s*[·-]\s*recalculate route|Route display fallback\s*[·-]\s*recalculate route/i;
+  const API_ERROR_TEXT_RE = /Map service unavailable|Could not find|Could not calculate|No route returned|Address not found|outside UAE|Route rejected|Directions/i;
+  let realDirectionsRequestStarted = false;
+  let lastRealDirectionsRequestAt = 0;
 
   function $(id){ return document.getElementById(id); }
-  function value(id){ const el = $(id); return el && el.value ? el.value.trim() : ''; }
-
-  window.routeLifecycleState = window.routeLifecycleState || 'IDLE';
-  window.routeRequestStarted = false;
-
-  function clearRouteVisuals(){
-    try {
-      if (Array.isArray(renderers)) {
-        renderers.forEach(function(r){ try { if (r && typeof r.setMap === 'function') r.setMap(null); } catch(_){} });
-        renderers = [];
-      }
-    } catch(_) {}
-  }
-
-  function resetRouteData(){
-    clearRouteVisuals();
+  function val(id){ const el = $(id); return el && el.value ? String(el.value).trim() : ''; }
+  function hasInputs(){ return !!(val('start') && val('end')); }
+  function clearResults(){ const r = $('results'); if (r) r.innerHTML = ''; }
+  function resetRouteState(){
     try { currentDirectionsResult = null; } catch(_) {}
     try { analyzedRoutes = []; } catch(_) {}
     try { selectedRoute = null; } catch(_) {}
     try { _bestRoute = null; } catch(_) {}
     try { _fastestRoute = null; } catch(_) {}
     try { currentDecision = null; } catch(_) {}
-    try { activeDriveRouteIndex = null; } catch(_) {}
-    try { activeDriveRouteSnapshot = null; } catch(_) {}
+    try { if (window.currentDecision) window.currentDecision = null; } catch(_) {}
+    try { if (Array.isArray(window.analyzedRoutes)) window.analyzedRoutes = []; } catch(_) {}
   }
-
-  function enterIdleState(){
-    window.routeLifecycleState = 'IDLE';
-    window.routeRequestStarted = false;
-    resetRouteData();
-    const results = $('results');
-    if (results) results.innerHTML = '';
+  function enterIdle(reason){
+    resetRouteState();
+    clearResults();
+    document.documentElement.setAttribute('data-route-state','IDLE');
+    document.documentElement.setAttribute('data-route-idle-reason', reason || 'missing-input');
   }
-
-  function hasRouteInputs(){
-    return !!(value('start') && value('end'));
-  }
-
-  const previousCalculateRoutes = window.calculateRoutes || (typeof calculateRoutes === 'function' ? calculateRoutes : null);
-  window.calculateRoutes = function calculateRoutesEmptyStateGuard(){
-    if (!hasRouteInputs()) {
-      enterIdleState();
-      return Promise.resolve(null);
+  function hideUnsafeFallbackErrors(){
+    const r = $('results');
+    if (!r) return;
+    const text = (r.textContent || '').trim();
+    if (!text) return;
+    const noRoutes = !(Array.isArray(window.analyzedRoutes || (typeof analyzedRoutes !== 'undefined' ? analyzedRoutes : [])) && (window.analyzedRoutes || analyzedRoutes).length);
+    if (FALLBACK_TEXT_RE.test(text)) {
+      r.innerHTML = '';
+      if (!hasInputs()) enterIdle('fallback-cleared-empty-input');
+      return;
     }
-    window.routeLifecycleState = 'LOADING';
-    window.routeRequestStarted = true;
-    if (typeof previousCalculateRoutes === 'function') {
-      return previousCalculateRoutes.apply(this, arguments);
+    // Do not allow old safety layers to show an error before a real Directions request.
+    if (!realDirectionsRequestStarted && !lastRealDirectionsRequestAt && API_ERROR_TEXT_RE.test(text) && !hasInputs()) {
+      enterIdle('early-error-cleared');
+      return;
     }
-    return Promise.resolve(null);
-  };
-  try { calculateRoutes = window.calculateRoutes; } catch(_) {}
-
-  function installInputGuards(){
-    const end = $('end');
-    const start = $('start');
-    [start, end].forEach(function(input){
-      if (!input || input.dataset.emptyStateGuard === '1') return;
-      input.dataset.emptyStateGuard = '1';
+    // If renderResults was called with no route data, keep screen clean. Real API errors are shown only by calculateRoutes after request.
+    if (noRoutes && FALLBACK_TEXT_RE.test(text)) r.innerHTML = '';
+  }
+  function installDirectionsRequestTracker(){
+    try {
+      if (!window.google || !google.maps || !google.maps.DirectionsService || window.__crDirectionsTrackedV2) return false;
+      const proto = google.maps.DirectionsService.prototype;
+      if (!proto || typeof proto.route !== 'function') return false;
+      const original = proto.route;
+      if (original.__crTrackedV2) return true;
+      proto.route = function(){
+        realDirectionsRequestStarted = true;
+        lastRealDirectionsRequestAt = Date.now();
+        document.documentElement.setAttribute('data-route-state','LOADING');
+        return original.apply(this, arguments);
+      };
+      proto.route.__crTrackedV2 = true;
+      window.__crDirectionsTrackedV2 = true;
+      return true;
+    } catch(e) { return false; }
+  }
+  function patchCalculateRoutes(){
+    const oldCalc = window.calculateRoutes || (typeof calculateRoutes === 'function' ? calculateRoutes : null);
+    if (typeof oldCalc !== 'function' || oldCalc.__crEmptyStateFinalV2) return;
+    const wrapped = async function calculateRoutesEmptyStateFinalV2(){
+      if (!hasInputs()) {
+        realDirectionsRequestStarted = false;
+        lastRealDirectionsRequestAt = 0;
+        enterIdle('calculate-with-missing-input');
+        return;
+      }
+      document.documentElement.setAttribute('data-route-state','LOADING');
+      const beforeRequestAt = lastRealDirectionsRequestAt;
+      try {
+        const out = await oldCalc.apply(this, arguments);
+        hideUnsafeFallbackErrors();
+        const routes = (typeof analyzedRoutes !== 'undefined' && Array.isArray(analyzedRoutes)) ? analyzedRoutes : (Array.isArray(window.analyzedRoutes) ? window.analyzedRoutes : []);
+        if (routes && routes.length) document.documentElement.setAttribute('data-route-state','READY');
+        else if (lastRealDirectionsRequestAt === beforeRequestAt && !realDirectionsRequestStarted) enterIdle('no-request-no-routes');
+        return out;
+      } catch(e) {
+        if (!hasInputs()) { enterIdle('exception-missing-input'); return; }
+        document.documentElement.setAttribute('data-route-state','ERROR');
+        throw e;
+      }
+    };
+    wrapped.__crEmptyStateFinalV2 = true;
+    window.calculateRoutes = wrapped;
+    try { calculateRoutes = wrapped; } catch(_) {}
+  }
+  function patchRenderResults(){
+    const oldRender = window.renderResults || (typeof renderResults === 'function' ? renderResults : null);
+    if (typeof oldRender !== 'function' || oldRender.__crEmptyStateFinalV2) return;
+    const wrapped = function renderResultsEmptyStateFinalV2(){
+      const routes = (typeof analyzedRoutes !== 'undefined' && Array.isArray(analyzedRoutes)) ? analyzedRoutes : (Array.isArray(window.analyzedRoutes) ? window.analyzedRoutes : []);
+      if (!hasInputs() || !routes || !routes.length) {
+        if (!hasInputs()) enterIdle('render-with-missing-input');
+        else clearResults();
+        return;
+      }
+      const out = oldRender.apply(this, arguments);
+      hideUnsafeFallbackErrors();
+      return out;
+    };
+    wrapped.__crEmptyStateFinalV2 = true;
+    window.renderResults = wrapped;
+    try { renderResults = wrapped; } catch(_) {}
+  }
+  function bindInputs(){
+    ['start','end'].forEach(function(id){
+      const input = $(id);
+      if (!input || input.dataset.crEmptyStateV2Bound === '1') return;
+      input.dataset.crEmptyStateV2Bound = '1';
       input.addEventListener('input', function(){
-        if (!hasRouteInputs()) enterIdleState();
-      });
+        if (!hasInputs()) enterIdle('input-cleared');
+      }, true);
       input.addEventListener('change', function(){
-        if (!hasRouteInputs()) enterIdleState();
-      });
+        if (!hasInputs()) enterIdle('change-cleared');
+      }, true);
     });
   }
-
-  const previousSetUserPreference = window.setUserPreference || (typeof setUserPreference === 'function' ? setUserPreference : null);
-  if (typeof previousSetUserPreference === 'function') {
-    window.setUserPreference = function setUserPreferenceEmptyStateGuard(value){
-      const out = previousSetUserPreference.apply(this, arguments);
-      if (!hasRouteInputs()) enterIdleState();
-      return out;
-    };
-    try { setUserPreference = window.setUserPreference; } catch(_) {}
+  function installObserver(){
+    const r = $('results');
+    if (!r || r.__crEmptyStateObserverV2) return;
+    r.__crEmptyStateObserverV2 = true;
+    new MutationObserver(function(){ hideUnsafeFallbackErrors(); }).observe(r, {childList:true, subtree:true, characterData:true});
   }
-
-  const previousToggleFilter = window.toggleFilter || (typeof toggleFilter === 'function' ? toggleFilter : null);
-  if (typeof previousToggleFilter === 'function') {
-    window.toggleFilter = function toggleFilterEmptyStateGuard(key){
-      const out = previousToggleFilter.apply(this, arguments);
-      if (!hasRouteInputs()) enterIdleState();
-      return out;
-    };
-    try { toggleFilter = window.toggleFilter; } catch(_) {}
+  function installAll(){
+    installDirectionsRequestTracker();
+    patchCalculateRoutes();
+    patchRenderResults();
+    bindInputs();
+    installObserver();
+    if (!hasInputs()) enterIdle('initial-load');
+    hideUnsafeFallbackErrors();
+    document.documentElement.setAttribute('data-cr-empty-state-fix', VERSION);
   }
-
-  const previousRenderResults = window.renderResults || (typeof renderResults === 'function' ? renderResults : null);
-  if (typeof previousRenderResults === 'function') {
-    window.renderResults = function renderResultsEmptyStateGuard(){
-      if (!hasRouteInputs()) {
-        enterIdleState();
-        return null;
-      }
-      window.routeLifecycleState = 'READY';
-      return previousRenderResults.apply(this, arguments);
-    };
-    try { renderResults = window.renderResults; } catch(_) {}
-  }
-
-  function boot(){
-    installInputGuards();
-    if (!hasRouteInputs()) enterIdleState();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once:true });
-  } else {
-    boot();
-  }
-  setTimeout(boot, 250);
-  setTimeout(boot, 1000);
-
-  window.clearRoadEmptyStateAudit = function(){
-    return {
-      version: FIX_VERSION,
-      lifecycle: window.routeLifecycleState,
-      hasStart: !!value('start'),
-      hasEnd: !!value('end'),
-      requestStarted: !!window.routeRequestStarted,
-      routes: Array.isArray(analyzedRoutes) ? analyzedRoutes.length : 0,
-      hasDecision: !!currentDecision,
-      hasSelectedRoute: !!selectedRoute,
-      resultsText: $('results') ? $('results').innerText.trim() : ''
-    };
-  };
-
-  console.log('[QA FIX] Route empty state lifecycle installed', FIX_VERSION);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installAll, {once:true});
+  else installAll();
+  setTimeout(installAll, 250);
+  setTimeout(installAll, 1000);
+  setInterval(function(){ installDirectionsRequestTracker(); hideUnsafeFallbackErrors(); }, 1000);
 })();
 </script>
 <script async
