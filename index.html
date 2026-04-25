@@ -12263,6 +12263,209 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
   window.__TZ4_MOBILE_LAYOUT_CLEANUP__ = true;
 })();
 </script>
+
+
+<script>
+/* ===== ТЗ-5: Route Details simplification =====
+   Goal: remove debug/duplicate metrics from the route details modal.
+   Visible facts only: Time, Distance, Delay, Traffic, Tolls, Turns.
+   Does not change routing, GPS, autocomplete, Drive Mode, or scoring logic.
+*/
+(function tz5RouteDetailsSimplification(){
+  function esc(value){
+    try {
+      if (typeof _tz1EscapeHTML === 'function') return _tz1EscapeHTML(value);
+    } catch (_) {}
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function tr(key, fallback){
+    try {
+      if (typeof t === 'function') {
+        const value = t(key);
+        if (value && value !== key) return value;
+      }
+    } catch (_) {}
+    return fallback || key;
+  }
+
+  function minOf(route){
+    try {
+      if (typeof _tz1Minutes === 'function') return _tz1Minutes(route);
+    } catch (_) {}
+    const raw = route && (route.durationMin || route.durationMinutes || route.timeMin || route.duration);
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.round(n) : 0;
+  }
+
+  function durationText(route){
+    const min = Math.max(0, Math.round(Number(minOf(route)) || 0));
+    try {
+      if (typeof formatDuration === 'function') return formatDuration(min);
+      if (typeof tz1FormatDuration === 'function') return tz1FormatDuration(min);
+    } catch (_) {}
+    if (min < 60) return min + ' min';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? (h + ' h ' + m + ' min') : (h + ' h');
+  }
+
+  function distanceText(route){
+    let km = 0;
+    try {
+      if (typeof tz8RouteDistanceKm === 'function') km = tz8RouteDistanceKm(route);
+    } catch (_) {}
+    if (!km && route && route.distance) km = Math.round((Number(route.distance) / 1000) * 10) / 10;
+    if (!Number.isFinite(Number(km))) km = 0;
+    return (Math.round(Number(km) * 10) / 10) + ' km';
+  }
+
+  function delayText(route){
+    const delay = Math.max(0, Math.round(Number(route && route.delayMinutes) || 0));
+    return delay === 0 ? '0 min' : ('+' + delay + ' min');
+  }
+
+  function trafficText(route){
+    try {
+      const raw = route && (route.traffic || route.trafficLevel || route.trafficLabel || 'medium');
+      if (typeof getTrafficText === 'function' && typeof toTitleCaseLabel === 'function') return toTitleCaseLabel(getTrafficText(raw));
+      if (typeof getTrafficText === 'function') return getTrafficText(raw);
+    } catch (_) {}
+    return String((route && (route.traffic || route.trafficLevel || route.trafficLabel)) || 'Medium');
+  }
+
+  function tollsText(route){
+    const cost = Number(route && route.tollCost);
+    if (Number.isFinite(cost) && cost > 0) return cost + ' AED';
+    return tr('modal_no_tolls', 'No tolls');
+  }
+
+  function turnsText(route){
+    const steps = (function(){
+      try { return typeof tz10RouteSteps === 'function' ? tz10RouteSteps(route) : []; } catch (_) { return []; }
+    })();
+    const n = Number(route && (route.complexity || route.stopsCount));
+    const turns = Number.isFinite(n) && n > 0 ? Math.round(n) : steps.length;
+    return String(turns || 0);
+  }
+
+  function routeTitle(route){
+    try { if (typeof getRouteSummaryName === 'function') return getRouteSummaryName(route); } catch (_) {}
+    return route && (route.name || route.summary || route.title) || tr('nav_route', 'Route');
+  }
+
+  function whyPoints(route, best){
+    try {
+      if (Array.isArray(route.whyPoints) && route.whyPoints.length) return route.whyPoints;
+      if (typeof generateNeutralWhy === 'function') return generateNeutralWhy(route, best || route);
+    } catch (_) {}
+    return [];
+  }
+
+  function decisionNote(route, best, isBest){
+    try {
+      if (isBest) return route.tradeOff || (typeof _tz2BuildTradeOff === 'function' ? _tz2BuildTradeOff(route, route, window.analyzedRoutes || analyzedRoutes) : '');
+      if (typeof generateDecisionInsight === 'function') return generateDecisionInsight(route, best || route);
+    } catch (_) {}
+    return '';
+  }
+
+  function extendTz5I18n(){
+    try {
+      if (!window.i18n) return;
+      const add = {
+        en: { modal_no_tolls: 'No tolls', modal_close: 'Close' },
+        ru: { modal_no_tolls: 'Без платных дорог', modal_close: 'Закрыть' },
+        ua: { modal_no_tolls: 'Без платних доріг', modal_close: 'Закрити' },
+        ar: { modal_no_tolls: 'بدون رسوم', modal_close: 'إغلاق' }
+      };
+      Object.keys(add).forEach(function(lang){ window.i18n[lang] = Object.assign({}, window.i18n[lang] || {}, add[lang]); });
+    } catch (_) {}
+  }
+
+  // Hide old/debug route metrics blocks if any older modal renderer still injects them.
+  function hideDebugBlocks(){
+    try {
+      document.querySelectorAll('.tz10-breakdown-grid, .tz10-segment-note').forEach(function(el){ el.style.display = 'none'; });
+      document.querySelectorAll('.detail-section-title').forEach(function(el){
+        const txt = (el.textContent || '').trim().toLowerCase();
+        if (txt === 'route metrics' || txt === 'route breakdown' || txt === 'key driving actions') {
+          const section = el.closest('.detail-section');
+          if (section) section.style.display = 'none';
+        }
+      });
+    } catch (_) {}
+  }
+
+  function openSimplifiedRouteDetails(index){
+    const routes = window.analyzedRoutes || (typeof analyzedRoutes !== 'undefined' ? analyzedRoutes : []);
+    const route = Array.isArray(routes) ? routes.find(function(x){ return x.index === index; }) : null;
+    if (!route) return;
+
+    const best = (window.currentDecision && window.currentDecision.bestRoute) || (typeof currentDecision !== 'undefined' && currentDecision && currentDecision.bestRoute) || window._bestRoute || (typeof _bestRoute !== 'undefined' ? _bestRoute : route);
+    const isBest = !!(best && route.index === best.index);
+    const note = decisionNote(route, best || route, isBest);
+    const points = whyPoints(route, best || route);
+    const title = routeTitle(route);
+    const modal = document.getElementById('modal-content');
+    const overlay = document.getElementById('modal-overlay');
+    if (!modal || !overlay) return;
+
+    modal.classList.add('tz10-details', 'tz5-details');
+    modal.innerHTML =       '<div class="modal-handle"></div>' +
+      '<div class="modal-header">' +
+        '<div>' +
+          '<h2 class="modal-title">' + esc(title) + '</h2>' +
+          '<div class="tz10-modal-subtitle">' + esc(distanceText(route)) + ' · ' + esc(trafficText(route)) + '</div>' +
+        '</div>' +
+        '<span class="modal-role-badge ' + (isBest ? 'recommended' : 'alternative') + '">' + esc(isBest ? tr('modal_recommended', 'Recommended') : tr('modal_alternative', 'Alternative')) + '</span>' +
+      '</div>' +
+      (note ? '<div class="comparison-note">' + esc(note) + '</div>' : '') +
+      '<div class="detail-section tz5-key-facts-only">' +
+        '<div class="detail-section-title">' + esc(tr('modal_key_facts', 'Key facts')) + '</div>' +
+        '<div class="detail-grid">' +
+          '<div class="detail-item"><div class="detail-label">' + esc(tr('modal_time', 'Time')) + '</div><div class="detail-value">' + esc(durationText(route)) + '</div></div>' +
+          '<div class="detail-item"><div class="detail-label">' + esc(tr('modal_distance', 'Distance')) + '</div><div class="detail-value">' + esc(distanceText(route)) + '</div></div>' +
+          '<div class="detail-item"><div class="detail-label">' + esc(tr('modal_delay', 'Delay')) + '</div><div class="detail-value">' + esc(delayText(route)) + '</div></div>' +
+          '<div class="detail-item"><div class="detail-label">' + esc(tr('modal_traffic', 'Traffic')) + '</div><div class="detail-value" style="font-size:14px">' + esc(trafficText(route)) + '</div></div>' +
+          '<div class="detail-item"><div class="detail-label">' + esc(tr('modal_tolls', 'Tolls')) + '</div><div class="detail-value" style="font-size:14px">' + esc(tollsText(route)) + '</div></div>' +
+          '<div class="detail-item"><div class="detail-label">' + esc(tr('modal_turns', 'Turns')) + '</div><div class="detail-value">' + esc(turnsText(route)) + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      (points && points.length ? '<div class="modal-why"><div class="modal-why-title">' + esc(isBest ? tr('modal_why_title', 'Why this route') : tr('modal_tradeoff', 'Trade-off')) + '</div><ul class="modal-why-points">' + points.map(function(p){ return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></div>' : '') +
+      '<div class="tz10-modal-actions">' +
+        '<button class="tz10-secondary-btn" onclick="closeModal({target:document.getElementById(\'modal-overlay\')})">' + esc(tr('modal_close', 'Close')) + '</button>' +
+        '<button class="modal-cta" onclick="startDrive(' + Number(route.index) + ')">' + esc((isBest ? tr('modal_go', 'Go') : tr('modal_try', 'Try')) + ' ' + title) + '</button>' +
+      '</div>';
+
+    overlay.classList.add('visible');
+    setTimeout(hideDebugBlocks, 0);
+  }
+
+  function install(){
+    extendTz5I18n();
+    window.tz10RenderRouteBreakdown = function(){ return ''; };
+    try { tz10RenderRouteBreakdown = window.tz10RenderRouteBreakdown; } catch (_) {}
+    window.openRouteDetails = openSimplifiedRouteDetails;
+    try { openRouteDetails = openSimplifiedRouteDetails; } catch (_) {}
+    window.clearRoadTZ5Audit = {
+      ok: true,
+      simplifiedDetails: true,
+      visibleFacts: ['Time','Distance','Delay','Traffic','Tolls','Turns'],
+      removesDebugMetrics: true,
+      coreFunctionsPresent: ['calculateRoutes','renderResults','startDriveMode','requestGPS','setLang'].every(function(fn){ return typeof window[fn] === 'function' || typeof globalThis[fn] === 'function'; })
+    };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
+})();
+</script>
 <script async
 src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
 </script>
