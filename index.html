@@ -5544,6 +5544,24 @@ function tz10SafeNumber(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// ТЗ-1: safe ETA difference formatter.
+// Fixes JS floating point noise in ETA comparison.
+// and prevents negative ETA comparison from being shown to the user.
+function tz1EtaDiffMinutes(route, bestRoute) {
+  const routeMin = Number(typeof _tz1Minutes === "function" ? _tz1Minutes(route) : 0);
+  const bestMin = Number(typeof _tz1Minutes === "function" ? _tz1Minutes(bestRoute || route) : routeMin);
+  if (!Number.isFinite(routeMin) || !Number.isFinite(bestMin)) return 0;
+  const rounded = Math.round(routeMin - bestMin);
+  return Math.abs(rounded) < 1 ? 0 : rounded;
+}
+
+function tz1FormatEtaVsBest(route, bestRoute, isBest) {
+  if (isBest) return "Best route";
+  const diff = tz1EtaDiffMinutes(route, bestRoute);
+  if (diff <= 0) return "Same as best";
+  return "+" + diff + " min vs best";
+}
+
 function tz10RouteSteps(route) {
   try {
     return (route && route.route && route.route.legs && route.route.legs[0] && route.route.legs[0].steps) || [];
@@ -5563,7 +5581,7 @@ function tz10RouteDetailsViewModel(r, best) {
   const steps = tz10RouteSteps(r);
   const bestMin = best ? _tz1Minutes(best) : _tz1Minutes(r);
   const thisMin = _tz1Minutes(r);
-  const diff = thisMin - bestMin;
+  const diff = tz1EtaDiffMinutes(r, best || r);
   const distanceKm = tz8RouteDistanceKm(r) || (r.distance ? Math.round((r.distance / 1000) * 10) / 10 : 0);
   const delay = tz10SafeNumber(r.delayMinutes, 0);
   const score = Math.round(tz10SafeNumber(r.decisionScore, tz10SafeNumber(r.score, 0)));
@@ -5580,7 +5598,7 @@ function tz10RouteDetailsViewModel(r, best) {
 
 function tz10RenderRouteBreakdown(vm) {
   const delayText = vm.delay <= 0 ? "0 min" : "+" + vm.delay + " min";
-  const diffText = vm.diff === 0 ? "Same ETA" : (vm.diff > 0 ? "+" + vm.diff + " min vs best" : vm.diff + " min vs best");
+  const diffText = vm.isBest ? "Best route" : (vm.diff <= 0 ? "Same as best" : "+" + vm.diff + " min vs best");
   return `
     <div class="detail-section">
       <div class="detail-section-title">Route metrics</div>
@@ -6487,8 +6505,8 @@ function tz9CleanReason(route, best, analyzedRoutes) {
 }
 
 function tz8RenderAlternativeCard(route, best, analyzedRoutes, idx) {
-  const diff = _tz1Minutes(route) - _tz1Minutes(best);
-  const diffText = diff === 0 ? "same ETA" : (diff > 0 ? "+" + diff + " min" : diff + " min");
+  const diff = tz1EtaDiffMinutes(route, best);
+  const diffText = diff <= 0 ? "same ETA" : "+" + diff + " min";
   const roleCls = diff < 0 ? "faster" : route.traffic === "low" ? "no-tolls" : "relaxed";
   const distanceText = tz8RouteDistanceKm(route) ? tz8RouteDistanceKm(route) + " km" : "distance n/a";
   const rank = Number.isFinite(route.decisionRank) ? route.decisionRank : idx + 2;
@@ -11299,9 +11317,10 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
   if (typeof tz8RenderAlternativeCard === 'function') {
     const oldRouteName = typeof _tz1RouteName === 'function' ? _tz1RouteName : (r => (r && r.summary) || 'Route');
     window.tz8RenderAlternativeCard = tz8RenderAlternativeCard = function tz8RenderAlternativeCardTZ2(route, best, analyzedRoutes, idx) {
-      const diff = Math.round((minutesNumber(route) - minutesNumber(best)) * 10) / 10;
-      const diffText = diff === 0 ? 'same ETA' : (diff > 0 ? '+' + diff + ' min' : diff + ' min');
-      const roleCls = diff < 0 ? 'faster' : route.traffic === 'low' ? 'no-tolls' : 'relaxed';
+      const diff = Math.round(minutesNumber(route) - minutesNumber(best));
+      const safeDiff = Math.abs(diff) < 1 ? 0 : diff;
+      const diffText = safeDiff <= 0 ? 'same ETA' : '+' + safeDiff + ' min';
+      const roleCls = safeDiff < 0 ? 'faster' : route.traffic === 'low' ? 'no-tolls' : 'relaxed';
       const distanceText = typeof tz8RouteDistanceKm === 'function' && tz8RouteDistanceKm(route) ? tz8RouteDistanceKm(route) + ' km' : 'distance n/a';
       const rank = Number.isFinite(route.decisionRank) ? route.decisionRank : idx + 2;
       const character = typeof tz9RouteCharacter === 'function' ? tz9RouteCharacter(route, best) : 'ALTERNATIVE ROUTE';
