@@ -1,0 +1,21 @@
+Шаблон: index.html здесь БЕЗ полного CSS — стили в ../src/styles/app.css (подставляются при сборке).
+Без полного словаря в <script id="clear-road-inline-i18n"> — строки в ../src/i18n/app-i18n.js (подставляются при сборке).
+Без полного тела в <script id="cr-fix-route-empty-state-final-v2"> — ../src/js/cr-route-empty-state-final-v2.js (подставляется при сборке).
+Без полного тела в <script id="tz8-rtl-script"> — ../src/js/tz8-rtl-layer.js (подставляется при сборке).
+В URL Maps API в шаблоне плейсхолдер ключа: при сборке подставляется CLEAR_ROAD_MAPS_API_KEY / GOOGLE_MAPS_API_KEY или первая строка src/secrets/maps-api-key.txt; иначе — встроенный dev-ключ (см. предупреждение в консоли при build).
+Продакшен: npm run build:prod — обязателен ключ (env или secrets-файл), без fallback.
+
+Команды из корня clear-road-uae:
+  npm run build       → dist/index.html и копия в родительскую папку (например Downloads\index.html рядом с desktop.ini)
+  npm run build -- --no-copy-parent → только dist, без копии в родителя
+  npm run build:check → проверка без записи dist
+  npm run build:prod    → то же, но без ключа в env/secrets сборка завершится ошибкой (CI/релиз)
+
+Если сюда скопировали СТАРЫЙ монолит со встроенным <style>:
+  npm run extract:css → вынести CSS в src/styles/app.css и вернуть плейсхолдер в input/index.html
+
+Если в монолите снова полный TZ8 RTL внутри <script id="tz8-rtl-script">…</script>:
+  npm run extract:tz8-rtl → вынести в src/js/tz8-rtl-layer.js и вернуть плейсхолдер
+
+Если в монолите снова полный cr-empty-state внутри <script id="cr-fix-route-empty-state-final-v2">…</script>:
+  npm run extract:empty-state → вынести в src/js/cr-route-empty-state-final-v2.js и вернуть плейсхолдер

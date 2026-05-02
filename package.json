@@ -1,0 +1,19 @@
+{
+  "name": "clear-road-uae",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clear Road UAE — сборка одного index.html (CSS, i18n, TZ8 RTL, empty-state, ключ Maps)",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:check": "node scripts/build.mjs --verify-only",
+    "build:prod": "node scripts/build.mjs --require-maps-key",
+    "extract:css": "node scripts/extract-css.mjs",
+    "extract:i18n": "node scripts/extract-i18n.mjs",
+    "extract:empty-state": "node scripts/extract-empty-state-js.mjs",
+    "extract:tz8-rtl": "node scripts/extract-tz8-rtl.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
