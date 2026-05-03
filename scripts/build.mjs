@@ -3,7 +3,8 @@
  * CSS: src/styles/app.css → __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
  * i18n: src/i18n/app-i18n.js → __CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__
  * cr-empty-state: src/js/cr-route-empty-state-final-v2.js → __CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__
- * tz4-uae-local: src/js/cr-tz4-uae-local-layer.js → __CLEAR_ROAD_BUILD_JS_TZ4_UAE_LOCAL__ (после основного inline script, до tz5-filters)
+ * tz3-predictive-stability: src/js/cr-tz3-predictive-stability-layer.js → __CLEAR_ROAD_BUILD_JS_TZ3_PREDICTIVE_STABILITY__ (после основного inline script, до tz4-uae-local)
+ * tz4-uae-local: src/js/cr-tz4-uae-local-layer.js → __CLEAR_ROAD_BUILD_JS_TZ4_UAE_LOCAL__ (после tz3-predictive-stability, до tz5-filters)
  * tz5-filters: src/js/cr-tz5-filters-preferences-layer.js → __CLEAR_ROAD_BUILD_JS_TZ5_FILTERS__ (после tz4-uae-local, до tz6-quick-start)
  * tz6-quick-start: src/js/cr-tz6-quick-start-layer.js → __CLEAR_ROAD_BUILD_JS_TZ6_QUICK_START__ (после tz5-filters, до tz7-main-i18n)
  * tz7-main-i18n: src/js/cr-tz7-main-i18n-cleanup.js → __CLEAR_ROAD_BUILD_JS_TZ7_MAIN_I18N__ (после tz6-quick-start, до tz8-rtl)
@@ -41,6 +42,7 @@ const parentIndexHtml = resolve(projectRoot, "..", "index.html");
 const cssFile = join(projectRoot, "src", "styles", "app.css");
 const i18nFile = join(projectRoot, "src", "i18n", "app-i18n.js");
 const emptyStateJsFile = join(projectRoot, "src", "js", "cr-route-empty-state-final-v2.js");
+const tz3PredictiveStabilityJsFile = join(projectRoot, "src", "js", "cr-tz3-predictive-stability-layer.js");
 const tz4UaeLocalJsFile = join(projectRoot, "src", "js", "cr-tz4-uae-local-layer.js");
 const tz5FiltersJsFile = join(projectRoot, "src", "js", "cr-tz5-filters-preferences-layer.js");
 const tz6QuickStartJsFile = join(projectRoot, "src", "js", "cr-tz6-quick-start-layer.js");
@@ -67,6 +69,7 @@ const MAPS_KEY_DEV_FALLBACK = "AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4";
 const PLACEHOLDER_CSS = "__CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__";
 const PLACEHOLDER_I18N = "__CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__";
 const PLACEHOLDER_EMPTY_STATE_JS = "__CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__";
+const PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS = "__CLEAR_ROAD_BUILD_JS_TZ3_PREDICTIVE_STABILITY__";
 const PLACEHOLDER_TZ4_UAE_LOCAL_JS = "__CLEAR_ROAD_BUILD_JS_TZ4_UAE_LOCAL__";
 const PLACEHOLDER_TZ5_FILTERS_JS = "__CLEAR_ROAD_BUILD_JS_TZ5_FILTERS__";
 const PLACEHOLDER_TZ6_QUICK_START_JS = "__CLEAR_ROAD_BUILD_JS_TZ6_QUICK_START__";
@@ -152,6 +155,20 @@ function injectEmptyStateJs(html) {
     process.exit(1);
   }
   return html.split(PLACEHOLDER_EMPTY_STATE_JS).join(js);
+}
+
+function injectTz3PredictiveStabilityJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS)) return html;
+  if (!existsSync(tz3PredictiveStabilityJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ3 predictive stability, но нет файла:", tz3PredictiveStabilityJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz3PredictiveStabilityJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ3 predictive stability:", tz3PredictiveStabilityJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS).join(js);
 }
 
 function injectTz4UaeLocalJs(html) {
@@ -479,6 +496,10 @@ function validateArtifact(html) {
     console.error("В артефакте остался плейсхолдер empty-state JS — сборка не завершена.");
     process.exit(1);
   }
+  if (html.includes(PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ3 predictive stability JS — сборка не завершена.");
+    process.exit(1);
+  }
   if (html.includes(PLACEHOLDER_TZ4_UAE_LOCAL_JS)) {
     console.error("В артефакте остался плейсхолдер TZ4 UAE local JS — сборка не завершена.");
     process.exit(1);
@@ -572,6 +593,7 @@ function validateArtifact(html) {
     ["closing html", /<\/html>\s*$/i.test(html.trim())],
     ["css bulk", html.includes("clear-road.css block") || html.includes(":root {")],
     ["cr-empty-state JS", html.includes("crFixRouteEmptyStateFinalV2")],
+    ["TZ3 predictive stability", html.includes("clearRoadTZ3Predictive")],
     ["TZ4 UAE local / Salik", html.includes("clearRoadTZ4UAE")],
     ["TZ5 filters / preferences", html.includes("clearRoadTZ5Filters")],
     ["TZ6 Quick Start", html.includes("clearRoadTZ6QuickStart")],
@@ -616,6 +638,12 @@ function validateSourceInput(html) {
   if (html.includes(PLACEHOLDER_EMPTY_STATE_JS)) {
     if (!existsSync(emptyStateJsFile) || !readFileSync(emptyStateJsFile, "utf8").trim()) {
       console.error("input содержит плейсхолдер empty-state JS — нужен непустой", emptyStateJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS)) {
+    if (!existsSync(tz3PredictiveStabilityJsFile) || !readFileSync(tz3PredictiveStabilityJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ3 predictive stability — нужен непустой", tz3PredictiveStabilityJsFile);
       process.exit(1);
     }
   }
@@ -757,18 +785,20 @@ function main() {
                 injectTz11CleanupJs(
                   injectTz10AiAssistantJs(
                     injectEmptyStateJs(
-                      injectTz4UaeLocalJs(
-                        injectTz5FiltersJs(
-                          injectTz6QuickStartJs(
-                            injectTz7MainI18nJs(
-                              injectTz8RtlJs(
-                                injectTz7Tz8BundleJs(
-                                  injectTz6bFinalJs(
-                                    injectTz6AiCleanJs(
-                                      injectTz4MobileJs(
-                                        injectTz3I18nCleanJs(
-                                          injectTz1Tz2FinalJs(
-                                            injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                      injectTz3PredictiveStabilityJs(
+                        injectTz4UaeLocalJs(
+                          injectTz5FiltersJs(
+                            injectTz6QuickStartJs(
+                              injectTz7MainI18nJs(
+                                injectTz8RtlJs(
+                                  injectTz7Tz8BundleJs(
+                                    injectTz6bFinalJs(
+                                      injectTz6AiCleanJs(
+                                        injectTz4MobileJs(
+                                          injectTz3I18nCleanJs(
+                                            injectTz1Tz2FinalJs(
+                                              injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                                            )
                                           )
                                         )
                                       )
@@ -825,6 +855,7 @@ function main() {
   console.log("   CSS:", cssFile);
   console.log("   i18n:", i18nFile);
   console.log("   empty-state JS:", emptyStateJsFile);
+  console.log("   TZ3 predictive stability JS:", tz3PredictiveStabilityJsFile);
   console.log("   TZ4 UAE local JS:", tz4UaeLocalJsFile);
   console.log("   TZ5 filters JS:", tz5FiltersJsFile);
   console.log("   TZ6 Quick Start JS:", tz6QuickStartJsFile);
