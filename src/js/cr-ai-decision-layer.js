@@ -99,9 +99,15 @@ function applySalikPricingBeforeDecision(routes) {
         r.salikPricePerGate = ppg;
         var raw = r.salikCount * ppg;
         r.salikCost = Math.round(raw * 100) / 100;
-        r.tollCost = r.salikCost;
-        r.hasToll = r.salikCost > 0;
-        r.tolls = r.salikCost > 0;
+        if (r.darbCount == null) r.darbCount = 0;
+        if (r.darbCost == null) r.darbCost = 0;
+        var darbAed = Number(r.darbCost);
+        if (!Number.isFinite(darbAed)) darbAed = 0;
+        r.tollCost =
+          Math.round((Number(r.salikCost) + darbAed) * 100) / 100;
+        if (!Number.isFinite(r.tollCost)) r.tollCost = r.salikCost;
+        r.hasToll = r.tollCost > 0.005;
+        r.tolls = r.hasToll;
       });
     }
   } catch (_) {}

@@ -66,9 +66,179 @@
     return route;
   }
 
-  const TZ4_SALIK_LEGACY_FALLBACK_PER_GATE = 4;
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
+  const TZ4_DARB_FALLBACK_PER_GATE = 4;
+
+  function tz4uaeNormalizeTrip(s) {
+    return String(s || "").toLowerCase();
+  }
+
+  function tz4uaeReadTripEndpoints() {
+    try {
+      const s = document.getElementById("start");
+      const e = document.getElementById("end");
+      return {
+        start: s && s.value ? String(s.value) : "",
+        end: e && e.value ? String(e.value) : ""
+      };
+    } catch (_) {
+      return { start: "", end: "" };
+    }
+  }
+
+  /** Dubai road Salik gates only (named). */
+  function tz4uaeEndpointEmirates(startText, endText) {
+    const a = tz4uaeNormalizeTrip(startText);
+    const b = tz4uaeNormalizeTrip(endText);
+    const dubai =
+      /\bdubai\b|(?:^|\s)dxb\b|\bdeira\b|bur dubai|jumeirah|dubai marina|downtown dubai|business bay|internet city|media city|dubailand|silicon oasis|discovery gardens|arabian ranches|motor city|\bdsc\b|sports city|palm jumeirah|jebel ali village/;
+    const abuDhabi =
+      /\babu dhabi\b|\bal ain\b|saadiyat|yas island|khalifa city|musaffah|mussafah|rabdan|maqta|ghantoot|sas al nakhl|al raha|al reef|corniche|al qurm|khor al maqta/;
+    const north =
+      /\bsharjah\b|\bajman\b|umm al quwain|\buaq\b|ras al khaimah|\brak\b|fujairah|kalba|khor fakkan|dibba/;
+    return {
+      startDubai: dubai.test(a),
+      endDubai: dubai.test(b),
+      startAbuDhabi: abuDhabi.test(a),
+      endAbuDhabi: abuDhabi.test(b),
+      startNorth: north.test(a),
+      endNorth: north.test(b),
+      anyDubai: dubai.test(a) || dubai.test(b),
+      anyAbuDhabi: abuDhabi.test(a) || abuDhabi.test(b),
+      anyNorth: north.test(a) || north.test(b)
+    };
+  }
+
+  /**
+   * Northern-emirates-only trips (e.g. Ajman ↔ Sharjah): no Dubai road Salik unless a named Dubai gate appears in route text.
+   */
+  function tz4uaeSuppressDubaiRoadSalikDefault(ctx) {
+    if (ctx.anyAbuDhabi || ctx.anyDubai) return false;
+    if (ctx.startNorth && ctx.endNorth) return true;
+    return false;
+  }
+
+  function tz4uaeDetectSalikRoad(text, route, ctx) {
+    const s = String(text || "").toLowerCase();
+    const gates = [];
+    const add = function(id, label) {
+      if (!gates.some(function(g) {
+        return g.id === id;
+      })) gates.push({
+        id: id,
+        label: label
+      });
+    };
+
+    if (/al\s+barsha/.test(s)) add("al-barsha", "Al Barsha");
+    if (/al\s+safa/.test(s)) add("al-safa", "Al Safa");
+    if (/al\s+garhoud|garhoud\s+bridge/.test(s)) add("al-garhoud", "Al Garhoud Bridge");
+    if (/al\s+maktoum|maktoum\s+bridge/.test(s)) add("al-maktoum", "Al Maktoum Bridge");
+    if (/airport\s+tunnel/.test(s)) add("airport-tunnel", "Airport Tunnel");
+    if (/al\s+mamzar\s+north/.test(s)) add("al-mamzar-n", "Al Mamzar North");
+    if (/al\s+mamzar\s+south/.test(s)) add("al-mamzar-s", "Al Mamzar South");
+    if (/al\s+mamzar/.test(s) && !/al\s+mamzar\s+(north|south)/.test(s)) add("al-mamzar", "Al Mamzar");
+    if (/jebel\s+ali/.test(s)) add("jebel-ali", "Jebel Ali");
+    if (/business\s+bay\s+crossing|business\s+bay\s+bridge/.test(s)) add("business-bay", "Business Bay Crossing");
+
+    const suppress = tz4uaeSuppressDubaiRoadSalikDefault(ctx);
+    if (suppress && !gates.length) {
+      return {
+        gates: [],
+        count: 0,
+        confidence: "high",
+        source: "northern-emirates-no-dubai-gates"
+      };
+    }
+
+    const onlyOuterFree = /\be311\b|sheikh mohammed bin zayed|\be611\b|emirates road/.test(s) && !(/\be11\b|sheikh zayed|al\s+safa|al\s+barsha|al\s+mamzar|garhoud|maktoum|airport tunnel|business bay|jebel ali/.test(s));
+    if (onlyOuterFree && !gates.length) {
+      return {
+        gates: [],
+        count: 0,
+        confidence: "high",
+        source: "free-corridor"
+      };
+    }
+
+    const count = gates.length;
+    return {
+      gates: gates.slice(),
+      count: count,
+      confidence: count ? "medium" : "high",
+      source: count ? "dubai-road-gate" : "no-dubai-road-salik"
+    };
+  }
+
+  function tz4uaeDetectDarb(text, ctx) {
+    const s = String(text || "").toLowerCase();
+    const gates = [];
+    const add = function(id, label) {
+      if (!gates.some(function(g) {
+        return g.id === id;
+      })) gates.push({
+        id: id,
+        label: label
+      });
+    };
+
+    const adRelevant = ctx.anyAbuDhabi || /ghantoot|maqta|musaffah|saadiyat|rabdan|al qurm|darb/.test(s);
+    if (!adRelevant) {
+      return {
+        gates: [],
+        count: 0,
+        confidence: "high",
+        source: "no-darb-context"
+      };
+    }
+
+    if (/al\s+maqta|maqta\s+bridge/.test(s)) add("maqta", "Al Maqta Bridge");
+    if (/musaffah|mussaffah|rabdan/.test(s)) add("musaffah", "Musaffah / Rabdan");
+    if (/sheikh\s+zayed\s+bridge|sas\s+al\s+nakhl/.test(s)) add("szb", "Sheikh Zayed Bridge / Sas Al Nakhl");
+    if (/sheikh\s+khalifa\s+bridge|al\s+saadiyat/.test(s)) add("skb", "Sheikh Khalifa Bridge / Al Saadiyat");
+    if (/ghantoot/.test(s)) add("ghantoot", "Ghantoot Toll Gate");
+    if (/al\s+qurm|qurm\s+toll/.test(s)) add("qurm", "Al Qurm Toll Gate");
+
+    const count = gates.length;
+    return {
+      gates: gates.slice(),
+      count: count,
+      confidence: count ? "low" : (ctx.anyAbuDhabi ? "low" : "high"),
+      source: count ? "darb-text" : ctx.anyAbuDhabi ? "abu-dhabi-destination-maybe" : "no-darb-gate-named"
+    };
+  }
+
+  /** Paid parking may use Salik/Parkonic — not road toll. Destination-only. */
+  function tz4uaeDetectDestParkingSalik(endText) {
+    const s = tz4uaeNormalizeTrip(endText);
+    if (!s) return {
+      level: "none",
+      key: null
+    };
+    const patterns =
+      /dubai\s+mall|golden\s+mile|galleria|nakheel\s+mall|west\s+palm|palm\s+jumeirah|the\s+town\s+mall|dubai\s+investment|(?:^|\s)dip(?:\s|,|$)|dubai\s+sports\s+city|palm\s+monorail|parkonic|jebel\s+ali\s+town|sharjah.*beach|beach.*sharjah|al\s+khan|al\s+majaz/;
+    if (patterns.test(s)) return {
+      level: "salik_parking_possible", key: "uae_parking_salik_parkonic_line"
+    };
+    if (/\bmall\b|multi\s*storey|multistorey|paid\s+parking/.test(s)) return {
+      level: "paid_unknown", levelRaw: "possible", key: "uae_parking_may_be_paid_dest"
+    };
+    return {
+      level: "none",
+      key: null
+    };
+  }
+
+  function tz4uaeApplyDarbPricingToRoute(route, at) {
+    if (!route || typeof route !== "object") return route;
+    const when = at instanceof Date ? at : new Date();
+    const cnt = tz4uaeSafeNumber(route.darbCount, 0);
+    route.darbCount = Math.max(0, Math.round(cnt));
+    const ppg = TZ4_DARB_FALLBACK_PER_GATE;
+    route.darbPricePerGate = ppg;
+    const raw = route.darbCount * ppg;
+    route.darbCost = Math.round(raw * 100) / 100;
+    route.darbEstimateUncertain = route.darbCount > 0 || route.uaeDarbPossible === true;
+    return route;
   }
 
   function tz4uaeEscape(value) {
@@ -127,71 +297,6 @@
     return corridors;
   }
 
-  function tz4uaeDetectSalik(text, route) {
-    const s = String(text || "").toLowerCase();
-    const gates = [];
-    const add = function(id, label) {
-      if (!gates.some(function(g) { return g.id === id; })) gates.push({ id: id, label: label });
-    };
-
-    // Strong named-gate patterns first.
-    if (/al\s+safa/.test(s)) add("al-safa", "Al Safa Salik");
-    if (/al\s+barsha/.test(s)) add("al-barsha", "Al Barsha Salik");
-    if (/al\s+mamzar/.test(s)) add("al-mamzar", "Al Mamzar Salik");
-    if (/al\s+garhoud|garhoud bridge/.test(s)) add("al-garhoud", "Al Garhoud Salik");
-    if (/al\s+maktoum|maktoum bridge/.test(s)) add("al-maktoum", "Al Maktoum Salik");
-    if (/airport tunnel/.test(s)) add("airport-tunnel", "Airport Tunnel Salik");
-    if (/business bay crossing|business bay bridge/.test(s)) add("business-bay", "Business Bay Crossing Salik");
-    if (/jebel ali/.test(s)) add("jebel-ali", "Jebel Ali Salik");
-
-    // Generic E11/SZR fallback: probable Salik only when the route text clearly uses Dubai E11/SZR.
-    if (!gates.length && (/\be11\b|sheikh zayed|szr/.test(s)) && /dubai|jumeirah|marina|downtown|business bay|jebel ali|barsha|safa/.test(s)) {
-      add("e11-generic", "Dubai E11 / Sheikh Zayed Salik area");
-    }
-
-    // Avoid false positives on common free outer corridors unless a named Salik gate was detected.
-    const onlyOuterFree = /\be311\b|sheikh mohammed bin zayed|\be611\b|emirates road/.test(s) && !(/\be11\b|sheikh zayed|al\s+safa|al\s+barsha|al\s+mamzar|garhoud|maktoum|airport tunnel|business bay|jebel ali/.test(s));
-    if (onlyOuterFree) return { gates: [], count: 0, cost: 0, confidence: "high", source: "free-corridor" };
-
-    const previousCost = tz4uaeSafeNumber(route && route.tollCost, 0);
-    const previousCount = tz4uaeSafeNumber(route && route.tollCount, 0);
-    let count = gates.length;
-
-    if (count === 0 && previousCost > 0) {
-      count = Math.max(1, Math.round(previousCost / TZ4_SALIK_LEGACY_FALLBACK_PER_GATE));
-      gates.push({ id: "estimated", label: "Estimated Salik area" });
-    } else if (count === 0 && previousCount > 0) {
-      count = previousCount;
-      gates.push({ id: "estimated", label: "Estimated Salik area" });
-    } else if (count === 0 && route && tz4uaeSafeNumber(route.highwayShare, 0) >= 0.42 && /\be11\b|sheikh zayed|szr/.test(s) && /dubai|jumeirah|marina|downtown|business bay|jebel ali|barsha|safa/.test(s)) {
-      const hs = tz4uaeSafeNumber(route.highwayShare, 0);
-      count = Math.min(4, Math.max(1, 1 + Math.floor(hs * 2)));
-      gates.push({ id: "segment-estimate", label: "Salik-prone segments (estimate)" });
-    }
-
-    return {
-      gates: gates.slice(0, Math.max(0, count)),
-      count: count,
-      costPreview: count * TZ4_SALIK_LEGACY_FALLBACK_PER_GATE,
-      confidence:
-        gates.length && gates[0].id !== "estimated" && gates[0].id !== "segment-estimate"
-          ? "medium"
-          : gates[0] && gates[0].id === "segment-estimate"
-            ? "low"
-            : count > 0
-              ? "low"
-              : "high",
-      source:
-        gates.length && gates[0].id !== "estimated" && gates[0].id !== "segment-estimate"
-          ? "route-text"
-          : count > 0
-            ? gates[0] && gates[0].id === "segment-estimate"
-              ? "segment-estimate"
-              : "existing-estimate"
-            : "no-salik"
-    };
-  }
-
   function tz4uaePeakWindow() {
     const d = new Date();
     const day = d.getDay();
@@ -236,39 +341,68 @@
   function tz4uaeBuildAdvice(meta, route) {
     const ppg = tz4uaeGetSalikPricePerGate(new Date());
     const sc = tz4uaeSafeNumber(meta.salik.count, 0) * ppg;
-    const tollPart = sc > 0 ? Math.round(sc * 100) / 100 + " AED Salik" : "no Salik detected";
-    const peakPart = meta.pattern.peakWindow.active ? (meta.pattern.peakWindow.label + ", " + meta.pattern.peakLabel + " local risk") : (meta.pattern.peakLabel + " local risk now");
+    const dc = tz4uaeSafeNumber(route && route.darbCost, 0);
+    let tollPart = "no Dubai road Salik";
+    if (sc > 0) tollPart = Math.round(sc * 100) / 100 + " AED Dubai road Salik";
+    if (dc > 0) tollPart += (sc > 0 ? " · " : "") + Math.round(dc * 100) / 100 + " AED Darb (estimate)";
+    else if (route && route.uaeDarbPossible) tollPart += (tollPart.indexOf("AED") === -1 ? "" : " · ") + "Darb may apply (Abu Dhabi)";
+    const peakPart = meta.pattern.peakWindow.active
+      ? meta.pattern.peakWindow.label + ", " + meta.pattern.peakLabel + " local risk"
+      : meta.pattern.peakLabel + " local risk now";
     const corridor = meta.pattern.corridors[0] ? meta.pattern.corridors[0].label : meta.pattern.personality;
     return corridor + " · " + tollPart + " · " + peakPart;
   }
 
   function tz4uaeEnrichRoute(route) {
     if (!route || typeof route !== "object") return route;
+    const trip = tz4uaeReadTripEndpoints();
+    const ctx = tz4uaeEndpointEmirates(trip.start, trip.end);
     const text = tz4uaeRouteText(route);
-    const salik = tz4uaeDetectSalik(text, route);
+    const salik = tz4uaeDetectSalikRoad(text, route, ctx);
+    const darbRaw = tz4uaeDetectDarb(text, ctx);
+    const parking = tz4uaeDetectDestParkingSalik(trip.end);
+
+    route.uaeTripEmirates = ctx;
+    route.uaeDestParking = parking;
+    route.uaeDestAbuDhabi = ctx.endAbuDhabi;
+    route.uaeDarbPossible = darbRaw.source === "abu-dhabi-destination-maybe" && darbRaw.count === 0;
+
+    route.darbCount = Math.max(0, Math.round(tz4uaeSafeNumber(darbRaw.count, 0)));
+    route.darbMeta = {
+      confidence: darbRaw.confidence,
+      source: darbRaw.source,
+      gates: darbRaw.gates || []
+    };
+
+    route.salikCount = Math.max(0, Math.round(tz4uaeSafeNumber(salik.count, 0)));
+    route.salikRoadGates = salik.gates || [];
+    route.salikMeta = {
+      confidence: salik.confidence,
+      source: salik.source,
+      gateCount: route.salikCount,
+      kind: "dubai_road"
+    };
+    route.salikEstimateUncertain = false;
+
+    tz4uaeApplySalikPricingToRoute(route, new Date());
+    tz4uaeApplyDarbPricingToRoute(route, new Date());
+
+    const totalRoad = tz4uaeSafeNumber(route.salikCost, 0) + tz4uaeSafeNumber(route.darbCost, 0);
+    route.tollCost = Math.round(totalRoad * 100) / 100;
+    route.hasToll = totalRoad > 0.005;
+    route.tolls = route.hasToll;
+    route.tollCount = route.salikCount;
+
     const pattern = tz4uaeDetectLocalPattern(text, route);
     const meta = {
       salik: salik,
+      darb: darbRaw,
+      parking: parking,
       pattern: pattern,
       textFingerprint: text.slice(0, 240),
       updatedAt: Date.now()
     };
-
     route.uaeLocal = meta;
-    route.salikCount = Math.max(0, Math.round(tz4uaeSafeNumber(salik.count, 0)));
-    route.salikMeta = {
-      confidence: salik.confidence,
-      source: salik.source,
-      gateCount: route.salikCount
-    };
-    route.salikEstimateUncertain =
-      route.salikCount > 0 &&
-      (salik.confidence === "low" ||
-        salik.source === "segment-estimate" ||
-        salik.source === "existing-estimate" ||
-        !!(salik.gates && salik.gates[0] && salik.gates[0].id === "estimated"));
-
-    tz4uaeApplySalikPricingToRoute(route, new Date());
 
     route.uaePeakRisk = pattern.peakRisk;
     route.uaePeakLabel = pattern.peakLabel;
@@ -276,8 +410,8 @@
     route.uaeAdvice = tz4uaeBuildAdvice(meta, route);
 
     if (route.scoreBreakdown) {
-      route.scoreBreakdown.tollCost = route.salikCost;
-      route.scoreBreakdown.tollPenalty = route.salikCost > 0 ? 6 : 0;
+      route.scoreBreakdown.tollCost = route.tollCost;
+      route.scoreBreakdown.tollPenalty = route.tollCost > 0 ? 6 : 0;
       route.scoreBreakdown.uaePeakRisk = pattern.peakRisk;
       route.scoreBreakdown.uaePeakLabel = pattern.peakLabel;
     }
@@ -318,7 +452,11 @@
   try { window.clearRoadTZ4UAE = {
     enrichRoute: tz4uaeEnrichRoute,
     enrichRoutes: tz4uaeEnrichRoutes,
-    detectSalik: function(route) { return tz4uaeDetectSalik(tz4uaeRouteText(route), route); },
+    detectSalik: function(route) {
+      const trip = tz4uaeReadTripEndpoints();
+      const ctx = tz4uaeEndpointEmirates(trip.start, trip.end);
+      return tz4uaeDetectSalikRoad(tz4uaeRouteText(route), route, ctx);
+    },
     detectPattern: function(route) { return tz4uaeDetectLocalPattern(tz4uaeRouteText(route), route); },
     peakWindow: tz4uaePeakWindow,
     getSalikPricePerGate: tz4uaeGetSalikPricePerGate,
@@ -326,7 +464,15 @@
     refreshRoutesSalikPricing: function(routes, at) {
       if (!Array.isArray(routes)) return routes;
       const when = at instanceof Date ? at : new Date();
-      routes.forEach(function(r) { tz4uaeApplySalikPricingToRoute(r, when); });
+      routes.forEach(function(r) {
+        if (!r) return;
+        tz4uaeApplySalikPricingToRoute(r, when);
+        tz4uaeApplyDarbPricingToRoute(r, when);
+        const total = tz4uaeSafeNumber(r.salikCost, 0) + tz4uaeSafeNumber(r.darbCost, 0);
+        r.tollCost = Math.round(total * 100) / 100;
+        r.hasToll = total > 0.005;
+        r.tolls = r.hasToll;
+      });
       return routes;
     }
   }; } catch (_) {}

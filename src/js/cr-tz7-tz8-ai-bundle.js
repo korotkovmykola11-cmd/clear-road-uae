@@ -423,13 +423,19 @@
     };
   }
   function hasTolls(route){
-    return !!(route && (route.tolls || route.hasTolls || safeNum(route.tollCost, 0) > 0 || safeNum(route.salikCost, 0) > 0));
+    return !!(route && (route.tolls || route.hasTolls || safeNum(route.tollCost, 0) > 0 || safeNum(route.salikCost, 0) > 0 || safeNum(route.darbCost, 0) > 0));
   }
   function salikAed(route){
-    return safeNum(route && route.salikCost, safeNum(route && route.tollCost, 0));
+    return safeNum(route && route.salikCost, 0);
   }
   function salikGates(route){
     return Math.max(0, Math.round(safeNum(route && route.salikCount, safeNum(route && route.tollCount, 0))));
+  }
+  function darbAed(route){
+    return safeNum(route && route.darbCost, 0);
+  }
+  function darbGates(route){
+    return Math.max(0, Math.round(safeNum(route && route.darbCount, 0)));
   }
   function hasHighway(route){
     if (!route) return false;
@@ -542,23 +548,27 @@
   const L = {
     en: {
       go:'GO NOW', close:'ROUTES ARE CLOSE', only:'ONLY VALID ROUTE', why:'WHY', trade:'TRADE-OFF', when:'WHEN', conf:'AI CONFIDENCE',
-      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'Leave when ready — compare minutes and Salik below.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH',
-      salikCostNarr:'Salik about {aed} AED ({gates} gates)', salikFreeVs:'Skips Salik versus a tolled alternative', pickBySalik:'Times are close — decide using Salik cost and comfort.', stabBetter:'More stable ETA than the main alternative'
+      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'Leave when ready — compare minutes and road tolls below.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH',
+      salikCostNarr:'Dubai road Salik about {aed} AED ({gates} gates)', salikFreeVs:'Skips Dubai road Salik versus a tolled alternative', pickBySalik:'Times are close — decide using Dubai road Salik and comfort.', stabBetter:'More stable ETA than the main alternative',
+      abuDhabiNotSalik:'Not Salik — Abu Dhabi uses Darb tolls.', darbCostNarr:'Darb (estimate): about {aed} AED · {gates} gate(s).', darbMaybe:'Darb may apply on Abu Dhabi roads — not Salik.', salikDubaiSegmentNarr:'Dubai road Salik on route: about {aed} AED ({gates} gates).'
     },
     ru: {
       go:'ЕДЬ СЕЙЧАС', close:'МАРШРУТЫ ПОЧТИ РАВНЫ', only:'ОДИН ДОСТУПНЫЙ МАРШРУТ', why:'ПОЧЕМУ', trade:'КОМПРОМИСС', when:'КОГДА', conf:'УВЕРЕННОСТЬ AI',
-      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Выезжай, когда готов — ниже сравнение минут и Салика.', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ',
-      salikCostNarr:'Салик около {aed} AED ({gates} ворот)', salikFreeVs:'Без Салика против платной альтернативы', pickBySalik:'Время близко — решай по Салику и комфорту.', stabBetter:'Стабильнее ETA, чем основная альтернатива'
+      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Выезжай, когда готов — ниже сравнение минут и дорожных сборов.', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ',
+      salikCostNarr:'Дорожный Салик Dubai ~{aed} AED ({gates} ворот)', salikFreeVs:'Без дорожного Салика Dubai против платной альтернативы', pickBySalik:'Время близко — решай по дорожному Салику Dubai и комфорту.', stabBetter:'Стабильнее ETA, чем основная альтернатива',
+      abuDhabiNotSalik:'Это не Салик: в Abu Dhabi — Darb.', darbCostNarr:'Darb (оценка): ~{aed} AED · {gates} ворот.', darbMaybe:'Возможен Darb на дорогах Abu Dhabi — не Салик.', salikDubaiSegmentNarr:'Дорожный Салик Dubai на маршруте: ~{aed} AED ({gates} ворот).'
     },
     ua: {
       go:'ЇДЬ ЗАРАЗ', close:'МАРШРУТИ МАЙЖЕ РІВНІ', only:'ОДИН ДОСТУПНИЙ МАРШРУТ', why:'ЧОМУ', trade:'КОМПРОМІС', when:'КОЛИ', conf:'ВПЕВНЕНІСТЬ AI',
-      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Виїжджай, коли готовий — нижче порівняння хвилин і Саліку.', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА',
-      salikCostNarr:'Салік ~{aed} AED ({gates} шлюзів)', salikFreeVs:'Без Саліку проти платної альтернативи', pickBySalik:'Час близький — обирай за Саліком і комфортом.', stabBetter:'Стабільніший ETA за основну альтернативу'
+      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Виїжджай, коли готовий — нижче порівняння хвилин і зборів.', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА',
+      salikCostNarr:'Дорожній Салік Dubai ~{aed} AED ({gates} шлюзів)', salikFreeVs:'Без дорожнього Саліку Dubai проти платної альтернативи', pickBySalik:'Час близький — обирай за дорожнім Саліком Dubai і комфортом.', stabBetter:'Стабільніший ETA за основну альтернативу',
+      abuDhabiNotSalik:'Це не Салік: у Abu Dhabi — Darb.', darbCostNarr:'Darb (оцінка): ~{aed} AED · {gates} шлюзів.', darbMaybe:'Можливий Darb на дорогах Abu Dhabi — не Салік.', salikDubaiSegmentNarr:'Дорожній Салік Dubai на маршруті: ~{aed} AED ({gates} шлюзів).'
     },
     ar: {
       go:'انطلق الآن', close:'المسارات متقاربة', only:'مسار واحد صالح', why:'السبب', trade:'المقابل', when:'الوقت', conf:'ثقة AI',
-      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'انطلق عند الجاهزية — قارن الدقائق والسالك أدناه.', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية',
-      salikCostNarr:'سالك نحو {aed} درهم ({gates} بوابات)', salikFreeVs:'بدون سالك مقارنة ببديل برسوم', pickBySalik:'الأوقات متقاربة — قرّر حسب تكلفة سالك والراحة.', stabBetter:'وقت وصول أكثر استقراراً من البديل الرئيسي'
+      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'انطلق عند الجاهزية — قارن الدقائق ورسوم الطرق أدناه.', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية',
+      salikCostNarr:'سالك طرق دبي: نحو {aed} درهم ({gates} بوابات)', salikFreeVs:'بدون سالك طرق دبي مقارنة ببديل برسوم', pickBySalik:'الأوقات متقاربة — قرّر حسب سالك طرق دبي والراحة.', stabBetter:'وقت وصول أكثر استقراراً من البديل الرئيسي',
+      abuDhabiNotSalik:'ليس سالك — أبوظبي تستخدم رسوم دارب.', darbCostNarr:'دارب (تقدير): نحو {aed} درهم · {gates} بوابة.', darbMaybe:'قد تنطبق دارب على طرق أبوظبي — وليس سالك.', salikDubaiSegmentNarr:'سالك طرق دبي على المسار: نحو {aed} درهم ({gates} بوابات).'
     }
   };
   function dict(){ const lang = getLang(); return L[lang] || L.en; }
@@ -719,8 +729,17 @@
     const trade = [];
     const sa = salikAed(best);
     const sg = salikGates(best);
-    if (best && sa > 0.5) trade.push(tpl(d.salikCostNarr, { aed: Math.round(sa), gates: sg }));
-    else if (best && hasTolls(best)) trade.push(d.toll);
+    const da = darbAed(best);
+    const dg = darbGates(best);
+    if (best && best.uaeDestAbuDhabi) {
+      trade.push(d.abuDhabiNotSalik);
+      if (da > 0.5) trade.push(tpl(d.darbCostNarr, { aed: Math.round(da), gates: dg }));
+      else if (best.uaeDarbPossible) trade.push(d.darbMaybe);
+      if (sa > 0.5) trade.push(tpl(d.salikDubaiSegmentNarr, { aed: Math.round(sa), gates: sg }));
+    } else {
+      if (best && sa > 0.5) trade.push(tpl(d.salikCostNarr, { aed: Math.round(sa), gates: sg }));
+      else if (best && hasTolls(best)) trade.push(d.toll);
+    }
     if (best && hasHighway(best)) trade.push(d.highway);
     if (second && timeGap <= 1) trade.push(d.altClose);
     else if (!trade.length && second && timeGap > 0) trade.push(tpl(d.altSlower, {x: timeGap}));

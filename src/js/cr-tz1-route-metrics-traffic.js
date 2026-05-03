@@ -121,10 +121,11 @@ function calculateRouteMetrics(route, leg, rawRoute) {
   const highwayShare = calculateHighwayShare(leg, rawRoute);
   const traffic = getTrafficLevel(baseTime, time);
 
-  // ТЗ3 ЭТАП 1: Salik toll data
-  const tollCount = Math.floor(highwayShare * 3); // rough estimate based on highway usage
-  const tollCost = tollCount * 4; // 4 AED per Salik gate
-  const hasToll = tollCost > 0;
+  // Road tolls: TZ4 UAE layer sets Dubai Salik / Darb from route text + trip — not from highway share
+  // (highway-based guess caused false Salik e.g. Sharjah ↔ Ajman).
+  const tollCount = 0;
+  const tollCost = 0;
+  const hasToll = false;
 
   return {
     time,

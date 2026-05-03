@@ -13,10 +13,21 @@ function crI18nSub(str, o) {
 function crSalikSummaryForAdvisor(route, tk) {
   if (!route || typeof tk !== "function") return "";
   if (crSalikUncertain(route)) return tk("salik_disclaimer_uncertain");
-  const aed = crRouteSalikAed(route);
-  const g = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : route.tollCount) || 0));
-  if (aed < 0.01) return tk("ai_adv_salik_free");
-  return crI18nSub(tk("ai_adv_salik_paid"), { aed: Math.round(aed * 100) / 100, n: g });
+  const sub = crI18nSub;
+  const g = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : 0) || 0));
+  const road = crRouteSalikAed(route);
+  const darb = crRouteDarbAed(route);
+  if (route.uaeDestAbuDhabi) {
+    let s =
+      road < 0.01
+        ? tk("ai_adv_road_salik_free_ad")
+        : sub(tk("ai_adv_salik_paid"), { aed: Math.round(road * 100) / 100, n: g });
+    if (darb >= 0.01) s += " · " + sub(tk("ai_adv_darb_paid"), { aed: Math.round(darb * 100) / 100, n: Math.max(0, Math.round(Number(route.darbCount) || 0)) });
+    else if (route.uaeDarbPossible) s += " · " + tk("ai_adv_darb_possible_short");
+    return s;
+  }
+  if (road < 0.01) return tk("ai_adv_salik_free");
+  return sub(tk("ai_adv_salik_paid"), { aed: Math.round(road * 100) / 100, n: g });
 }
 
 function crRouteDisplayNum(route) {
@@ -45,6 +56,9 @@ function crAltRoutesComputeRefs(allRoutes) {
 
 function crAltRouteHasNoTolls(route) {
   if (!route) return true;
+  const dubai = Number(route.salikCost != null ? route.salikCost : 0);
+  const darb = Number(route.darbCost != null ? route.darbCost : 0);
+  if ((Number.isFinite(dubai) && dubai > 0) || (Number.isFinite(darb) && darb > 0)) return false;
   const tc = Number(route.tollCost);
   if (Number.isFinite(tc) && tc > 0) return false;
   if (route.hasToll) return false;
@@ -70,15 +84,26 @@ function crRefreshRoutesSalikPricing(routes) {
     r.salikPricePerGate = ppg;
     const raw = r.salikCount * ppg;
     r.salikCost = Math.round(raw * 100) / 100;
-    r.tollCost = r.salikCost;
-    r.hasToll = r.salikCost > 0;
-    r.tolls = r.salikCost > 0;
+    const dc = Number(r.darbCount != null ? r.darbCount : 0) || 0;
+    r.darbCount = Math.max(0, Math.round(dc));
+    const darbRaw = r.darbCount * (typeof r.darbPricePerGate === "number" ? r.darbPricePerGate : 4);
+    r.darbCost = Math.round(darbRaw * 100) / 100;
+    const total = r.salikCost + r.darbCost;
+    r.tollCost = Math.round(total * 100) / 100;
+    r.hasToll = total > 0.005;
+    r.tolls = r.hasToll;
   });
 }
 
 function crRouteSalikAed(route) {
   if (!route) return 0;
-  const c = Number(route.salikCost != null ? route.salikCost : route.tollCost);
+  const c = Number(route.salikCost != null ? route.salikCost : 0);
+  return Number.isFinite(c) ? c : 0;
+}
+
+function crRouteDarbAed(route) {
+  if (!route) return 0;
+  const c = Number(route.darbCost != null ? route.darbCost : 0);
   return Number.isFinite(c) ? c : 0;
 }
 
@@ -123,7 +148,9 @@ function crFindFastestFreeRoute(routes) {
   const list = Array.isArray(routes)
     ? routes.filter(function(r) { return r && Number.isFinite(r.index); })
     : [];
-  const frees = list.filter(function(r) { return crRouteSalikAed(r) < 0.01; });
+  const frees = list.filter(function(r) {
+    return crRouteSalikAed(r) < 0.01 && crRouteDarbAed(r) < 0.01;
+  });
   if (!frees.length) return null;
   return frees.slice().sort(function(a, b) {
     return crHeroMinutesForRoute(a) - crHeroMinutesForRoute(b);
@@ -672,14 +699,24 @@ function crBuildRouteAdvisorVoiceBrief(route) {
   if (crSalikUncertain(route)) chunks.push(tk("salik_disclaimer_uncertain"));
   else {
     const aed = crRouteSalikAed(route);
-    if (aed >= 0.01) chunks.push(sub(tk("ai_voice_salik_cost"), { aed: Math.round(aed * 100) / 100 }));
-    else chunks.push(tk("ai_voice_salik_free"));
+    if (route.uaeDestAbuDhabi) {
+      chunks.push(tk("ai_voice_abu_dhabi_not_salik"));
+      const d = crRouteDarbAed(route);
+      if (d >= 0.01) chunks.push(sub(tk("ai_voice_darb_cost"), { aed: Math.round(d * 100) / 100 }));
+      else if (route.uaeDarbPossible) chunks.push(tk("ai_voice_darb_possible"));
+    } else {
+      if (aed >= 0.01) chunks.push(sub(tk("ai_voice_salik_road_cost"), { aed: Math.round(aed * 100) / 100 }));
+      else chunks.push(tk("ai_voice_salik_road_free"));
+    }
+  }
+  if (route.uaeDestParking && route.uaeDestParking.key) {
+    chunks.push(tk(route.uaeDestParking.key));
   }
 
   const freeAlt = routes.find(function(r) {
-    return Number(r.index) !== Number(route.index) && crRouteSalikAed(r) < 0.01;
+    return Number(r.index) !== Number(route.index) && crRouteSalikAed(r) < 0.01 && crRouteDarbAed(r) < 0.01;
   });
-  if (freeAlt && crRouteSalikAed(route) >= 0.01) {
+  if (freeAlt && (crRouteSalikAed(route) >= 0.01 || crRouteDarbAed(route) >= 0.01)) {
     chunks.push(sub(tk("ai_voice_save_take_alt"), { n: crRouteDisplayNum(freeAlt) }));
   }
 
@@ -695,7 +732,7 @@ function crBuildRouteCardAdvisorInnerHtml(route, displayNum, ctx, tk) {
   if (ctx.best && route && Number(route.index) === Number(ctx.best.index)) whenKey = "route_card_when_best";
   else if (ctx.fastest && route && Number(route.index) === Number(ctx.fastest.index)) whenKey = "route_card_when_fastest";
   else if (ctx.calmest && route && Number(route.index) === Number(ctx.calmest.index)) whenKey = "route_card_when_calm";
-  else if (crRouteSalikAed(route) < 0.01 && ctx.best && crRouteSalikAed(ctx.best) >= 0.01) whenKey = "route_card_when_tollfree";
+  else if (crRouteSalikAed(route) < 0.01 && crRouteDarbAed(route) < 0.01 && ctx.best && (crRouteSalikAed(ctx.best) >= 0.01 || crRouteDarbAed(ctx.best) >= 0.01)) whenKey = "route_card_when_tollfree";
   const when = tk(whenKey);
   let h = '<div class="dashboard-route-advisor">';
   h += '<div class="dashboard-route-advisor-label">' + _tz1EscapeHTML(tk("route_card_advisor_heading")) + "</div>";
@@ -795,25 +832,63 @@ function crSalikCardHtml(route, tk) {
     });
     return s;
   };
-  const aed = crRouteSalikAed(route);
-  const gates = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : route.tollCount) || 0));
-  const headline =
-    aed < 0.01 ? tk("salik_line_headline_free") : sub(tk("salik_line_headline_cost"), { aed: Math.round(aed * 100) / 100 });
-  const note = aed > 0.01 ? tk("salik_card_note_toll") : tk("salik_card_note_free");
-  const extra = crSalikUncertain(route) ? " " + tk("salik_disclaimer_uncertain") : "";
-  const gatePart =
-    gates > 0
-      ? ' · <span class="dashboard-route-salik-gates">' + _tz1EscapeHTML(sub(tk("salik_gates_label"), { n: gates })) + "</span>"
-      : "";
+  const roadAed = crRouteSalikAed(route);
+  const roadGates = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : 0) || 0));
+  const darbAed = crRouteDarbAed(route);
+  const darbGates = Math.max(0, Math.round(Number(route.darbCount != null ? route.darbCount : 0) || 0));
+  const park = route.uaeDestParking || { level: "none", key: null };
+  const destAd = !!route.uaeDestAbuDhabi;
+
+  let roadVal =
+    roadAed < 0.01
+      ? tk("uae_row_road_free")
+      : sub(tk("uae_row_road_paid"), { aed: Math.round(roadAed * 100) / 100, n: roadGates });
+  if (crSalikUncertain(route)) roadVal += " · " + tk("salik_disclaimer_uncertain");
+
+  let darbVal = "";
+  if (destAd || darbAed >= 0.01 || route.uaeDarbPossible) {
+    if (darbAed >= 0.01) {
+      darbVal = sub(tk("uae_row_darb_paid"), { aed: Math.round(darbAed * 100) / 100, n: darbGates });
+      if (route.darbEstimateUncertain) darbVal += " · " + tk("uae_darb_may_vary");
+    } else if (route.uaeDarbPossible) {
+      darbVal = tk("uae_row_darb_possible");
+    } else {
+      darbVal = tk("uae_row_darb_none_detected");
+    }
+    darbVal = '<div class="dashboard-route-salik-row dashboard-route-salik-row--darb"><span class="dashboard-route-salik-k">' +
+      _tz1EscapeHTML(tk("uae_row_darb_label")) +
+      "</span> " +
+      _tz1EscapeHTML(darbVal) +
+      "</div>";
+  } else {
+    darbVal =
+      '<div class="dashboard-route-salik-row dashboard-route-salik-row--darb"><span class="dashboard-route-salik-k">' +
+      _tz1EscapeHTML(tk("uae_row_darb_label")) +
+      "</span> " +
+      _tz1EscapeHTML(tk("uae_row_darb_na")) +
+      "</div>";
+  }
+
+  let parkVal = tk("uae_row_parking_unknown");
+  if (park.key) parkVal = tk(park.key);
+
+  const adNote = destAd ? '<div class="dashboard-route-salik-note dashboard-route-salik-note--ad">' + _tz1EscapeHTML(tk("uae_not_salik_this_is_darb")) + "</div>" : "";
+
   return (
     '<div class="dashboard-route-salik">' +
-    '<div class="dashboard-route-salik-head">' +
-    _tz1EscapeHTML(headline) +
-    gatePart +
+    '<div class="dashboard-route-salik-row"><span class="dashboard-route-salik-k">' +
+    _tz1EscapeHTML(tk("uae_row_road_label")) +
+    "</span> " +
+    _tz1EscapeHTML(roadVal) +
     "</div>" +
-    '<div class="dashboard-route-salik-note">' +
-    _tz1EscapeHTML(note + extra) +
-    "</div></div>"
+    '<div class="dashboard-route-salik-row"><span class="dashboard-route-salik-k">' +
+    _tz1EscapeHTML(tk("uae_row_parking_label")) +
+    "</span> " +
+    _tz1EscapeHTML(parkVal) +
+    "</div>" +
+    darbVal +
+    adNote +
+    "</div>"
   );
 }
 
