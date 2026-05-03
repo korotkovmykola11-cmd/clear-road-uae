@@ -1,4 +1,5 @@
 /* ===== clear-road.css block 1/7 (DOM order, Phase 2) ===== */
+html { color-scheme: dark; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
       :root {
@@ -41,20 +42,18 @@
         position: relative;
         z-index: 5;
         isolation: isolate;
-        height: 16vh;
+        height: 100vh;
         min-height: 100px;
-        max-height: 140px;
         background: hsl(220 16% 9%);
-        overflow: hidden;
         flex-shrink: 0;
       }
-      .hero-section::after {
+      /* .hero-section::after {
         content: "";
         position: absolute; left: 0; right: 0; bottom: 0;
         height: 55%;
         background: linear-gradient(180deg, transparent, var(--bg) 80%);
         pointer-events: none;
-      }
+      } */
 
       #map {
         position: absolute;
@@ -74,12 +73,13 @@
       /* Above #map (z-index 0) and above overlapping main content (content-scroll z-index 1) */
       .top-bar {
         position: absolute;
-        top: max(env(safe-area-inset-top), 0.75rem); 
-        left: 1rem; right: 1rem;
+        top: max(12px, env(safe-area-inset-top));
+        left: 12px;
+        right: 12px;
         display: flex;
         align-items: center;
         gap: 0.625rem;
-        z-index: 10;
+        z-index: 50;
         pointer-events: auto;
       }
 
@@ -222,16 +222,22 @@
       }
 
       /* ===== PREMIUM DECISION HERO (Lovable style) ===== */
+      /* fixed: .decision-hero lives in #results under .content-scroll, not inside .hero-section — fixed overlays the map viewport */
       .decision-hero {
-        margin: -68px 14px 16px;
+        /* margin-top: -68px; */
+        margin: 0;
         background: hsla(220,11%,10%,.85);
         backdrop-filter: blur(32px) saturate(160%);
         -webkit-backdrop-filter: blur(32px) saturate(160%);
         border: 1px solid hsla(220,10%,20%,.9);
         border-radius: 32px;
         padding: 1.25rem 1.5rem 1rem;
-        position: relative; overflow: hidden;
-        z-index: 20;
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: calc(var(--tz4-bottom-nav-h) + var(--tz4-safe-bottom) + 12px);
+        z-index: 40;
+        overflow: hidden;
         box-shadow: var(--shadow-elev), inset 0 1px 0 hsla(255,255,255,.04);
         pointer-events: none;
       }
@@ -505,7 +511,8 @@
       .info-value { font-size:12px; font-weight:600; color:var(--text2); }
 
       /* ===== QUICK ACCESS (hidden on initial load) ===== */
-      .quick-section { display: none; margin: 16px 14px 12px; }
+      /* visibility: JS adds .hidden when routes render; global .hidden { display:none !important } */
+      .quick-section { margin: 16px 14px 12px; }
       .quick-title { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
       .quick-list { background:var(--surface); border-radius:14px; overflow:hidden; border:1px solid var(--border); }
       .quick-item {
@@ -746,7 +753,8 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        margin: -6px 14px 8px;
+        /* margin-top: -6px; */
+        margin: 0 14px 8px;
         padding: 8px 10px;
         background: hsla(220,11%,10%,.68);
         border: 1px solid hsla(220,10%,20%,.55);
@@ -1067,7 +1075,7 @@
         .nav-item { padding: 0.55rem 0.75rem; }
         .nav-label { font-size: 9px; }
         .dh-eta { font-size: clamp(64px, 20vw, 88px); }
-        .decision-hero { margin-left: 12px; margin-right: 12px; }
+        .decision-hero { margin: 0; }
       }
     
 
@@ -1205,7 +1213,8 @@ body {
   .decision-hero {
     border-radius: 24px;
     padding: 1rem 1rem 0.9rem;
-    margin-top: -56px;
+    /* margin-top: -56px; */
+    margin-top: 0;
     overflow: visible;
   }
   .dh-eta {
@@ -1530,7 +1539,6 @@ html[dir="rtl"], body.rtl, body.tz8-rtl-ar { direction: rtl; }
     body.tz8-rtl-ar .top-bar { left: .75rem; right: .75rem; }
     body.tz8-rtl-ar .tz5-filter-panel,
     body.tz8-rtl-ar .tz6-quickstart-panel,
-    body.tz8-rtl-ar .decision-hero,
     body.tz8-rtl-ar .other-routes { margin-left: 12px; margin-right: 12px; }
   }
 
