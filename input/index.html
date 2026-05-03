@@ -224,15 +224,16 @@ __CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__
 //    Ядро UAE: window.__CLEAR_ROAD_ROUTE_CALC_CORE__ (= calculateRoutesTZ2Final).
 //    Шаги внутри unified: clearRoadTZ7PatchDirectionsRoute → await core →
 //    clearRoadTZ7ScheduleAfterCalculateRoutes → clearRoadTZ6bScheduleApplyAll.
-//  initMap (снаружи → внутрь):
-//    1. cr-tz1-tz2-final-patch              (marker: __crTz12Patched)
-//    2. TZ2                                 (impl: initMapTZ2Final)
+//  initMap (снаружи → внутрь, финальный window.initMap после всех скриптов):
+//    1. cr-empty-state-directions            (window.__crEmptyStateInitMapHookV2 → initMapCrEmptyStateDirectionsHook)
+//    2. cr-tz1-tz2-final-patch             (marker: __crTz12Patched → initMapTZ1TZ2Final)
+//    3. TZ2 UAE map                        (impl: initMapTZ2Final; ядро карты)
 //  Решение «лучший маршрут» (этап 1 SSOT): window.buildRealDecision (= __CLEAR_ROAD_ROUTE_DECISION_SSOT__);
 //    вспомогательно clearRoadOfficialBestRoute; ранг ядра: __CLEAR_ROAD_RANK_ROUTES__ (aiScore).
 //  tz4BestByScore — только legacy текст/тай-брейк по route.score, не выбор маршрута.
 // ============================================================
 window.__CLEAR_ROAD_ROUTE_CANON__ = Object.freeze({
-  version: "2026-05-01-unified-calculate",
+  version: "2026-05-02-phase2-ssot",
   calculateRoutes: {
     public: { marker: "__crEmptyStateFinalV2", impl: "calculateRoutesUnified", also: "__crRouteUnified" },
     core: { ref: "__CLEAR_ROAD_ROUTE_CALC_CORE__", impl: "calculateRoutesTZ2Final" },
@@ -246,12 +247,12 @@ window.__CLEAR_ROAD_ROUTE_CANON__ = Object.freeze({
     rank: { ref: "__CLEAR_ROAD_RANK_ROUTES__", impl: "rankRoutes" }
   },
   initMapLayers: [
+    { id: "cr-empty-state-directions", windowFlag: "__crEmptyStateInitMapHookV2", impl: "initMapCrEmptyStateDirectionsHook" },
     { id: "cr-tz1-tz2-patch", marker: "__crTz12Patched", impl: "initMapTZ1TZ2Final" },
-    { id: "tz2-uae", marker: null, impl: "initMapTZ2Final" },
-    { id: "cr-empty-state-directions", windowFlag: "__crEmptyStateInitMapHookV2", impl: "initMapCrEmptyStateDirectionsHook" }
+    { id: "tz2-uae", marker: null, impl: "initMapTZ2Final" }
   ],
   setLangLayers: {
-    note: "Порядок по DOM: внешняя обёртка — последняя в списке. Порядок скриптов не переставлять без проверки.",
+    note: "Порядок по DOM: внешняя обёртка — последняя в списке. Порядок скриптов не переставлять без проверки. TZ7 подменяет setLang без маркера на функции — смотри clearRoadTZ7I18n.installed в snapshot.",
     installOrder: [
       { id: "tz7", module: "clearRoadTZ7I18n" },
       { id: "tz8", module: "clearRoadTZ8RTL" },
@@ -404,13 +405,13 @@ let lastDriveVoicePhase = "";
   window.__CLEAR_ROAD_APP_STATE_SNAPSHOT__ = clearRoadAppStateSnapshot;
   window.__CLEAR_ROAD_ROUTE_PIPELINE_README__ = Object.freeze({
     phase: 2,
-    description: "Канон маршрута + документированная цепочка setLang/initMap; см. __CLEAR_ROAD_ROUTE_CANON__, cr-fix-route-empty-state-final-v2.",
+    description: "Фаза 2 (закрыта): канон __CLEAR_ROAD_ROUTE_CANON__ + __CLEAR_ROAD_WRAPPER_SNAPSHOT__ для сверки цепочек setLang/initMap/calculateRoutes. Пустые маршруты и обёртки — cr-fix-route-empty-state-final-v2.",
     publicEntry: "window.calculateRoutes (calculateRoutesUnified)",
     core: "window.__CLEAR_ROAD_ROUTE_CALC_CORE__",
     decision: "window.buildRealDecision (__CLEAR_ROAD_ROUTE_DECISION_SSOT__)",
-    initMapLayers: "cr-tz1-tz2-patch → initMapTZ2Final → cr-empty-state Directions hook",
+    initMapLayers: "cr-empty-state (внешний) → cr-tz1-tz2-patch → initMapTZ2Final",
     setLangOuterMarker: "__tz6AICleanWrapped",
-    snapshot: "window.__CLEAR_ROAD_WRAPPER_SNAPSHOT__() в консоли — флаги текущих обёрток"
+    snapshot: "window.__CLEAR_ROAD_WRAPPER_SNAPSHOT__() — маркеры функций + setLangChainModules / windowFlags"
   });
 
   window.__CLEAR_ROAD_WRAPPER_SNAPSHOT__ = function clearRoadWrapperSnapshot(){
@@ -422,11 +423,18 @@ let lastDriveVoicePhase = "";
     const cr = window.calculateRoutes;
     const im = window.initMap;
     const sl = window.setLang;
+    const canon = window.__CLEAR_ROAD_ROUTE_CANON__;
     return {
       phase: 2,
+      canonVersion: canon && canon.version ? String(canon.version) : null,
       calculateRoutes: typeof cr === "function" ? { name: String(cr.name || ""), flags: fnFlags(cr) } : null,
       initMap: typeof im === "function" ? { name: String(im.name || ""), flags: fnFlags(im) } : null,
       setLang: typeof sl === "function" ? { name: String(sl.name || ""), flags: fnFlags(sl) } : null,
+      setLangChainModules: {
+        tz7: !!(window.clearRoadTZ7I18n && window.clearRoadTZ7I18n.installed),
+        tz8: !!(window.clearRoadTZ8RTL && window.clearRoadTZ8RTL.installed),
+        tz9: !!(window.clearRoadTZ9VoiceInput && window.clearRoadTZ9VoiceInput.installed)
+      },
       windowFlags: {
         emptyStateInitHook: !!window.__crEmptyStateInitMapHookV2,
         tz3Wrappers: !!window.__crTz3WrappersInstalled
