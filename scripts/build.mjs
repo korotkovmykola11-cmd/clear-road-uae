@@ -9,6 +9,10 @@
  * ux-diag-bootstrap: src/js/cr-ux-diag-bootstrap.js → __CLEAR_ROAD_BUILD_JS_UX_DIAG_BOOTSTRAP__ (внутри основного script, до GLOBAL STATE)
  * tz1-tz2-final-patch: src/js/cr-tz1-tz2-final-patch.js → __CLEAR_ROAD_BUILD_JS_TZ1_TZ2_FINAL__
  * tz3-i18n-clean: src/js/cr-tz3-i18n-clean-layer.js → __CLEAR_ROAD_BUILD_JS_TZ3_I18N_CLEAN__
+ * tz4-mobile: src/js/cr-tz4-mobile-layout-guard.js → __CLEAR_ROAD_BUILD_JS_TZ4_MOBILE__
+ * tz6-ai-clean: src/js/cr-tz6-ai-decision-clean.js → __CLEAR_ROAD_BUILD_JS_TZ6_AI_CLEAN__
+ * tz6b-final: src/js/cr-tz6b-final-fix.js → __CLEAR_ROAD_BUILD_JS_TZ6B_FINAL__
+ * tz7+tz8: src/js/cr-tz7-tz8-ai-bundle.js → __CLEAR_ROAD_BUILD_JS_TZ7_TZ8_BUNDLE__
  * Maps key: CLEAR_ROAD_MAPS_API_KEY или GOOGLE_MAPS_API_KEY, иначе src/secrets/maps-api-key.txt (первая строка), иначе встроенный dev-ключ + предупреждение. Флаг --require-maps-key — без env/файла сборка падает (прод).
  * Вход: input/index.html; иначе ../index.html; иначе CLEAR_ROAD_INPUT=...
  * После записи dist: копия в ../index.html (родитель clear-road-uae), чтобы в Загрузках рядом с desktop.ini был актуальный файл. Отключить: --no-copy-parent
@@ -33,6 +37,10 @@ const tz9VoiceJsFile = join(projectRoot, "src", "js", "tz9-voice-layer.js");
 const uxDiagBootstrapJsFile = join(projectRoot, "src", "js", "cr-ux-diag-bootstrap.js");
 const tz1Tz2FinalPatchJsFile = join(projectRoot, "src", "js", "cr-tz1-tz2-final-patch.js");
 const tz3I18nCleanJsFile = join(projectRoot, "src", "js", "cr-tz3-i18n-clean-layer.js");
+const tz4MobileJsFile = join(projectRoot, "src", "js", "cr-tz4-mobile-layout-guard.js");
+const tz6AiCleanJsFile = join(projectRoot, "src", "js", "cr-tz6-ai-decision-clean.js");
+const tz6bFinalJsFile = join(projectRoot, "src", "js", "cr-tz6b-final-fix.js");
+const tz7Tz8BundleJsFile = join(projectRoot, "src", "js", "cr-tz7-tz8-ai-bundle.js");
 const mapsKeySecretFile = join(projectRoot, "src", "secrets", "maps-api-key.txt");
 /** Только для локальной сборки без env/secrets; для прод задайте CLEAR_ROAD_MAPS_API_KEY */
 const MAPS_KEY_DEV_FALLBACK = "AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4";
@@ -45,6 +53,10 @@ const PLACEHOLDER_TZ9_VOICE_JS = "__CLEAR_ROAD_BUILD_JS_TZ9_VOICE__";
 const PLACEHOLDER_UX_DIAG_BOOTSTRAP_JS = "__CLEAR_ROAD_BUILD_JS_UX_DIAG_BOOTSTRAP__";
 const PLACEHOLDER_TZ1_TZ2_FINAL_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_TZ2_FINAL__";
 const PLACEHOLDER_TZ3_I18N_CLEAN_JS = "__CLEAR_ROAD_BUILD_JS_TZ3_I18N_CLEAN__";
+const PLACEHOLDER_TZ4_MOBILE_JS = "__CLEAR_ROAD_BUILD_JS_TZ4_MOBILE__";
+const PLACEHOLDER_TZ6_AI_CLEAN_JS = "__CLEAR_ROAD_BUILD_JS_TZ6_AI_CLEAN__";
+const PLACEHOLDER_TZ6B_FINAL_JS = "__CLEAR_ROAD_BUILD_JS_TZ6B_FINAL__";
+const PLACEHOLDER_TZ7_TZ8_BUNDLE_JS = "__CLEAR_ROAD_BUILD_JS_TZ7_TZ8_BUNDLE__";
 const PLACEHOLDER_MAPS_KEY = "__CLEAR_ROAD_BUILD_MAPS_API_KEY__";
 
 const args = process.argv.slice(2);
@@ -196,6 +208,62 @@ function injectTz3I18nCleanJs(html) {
   return html.split(PLACEHOLDER_TZ3_I18N_CLEAN_JS).join(js);
 }
 
+function injectTz4MobileJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ4_MOBILE_JS)) return html;
+  if (!existsSync(tz4MobileJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ4 mobile, но нет файла:", tz4MobileJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz4MobileJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ4 mobile:", tz4MobileJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ4_MOBILE_JS).join(js);
+}
+
+function injectTz6AiCleanJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ6_AI_CLEAN_JS)) return html;
+  if (!existsSync(tz6AiCleanJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ6 AI clean, но нет файла:", tz6AiCleanJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz6AiCleanJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ6 AI clean:", tz6AiCleanJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ6_AI_CLEAN_JS).join(js);
+}
+
+function injectTz6bFinalJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ6B_FINAL_JS)) return html;
+  if (!existsSync(tz6bFinalJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ6B final, но нет файла:", tz6bFinalJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz6bFinalJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ6B final:", tz6bFinalJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ6B_FINAL_JS).join(js);
+}
+
+function injectTz7Tz8BundleJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ7_TZ8_BUNDLE_JS)) return html;
+  if (!existsSync(tz7Tz8BundleJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ7+TZ8 bundle, но нет файла:", tz7Tz8BundleJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz7Tz8BundleJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ7+TZ8 bundle:", tz7Tz8BundleJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ7_TZ8_BUNDLE_JS).join(js);
+}
+
 function resolveMapsApiKey() {
   const env =
     (process.env.CLEAR_ROAD_MAPS_API_KEY && String(process.env.CLEAR_ROAD_MAPS_API_KEY).trim()) ||
@@ -265,6 +333,22 @@ function validateArtifact(html) {
     console.error("В артефакте остался плейсхолдер TZ3 i18n clean JS — сборка не завершена.");
     process.exit(1);
   }
+  if (html.includes(PLACEHOLDER_TZ4_MOBILE_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ4 mobile JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ6_AI_CLEAN_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ6 AI clean JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ6B_FINAL_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ6B final JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ7_TZ8_BUNDLE_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ7+TZ8 bundle JS — сборка не завершена.");
+    process.exit(1);
+  }
   if (html.includes(PLACEHOLDER_MAPS_KEY)) {
     console.error("В артефакте остался плейсхолдер Maps API key — сборка не завершена.");
     process.exit(1);
@@ -283,7 +367,11 @@ function validateArtifact(html) {
     ["tz9 voice", html.includes("clearRoadTZ9VoiceInput")],
     ["UX diag bootstrap", html.includes("clearRoadUxDiagnosticsBootstrap")],
     ["TZ1+TZ2 final patch", html.includes("crTZ1TZ2FinalPatch")],
-    ["TZ3 i18n clean", html.includes("clearRoadTZ3Apply")]
+    ["TZ3 i18n clean", html.includes("clearRoadTZ3Apply")],
+    ["TZ4 mobile guard", html.includes("__TZ4_MOBILE_LAYOUT_CLEANUP__")],
+    ["TZ6 AI clean", html.includes("clearRoadTZ6AIDecisionClean")],
+    ["TZ6B final", html.includes("clearRoadTZ6BFinalFix")],
+    ["TZ7+TZ8 bundle", html.includes("applyTZ8RealAIDecisionEngine")]
   ];
   const bad = checks.filter(([, ok]) => !ok).map(([name]) => name);
   if (bad.length) {
@@ -347,6 +435,30 @@ function validateSourceInput(html) {
       process.exit(1);
     }
   }
+  if (html.includes(PLACEHOLDER_TZ4_MOBILE_JS)) {
+    if (!existsSync(tz4MobileJsFile) || !readFileSync(tz4MobileJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ4 mobile — нужен непустой", tz4MobileJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ6_AI_CLEAN_JS)) {
+    if (!existsSync(tz6AiCleanJsFile) || !readFileSync(tz6AiCleanJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ6 AI clean — нужен непустой", tz6AiCleanJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ6B_FINAL_JS)) {
+    if (!existsSync(tz6bFinalJsFile) || !readFileSync(tz6bFinalJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ6B final — нужен непустой", tz6bFinalJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ7_TZ8_BUNDLE_JS)) {
+    if (!existsSync(tz7Tz8BundleJsFile) || !readFileSync(tz7Tz8BundleJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ7+TZ8 bundle — нужен непустой", tz7Tz8BundleJsFile);
+      process.exit(1);
+    }
+  }
 }
 
 function main() {
@@ -360,8 +472,16 @@ function main() {
       injectTz9VoiceJs(
         injectEmptyStateJs(
           injectTz8RtlJs(
-            injectTz3I18nCleanJs(
-              injectTz1Tz2FinalJs(injectUxDiagBootstrapJs(injectI18n(injectCss(html))))
+            injectTz7Tz8BundleJs(
+              injectTz6bFinalJs(
+                injectTz6AiCleanJs(
+                  injectTz4MobileJs(
+                    injectTz3I18nCleanJs(
+                      injectTz1Tz2FinalJs(injectUxDiagBootstrapJs(injectI18n(injectCss(html))))
+                    )
+                  )
+                )
+              )
             )
           )
         )
@@ -409,6 +529,10 @@ function main() {
   console.log("   UX diag bootstrap JS:", uxDiagBootstrapJsFile);
   console.log("   TZ1+TZ2 final patch JS:", tz1Tz2FinalPatchJsFile);
   console.log("   TZ3 i18n clean JS:", tz3I18nCleanJsFile);
+  console.log("   TZ4 mobile JS:", tz4MobileJsFile);
+  console.log("   TZ6 AI clean JS:", tz6AiCleanJsFile);
+  console.log("   TZ6B final JS:", tz6bFinalJsFile);
+  console.log("   TZ7+TZ8 bundle JS:", tz7Tz8BundleJsFile);
   console.log("   Maps API key:", mapsKeyInfo.source);
   console.log("   размер", bytes, "байт");
 

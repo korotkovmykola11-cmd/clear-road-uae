@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- clear-road-uae build 2026-05-01T16:12:32.552Z sha256:39e6e2ada03b5904 source:C:/Users/korot/Downloads/clear-road-uae/input/index.html -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Clear Road UAE</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0A0B0D">
   <!-- ROUTE CANON: calculateRoutes → calculateRoutesUnified (TZ7 + TZ6B + __CLEAR_ROAD_ROUTE_CALC_CORE__). initMap без изменений. Выбор маршрута SSOT: buildRealDecision / clearRoadOfficialBestRoute; tz4BestByScore — только legacy подписи, не выбор. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,6 +15,7 @@
   <!-- Theme: полный CSS в src/styles/app.css (в dist встраивается командой npm run build) -->
   <style id="clear-road-inline-theme">
 /* ===== clear-road.css block 1/7 (DOM order, Phase 2) ===== */
+html { color-scheme: dark; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
       :root {
@@ -55,32 +56,47 @@
       /* ===== HERO SECTION (map background) ===== */
       .hero-section {
         position: relative;
-        height: 16vh;
+        z-index: 5;
+        isolation: isolate;
+        height: 100vh;
         min-height: 100px;
-        max-height: 140px;
         background: hsl(220 16% 9%);
-        overflow: hidden;
         flex-shrink: 0;
       }
-      .hero-section::after {
+      /* .hero-section::after {
         content: "";
         position: absolute; left: 0; right: 0; bottom: 0;
         height: 55%;
         background: linear-gradient(180deg, transparent, var(--bg) 80%);
         pointer-events: none;
+      } */
+
+      #map {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+      #map[data-cr-maps-auth="failed"] {
+        box-sizing: border-box;
+        outline: 2px dashed rgba(248, 113, 113, 0.55);
+        outline-offset: -2px;
+        background: hsl(220 16% 12%);
       }
 
-      #map { width: 100%; height: 100%; }
-
       /* TOP FLOATING BAR */
+      /* Above #map (z-index 0) and above overlapping main content (content-scroll z-index 1) */
       .top-bar {
         position: absolute;
-        top: max(env(safe-area-inset-top), 0.75rem); 
-        left: 1rem; right: 1rem;
+        top: max(12px, env(safe-area-inset-top));
+        left: 12px;
+        right: 12px;
         display: flex;
         align-items: center;
         gap: 0.625rem;
-        z-index: 10;
+        z-index: 50;
+        pointer-events: auto;
       }
 
       .top-btn {
@@ -97,6 +113,9 @@
 
       .route-panel {
         flex: 1;
+        position: relative;
+        z-index: 1;
+        pointer-events: auto;
         background: hsla(220,11%,10%,.55);
         backdrop-filter: blur(16px) saturate(120%);
         -webkit-backdrop-filter: blur(16px) saturate(120%);
@@ -136,11 +155,25 @@
         color: var(--text2); margin-right: 0.5rem;
       }
       .route-input {
-        flex: 1; background: transparent; border: none; outline: none;
+        flex: 1;
+        position: relative;
+        z-index: 1;
+        pointer-events: auto;
+        background: transparent; border: none; outline: none;
         font-size: 14px; font-weight: 450; color: var(--text); font-family: inherit;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .route-input::placeholder { color: var(--text3); font-weight: 400; }
+      .route-input:focus,
+      .route-input:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 1.5px hsla(72, 96%, 56%, 0.5);
+        border-radius: 6px;
+      }
+      .route-input.gps-resolving::placeholder {
+        color: var(--amber);
+        font-weight: 500;
+      }
 
       .gps-btn-top {
         display: grid; place-items: center;
@@ -197,20 +230,35 @@
       .lang-btn.active { background:var(--green); color:#090e1a; border-color:var(--green); }
 
       /* ===== CONTENT SCROLL ===== */
-      .content-scroll { flex:1; overflow-y:auto; }
+      .content-scroll {
+        flex: 1;
+        overflow-y: auto;
+        position: relative;
+        z-index: 1;
+      }
 
       /* ===== PREMIUM DECISION HERO (Lovable style) ===== */
+      /* fixed: .decision-hero lives in #results under .content-scroll, not inside .hero-section — fixed overlays the map viewport */
       .decision-hero {
-        margin: -68px 14px 16px;
+        /* margin-top: -68px; */
+        margin: 0;
         background: hsla(220,11%,10%,.85);
         backdrop-filter: blur(32px) saturate(160%);
         -webkit-backdrop-filter: blur(32px) saturate(160%);
         border: 1px solid hsla(220,10%,20%,.9);
         border-radius: 32px;
         padding: 1.25rem 1.5rem 1rem;
-        position: relative; overflow: hidden;
-        z-index: 20;
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: calc(var(--tz4-bottom-nav-h) + var(--tz4-safe-bottom) + 12px);
+        z-index: 40;
+        overflow: hidden;
         box-shadow: var(--shadow-elev), inset 0 1px 0 hsla(255,255,255,.04);
+        pointer-events: none;
+      }
+      .decision-hero * {
+        pointer-events: auto;
       }
       .decision-hero::before {
         content:''; position:absolute; top:0; left:0; right:0; height:2px;
@@ -479,7 +527,8 @@
       .info-value { font-size:12px; font-weight:600; color:var(--text2); }
 
       /* ===== QUICK ACCESS (hidden on initial load) ===== */
-      .quick-section { display: none; margin: 16px 14px 12px; }
+      /* visibility: JS adds .hidden when routes render; global .hidden { display:none !important } */
+      .quick-section { margin: 16px 14px 12px; }
       .quick-title { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
       .quick-list { background:var(--surface); border-radius:14px; overflow:hidden; border:1px solid var(--border); }
       .quick-item {
@@ -683,6 +732,23 @@
       .pac-icon { display:none; }
       .pac-logo::after { display:none; }
 
+      /* ===== UX diagnostics: tiny read-only strip (no layout impact) ===== */
+      .cr-ux-diag-strip {
+        position: fixed;
+        left: 6px;
+        bottom: calc(max(env(safe-area-inset-bottom), 10px) + 68px);
+        z-index: 9990;
+        max-width: min(100vw - 12px, 420px);
+        font-size: 9px;
+        line-height: 1.2;
+        font-family: ui-monospace, "JetBrains Mono", monospace;
+        color: hsla(220, 8%, 56%, 0.72);
+        pointer-events: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
       /* ===== AI DECISION UX (legacy modal compat) ===== */
       .ai-confidence-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; text-transform:uppercase; letter-spacing:0.4px; }
       .ai-confidence-badge .conf-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
@@ -703,7 +769,8 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        margin: -6px 14px 8px;
+        /* margin-top: -6px; */
+        margin: 0 14px 8px;
         padding: 8px 10px;
         background: hsla(220,11%,10%,.68);
         border: 1px solid hsla(220,10%,20%,.55);
@@ -1024,7 +1091,7 @@
         .nav-item { padding: 0.55rem 0.75rem; }
         .nav-label { font-size: 9px; }
         .dh-eta { font-size: clamp(64px, 20vw, 88px); }
-        .decision-hero { margin-left: 12px; margin-right: 12px; }
+        .decision-hero { margin: 0; }
       }
     
 
@@ -1043,6 +1110,8 @@ body {
 }
 .content-scroll {
   min-height: 0;
+  position: relative;
+  z-index: 1;
   padding-bottom: calc(var(--tz4-bottom-nav-h) + var(--tz4-safe-bottom) + 16px);
   overscroll-behavior: contain;
 }
@@ -1160,7 +1229,8 @@ body {
   .decision-hero {
     border-radius: 24px;
     padding: 1rem 1rem 0.9rem;
-    margin-top: -56px;
+    /* margin-top: -56px; */
+    margin-top: 0;
     overflow: visible;
   }
   .dh-eta {
@@ -1485,7 +1555,6 @@ html[dir="rtl"], body.rtl, body.tz8-rtl-ar { direction: rtl; }
     body.tz8-rtl-ar .top-bar { left: .75rem; right: .75rem; }
     body.tz8-rtl-ar .tz5-filter-panel,
     body.tz8-rtl-ar .tz6-quickstart-panel,
-    body.tz8-rtl-ar .decision-hero,
     body.tz8-rtl-ar .other-routes { margin-left: 12px; margin-right: 12px; }
   }
 
@@ -1735,14 +1804,14 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
       <div class="route-panel">
         <div class="route-row">
           <span class="route-dot green"></span>
-          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="Current location" value="">
-          <button class="gps-btn-top" id="gps-btn" onclick="requestGPS()" title="Use my location">
+          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+          <button type="button" class="gps-btn-top" id="gps-btn" title="Use my location" aria-label="Use GPS location">
             <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
           </button>
         </div>
         <div class="route-row">
           <span class="route-dot"></span>
-          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="Where to?" value="">
+          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
         </div>
       </div>
     </div>
@@ -1909,7 +1978,7 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
   window.__CLEAR_ROAD_I18N_DATA__ = {
     en: {
       from:"From:", to:"To:",
-      placeholder_start:"Current location", placeholder_end:"Where to?",
+      placeholder_start:"From (e.g. Ajman)", placeholder_end:"To (e.g. Dubai Mall)",
       pref_balanced:"Balanced", pref_fastest:"Fastest", pref_no_tolls:"No tolls",
       filter_highways:"🛣 Avoid highways", filter_turns:"↩ Fewer turns",
       quick_access:"Quick Access",
@@ -1976,7 +2045,7 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
     },
     ru: {
       from:"Откуда:", to:"Куда:",
-      placeholder_start:"Текущее местоположение", placeholder_end:"Куда едем?",
+      placeholder_start:"Откуда (напр. Аджман)", placeholder_end:"Куда (напр. Dubai Mall)",
       pref_balanced:"Оптимальный", pref_fastest:"Быстрейший", pref_no_tolls:"Без платных",
       filter_highways:"🛣 Без шоссе", filter_turns:"↩ Меньше поворотов",
       quick_access:"Быстрый доступ",
@@ -2038,7 +2107,7 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
     },
     ua: {
       from:"Звідки:", to:"Куди:",
-      placeholder_start:"Поточне місцезнаходження", placeholder_end:"Куди їдемо?",
+      placeholder_start:"Звідки (напр. Аджман)", placeholder_end:"Куди (напр. Dubai Mall)",
       pref_balanced:"Оптимальний", pref_fastest:"Найшвидший", pref_no_tolls:"Без платних",
       filter_highways:"🛣 Без автотрас", filter_turns:"↩ Менше поворотів",
       quick_access:"Швидкий доступ",
@@ -2100,7 +2169,7 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
     },
     ar: {
       from:"من:", to:"إلى:",
-      placeholder_start:"موقعك الحالي", placeholder_end:"إلى أين؟",
+      placeholder_start:"من (مثال: عجمان)", placeholder_end:"إلى (مثال: دبي مول)",
       pref_balanced:"متوازن", pref_fastest:"الأسرع", pref_no_tolls:"بدون رسوم",
       filter_highways:"🛣 تجنب الطرق السريعة", filter_turns:"↩ منعطفات أقل",
       quick_access:"وصول سريع",
@@ -2190,15 +2259,16 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
 //    Ядро UAE: window.__CLEAR_ROAD_ROUTE_CALC_CORE__ (= calculateRoutesTZ2Final).
 //    Шаги внутри unified: clearRoadTZ7PatchDirectionsRoute → await core →
 //    clearRoadTZ7ScheduleAfterCalculateRoutes → clearRoadTZ6bScheduleApplyAll.
-//  initMap (снаружи → внутрь):
-//    1. cr-tz1-tz2-final-patch              (marker: __crTz12Patched)
-//    2. TZ2                                 (impl: initMapTZ2Final)
+//  initMap (снаружи → внутрь, финальный window.initMap после всех скриптов):
+//    1. cr-empty-state-directions            (window.__crEmptyStateInitMapHookV2 → initMapCrEmptyStateDirectionsHook)
+//    2. cr-tz1-tz2-final-patch             (marker: __crTz12Patched → initMapTZ1TZ2Final)
+//    3. TZ2 UAE map                        (impl: initMapTZ2Final; ядро карты)
 //  Решение «лучший маршрут» (этап 1 SSOT): window.buildRealDecision (= __CLEAR_ROAD_ROUTE_DECISION_SSOT__);
 //    вспомогательно clearRoadOfficialBestRoute; ранг ядра: __CLEAR_ROAD_RANK_ROUTES__ (aiScore).
 //  tz4BestByScore — только legacy текст/тай-брейк по route.score, не выбор маршрута.
 // ============================================================
 window.__CLEAR_ROAD_ROUTE_CANON__ = Object.freeze({
-  version: "2026-05-01-unified-calculate",
+  version: "2026-05-02-phase2-ssot",
   calculateRoutes: {
     public: { marker: "__crEmptyStateFinalV2", impl: "calculateRoutesUnified", also: "__crRouteUnified" },
     core: { ref: "__CLEAR_ROAD_ROUTE_CALC_CORE__", impl: "calculateRoutesTZ2Final" },
@@ -2212,12 +2282,12 @@ window.__CLEAR_ROAD_ROUTE_CANON__ = Object.freeze({
     rank: { ref: "__CLEAR_ROAD_RANK_ROUTES__", impl: "rankRoutes" }
   },
   initMapLayers: [
+    { id: "cr-empty-state-directions", windowFlag: "__crEmptyStateInitMapHookV2", impl: "initMapCrEmptyStateDirectionsHook" },
     { id: "cr-tz1-tz2-patch", marker: "__crTz12Patched", impl: "initMapTZ1TZ2Final" },
-    { id: "tz2-uae", marker: null, impl: "initMapTZ2Final" },
-    { id: "cr-empty-state-directions", windowFlag: "__crEmptyStateInitMapHookV2", impl: "initMapCrEmptyStateDirectionsHook" }
+    { id: "tz2-uae", marker: null, impl: "initMapTZ2Final" }
   ],
   setLangLayers: {
-    note: "Порядок по DOM: внешняя обёртка — последняя в списке. Порядок скриптов не переставлять без проверки.",
+    note: "Порядок по DOM: внешняя обёртка — последняя в списке. Порядок скриптов не переставлять без проверки. TZ7 подменяет setLang без маркера на функции — смотри clearRoadTZ7I18n.installed в snapshot.",
     installOrder: [
       { id: "tz7", module: "clearRoadTZ7I18n" },
       { id: "tz8", module: "clearRoadTZ8RTL" },
@@ -2228,6 +2298,89 @@ window.__CLEAR_ROAD_ROUTE_CANON__ = Object.freeze({
     ]
   }
 });
+// ============================================================
+//  UX diagnostics (console + minimal strip; no route/AI behavior change)
+// ============================================================
+(function clearRoadUxDiagnosticsBootstrap() {
+  const LOG = "[Clear Road UX]";
+  try { window.__CLEAR_ROAD_MAPS_AUTH_FAILED__ = false; } catch (_) {}
+  window.__CLEAR_ROAD_UX_DIAG__ = {
+    places: "unknown",
+    gpsLast: "unknown",
+    mapsAuth: "unknown",
+    localFallbackLogged: false
+  };
+  function ensureStrip() {
+    let el = document.getElementById("cr-ux-diag-strip");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "cr-ux-diag-strip";
+      el.className = "cr-ux-diag-strip";
+      el.setAttribute("aria-hidden", "true");
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function renderStrip() {
+    const st = window.__CLEAR_ROAD_UX_DIAG__;
+    const p = st.places === "ok" ? "OK" : st.places === "fail" ? "FAIL" : "—";
+    const g = st.gpsLast === "ok" ? "OK" : st.gpsLast === "fail" ? "FAIL" : "—";
+    const auth = st.mapsAuth === "fail" ? "  Maps:FAIL" : "";
+    ensureStrip().textContent = "Places:" + p + "  GPS:" + g + auth;
+  }
+  window.__clearRoadUxDiagLog = function (tag, detail) {
+    if (detail !== undefined) console.info(LOG, tag, detail);
+    else console.info(LOG, tag);
+  };
+  window.__clearRoadUxDiagPlaces = function (ok, detail) {
+    window.__CLEAR_ROAD_UX_DIAG__.places = ok ? "ok" : "fail";
+    if (ok) window.__clearRoadUxDiagLog("Places ready", detail || "");
+    else console.error(LOG, "Places FAIL — autocomplete widgets will not work. Check Maps JS + Places API (legacy), libraries=places, and API key.", detail || "");
+    renderStrip();
+  };
+  window.__clearRoadUxDiagGps = function (ok, detail) {
+    window.__CLEAR_ROAD_UX_DIAG__.gpsLast = ok ? "ok" : "fail";
+    if (ok) {
+      window.__clearRoadUxDiagLog("GPS success", detail || "");
+    } else {
+      console.error(LOG, "GPS error", detail != null ? detail : "");
+    }
+    renderStrip();
+  };
+  window.__clearRoadUxDiagFallback = function (reason) {
+    if (window.__CLEAR_ROAD_UX_DIAG__.localFallbackLogged) return;
+    window.__CLEAR_ROAD_UX_DIAG__.localFallbackLogged = true;
+    console.warn(LOG, "Local autocomplete fallback on — Google Places suggestions unavailable for typing.", reason || "");
+    renderStrip();
+  };
+  window.__clearRoadUxDiagGeocode = function (payload) {
+    window.__clearRoadUxDiagLog("Reverse geocode", payload);
+  };
+  window.__clearRoadUxDiagMapsAuthFail = function () {
+    try { window.__CLEAR_ROAD_MAPS_AUTH_FAILED__ = true; } catch (_) {}
+    window.__CLEAR_ROAD_UX_DIAG__.mapsAuth = "fail";
+    try {
+      var mapEl = document.getElementById("map");
+      if (mapEl) {
+        mapEl.setAttribute("data-cr-maps-auth", "failed");
+        mapEl.title = "Google Maps could not load (API key / referrer / billing). Use http://localhost:3000 and check Cloud Console.";
+      }
+    } catch (_) {}
+    console.error(
+      LOG,
+      "Maps API key rejected (gm_authFailure). Check: HTTP referrer vs " + String(location.origin) + ", enabled APIs (Maps JS, Places, Directions, Geocoding), billing, and key embedded in build."
+    );
+    renderStrip();
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(false, "Maps JS auth failure — Places will not initialize");
+      }
+    } catch (_) {}
+  };
+  window.gm_authFailure = window.__clearRoadUxDiagMapsAuthFail;
+  if (document.body) renderStrip();
+})();
+
 // ============================================================
 //  GLOBAL STATE
 // ============================================================
@@ -2288,13 +2441,13 @@ let lastDriveVoicePhase = "";
   window.__CLEAR_ROAD_APP_STATE_SNAPSHOT__ = clearRoadAppStateSnapshot;
   window.__CLEAR_ROAD_ROUTE_PIPELINE_README__ = Object.freeze({
     phase: 2,
-    description: "Канон маршрута + документированная цепочка setLang/initMap; см. __CLEAR_ROAD_ROUTE_CANON__, cr-fix-route-empty-state-final-v2.",
+    description: "Фаза 2 (закрыта): канон __CLEAR_ROAD_ROUTE_CANON__ + __CLEAR_ROAD_WRAPPER_SNAPSHOT__ для сверки цепочек setLang/initMap/calculateRoutes. Пустые маршруты и обёртки — cr-fix-route-empty-state-final-v2.",
     publicEntry: "window.calculateRoutes (calculateRoutesUnified)",
     core: "window.__CLEAR_ROAD_ROUTE_CALC_CORE__",
     decision: "window.buildRealDecision (__CLEAR_ROAD_ROUTE_DECISION_SSOT__)",
-    initMapLayers: "cr-tz1-tz2-patch → initMapTZ2Final → cr-empty-state Directions hook",
+    initMapLayers: "cr-empty-state (внешний) → cr-tz1-tz2-patch → initMapTZ2Final",
     setLangOuterMarker: "__tz6AICleanWrapped",
-    snapshot: "window.__CLEAR_ROAD_WRAPPER_SNAPSHOT__() в консоли — флаги текущих обёрток"
+    snapshot: "window.__CLEAR_ROAD_WRAPPER_SNAPSHOT__() — маркеры функций + setLangChainModules / windowFlags"
   });
 
   window.__CLEAR_ROAD_WRAPPER_SNAPSHOT__ = function clearRoadWrapperSnapshot(){
@@ -2306,11 +2459,18 @@ let lastDriveVoicePhase = "";
     const cr = window.calculateRoutes;
     const im = window.initMap;
     const sl = window.setLang;
+    const canon = window.__CLEAR_ROAD_ROUTE_CANON__;
     return {
       phase: 2,
+      canonVersion: canon && canon.version ? String(canon.version) : null,
       calculateRoutes: typeof cr === "function" ? { name: String(cr.name || ""), flags: fnFlags(cr) } : null,
       initMap: typeof im === "function" ? { name: String(im.name || ""), flags: fnFlags(im) } : null,
       setLang: typeof sl === "function" ? { name: String(sl.name || ""), flags: fnFlags(sl) } : null,
+      setLangChainModules: {
+        tz7: !!(window.clearRoadTZ7I18n && window.clearRoadTZ7I18n.installed),
+        tz8: !!(window.clearRoadTZ8RTL && window.clearRoadTZ8RTL.installed),
+        tz9: !!(window.clearRoadTZ9VoiceInput && window.clearRoadTZ9VoiceInput.installed)
+      },
       windowFlags: {
         emptyStateInitHook: !!window.__crEmptyStateInitMapHookV2,
         tz3Wrappers: !!window.__crTz3WrappersInstalled
@@ -5482,19 +5642,8 @@ function exitDriveMode() {
 // ============================================================
 
 function initMap() {
-    const darkStyle = [
-      { elementType: "geometry",           stylers: [{ color: "#0d1520" }] },
-      { elementType: "labels.text.fill",   stylers: [{ color: "#8e9ab0" }] },
-      { elementType: "labels.text.stroke", stylers: [{ color: "#0d1520" }] },
-      { featureType: "road",               elementType: "geometry", stylers: [{ color: "#1e2d42" }] },
-      { featureType: "road.highway",       elementType: "geometry", stylers: [{ color: "#243352" }] },
-      { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#1a2740" }] },
-      { featureType: "water",              elementType: "geometry", stylers: [{ color: "#0a111d" }] },
-      { featureType: "poi",                stylers: [{ visibility: "off" }] },
-      { featureType: "transit",            stylers: [{ visibility: "off" }] },
-      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#60a5fa" }] }
-    ];
-    map = new google.maps.Map(document.getElementById("map"), {
+    var mapHost = document.getElementById("map");
+    map = new google.maps.Map(mapHost, {
     center: { lat: 25.2048, lng: 55.2708 },
     zoom: 11,
     disableDefaultUI: true,
@@ -5503,6 +5652,13 @@ function initMap() {
       { featureType: "transit", stylers: [{ visibility: "off" }] }
     ]
   });
+    try {
+      if (mapHost) {
+        mapHost.removeAttribute("data-cr-maps-auth");
+        mapHost.title = "";
+      }
+      window.__CLEAR_ROAD_MAP_READY__ = !!map;
+    } catch (_) {}
 
   directionsService = new google.maps.DirectionsService();
 
@@ -5517,27 +5673,77 @@ function initMap() {
   patchAutocompleteBindings();
   patchGpsEntrypoints();
   wireInputAssist();
+  try {
+    window.__clearRoadUxDiagLog && window.__clearRoadUxDiagLog("initMap finished");
+  } catch (_) {}
+  try {
+    setTimeout(function () {
+      if (typeof window.__clearRoadRunUxSelfCheck === "function") {
+        window.__clearRoadRunUxSelfCheck({ source: "afterInitMap" });
+      }
+    }, 0);
+  } catch (_) {}
 }
 
 
 function initAutocomplete() {
-  if (startAutocomplete && endAutocomplete) return;
+  if (startAutocomplete && endAutocomplete) {
+    try {
+      window.__clearRoadStartAutocomplete = startAutocomplete;
+      window.__clearRoadEndAutocomplete = endAutocomplete;
+      window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = true;
+    } catch (_) {}
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(true, "Existing Autocomplete instances reused");
+      }
+      if (typeof window.__clearRoadUxDiagLog === "function") {
+        window.__clearRoadUxDiagLog("Autocomplete active", "reused instances");
+      }
+    } catch (_) {}
+    return;
+  }
   const startInput = document.getElementById("start");
   const endInput   = document.getElementById("end");
   if (!startInput || !endInput) return;
   if (!google?.maps?.places) {
-    console.error("Google Places library is not loaded.");
+    console.error("[Clear Road UX] Google Places library is not loaded (google.maps.places missing). Check: libraries=places on script URL, Maps JS load, API key; in Cloud Console enable Maps JavaScript API and Places API (legacy widget Autocomplete), not only Places API (New).");
+    try { window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = false; } catch (_) {}
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(false, "google.maps.places missing after Maps load");
+      }
+    } catch (_) {}
     wireInputAssist();
     return;
   }
 
   const options = {
-    fields: ["formatted_address", "geometry", "name"],
+    fields: ["formatted_address", "geometry", "name", "place_id"],
     componentRestrictions: { country: "ae" }
   };
 
   startAutocomplete = new google.maps.places.Autocomplete(startInput, options);
   endAutocomplete   = new google.maps.places.Autocomplete(endInput, options);
+  try {
+    window.__clearRoadStartAutocomplete = startAutocomplete;
+    window.__clearRoadEndAutocomplete = endAutocomplete;
+    window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = true;
+  } catch (_) {}
+
+  try {
+    if (typeof window.__clearRoadUxDiagPlaces === "function") {
+      window.__clearRoadUxDiagPlaces(true, "Autocomplete bound to #start and #end (componentRestrictions: ae)");
+    }
+  } catch (_) {}
+  try {
+    if (typeof window.__clearRoadUxDiagLog === "function") {
+      window.__clearRoadUxDiagLog("Autocomplete active", "Google Places suggestions on #start and #end");
+    }
+  } catch (_) {}
+  try {
+    if (window.__CLEAR_ROAD_UX_DIAG__) window.__CLEAR_ROAD_UX_DIAG__.localFallbackLogged = false;
+  } catch (_) {}
 
   patchAutocompleteBindings();
   wireInputAssist();
@@ -5693,6 +5899,13 @@ function setGpsLoading(on) {
   if (btn) btn.classList.toggle("gps-loading", !!on);
 }
 
+function setGpsResolving(on) {
+  const si = document.getElementById("start");
+  if (!si) return;
+  si.classList.toggle("gps-resolving", !!on);
+  si.setAttribute("aria-busy", on ? "true" : "false");
+}
+
 function tryCalculateRoutesFromInputs() {
   const now   = Date.now();
   const start = document.getElementById("start")?.value?.trim() || "";
@@ -5743,7 +5956,13 @@ function wireInputAssist() {
 
 function ensureAutocompleteReady() {
   if (!google?.maps?.places) {
-    console.error("Google Places library is not loaded.");
+    console.error("[Clear Road UX] Google Places library is not loaded (ensureAutocompleteReady). Same checks as initAutocomplete: libraries=places, legacy Places API for Autocomplete widget.");
+    try { window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = false; } catch (_) {}
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(false, "places missing in ensureAutocompleteReady");
+      }
+    } catch (_) {}
     wireInputAssist();
     return;
   }
@@ -5759,6 +5978,11 @@ function bindAutocompletePlaceChanged(autocomplete, kind) {
 
     const input = document.getElementById(kind === "start" ? "start" : "end");
     if (!input) return;
+
+    try {
+      const lp = document.getElementById("cr-ac-panel-" + input.id);
+      if (lp) lp.style.display = "none";
+    } catch (_) {}
 
     input.value = place.formatted_address || place.name || input.value || "";
 
@@ -5781,42 +6005,179 @@ function patchAutocompleteBindings() {
 
 function handleGeoError(err) {
   setGpsLoading(false);
+  try { setGpsResolving(false); } catch (_) {}
   const startInput = document.getElementById("start");
   if (!startInput) return;
-  if (err?.code === 1) { startInput.placeholder = t("gps_blocked"); return; }
-  if (err?.code === 2) { startInput.placeholder = t("gps_unavail"); return; }
-  if (err?.code === 3) { startInput.placeholder = t("gps_timeout"); return; }
-  startInput.placeholder = t("gps_error");
+  let msg;
+  if (err?.code === 1) { startInput.placeholder = t("gps_blocked"); msg = startInput.placeholder; }
+  else if (err?.code === 2) { startInput.placeholder = t("gps_unavail"); msg = startInput.placeholder; }
+  else if (err?.code === 3) { startInput.placeholder = t("gps_timeout"); msg = startInput.placeholder; }
+  else { startInput.placeholder = t("gps_error"); msg = startInput.placeholder; }
+  startInput.title = msg;
+  try {
+    if (typeof window.__clearRoadUxDiagGps === "function") {
+      window.__clearRoadUxDiagGps(false, { code: err?.code, message: msg, via: "handleGeoError" });
+    }
+  } catch (_) {}
+}
+
+function _normalizeLatLngForGeocode(latLng) {
+  const lat = typeof latLng.lat === "function" ? latLng.lat() : Number(latLng.lat);
+  const lng = typeof latLng.lng === "function" ? latLng.lng() : Number(latLng.lng);
+  return { lat, lng };
+}
+
+function _latLngLikelyUAE(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return lat >= 22.4 && lat <= 26.25 && lng >= 51.3 && lng <= 56.75;
+}
+
+function _geocodeResultHasUAECountry(result) {
+  const comps = result && result.address_components;
+  if (!comps || !comps.length) return false;
+  return comps.some(
+    (c) => c.types && c.types.includes("country") && c.short_name === "AE"
+  );
+}
+
+function _geocodeGranularityRank(result) {
+  const order = ["street_address", "premise", "point_of_interest", "establishment", "route", "neighborhood", "sublocality", "locality", "administrative_area_level_1"];
+  let rank = 0;
+  for (const c of result.address_components || []) {
+    for (const t of c.types || []) {
+      const i = order.indexOf(t);
+      if (i >= 0 && i >= rank) rank = i + 1;
+    }
+  }
+  return rank;
+}
+
+/** Prefer AE country component when coords in UAE; else first formatted line (best-effort), not blind results[0] only for non-UAE. */
+function pickFormattedAddressFromGeocoderResults(results, latLng) {
+  if (!results || !results.length) return null;
+  const { lat, lng } = _normalizeLatLngForGeocode(latLng);
+  const expectUAE = _latLngLikelyUAE(lat, lng);
+  const uaeCandidates = results.filter(_geocodeResultHasUAECountry);
+  if (expectUAE) {
+    if (uaeCandidates.length) {
+      let best = uaeCandidates[0];
+      let bestR = _geocodeGranularityRank(best);
+      for (let i = 1; i < uaeCandidates.length; i++) {
+        const r = _geocodeGranularityRank(uaeCandidates[i]);
+        if (r > bestR) {
+          bestR = r;
+          best = uaeCandidates[i];
+        }
+      }
+      return best.formatted_address || null;
+    }
+    const first = results[0];
+    return (first && first.formatted_address) ? first.formatted_address : null;
+  }
+  const first = results[0];
+  return (first && first.formatted_address) ? first.formatted_address : null;
 }
 
 function reverseGeocodeLatLng(latLng) {
   return new Promise((resolve) => {
     try {
-      new google.maps.Geocoder().geocode({ location: latLng }, (results, status) => {
-        resolve((status === "OK" && results?.[0]) ? results[0].formatted_address : `${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`);
+      const { lat, lng } = _normalizeLatLngForGeocode(latLng);
+      const fallbackCoord = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      const expectUAE = _latLngLikelyUAE(lat, lng);
+      if (!google?.maps?.Geocoder) {
+        try {
+          window.__clearRoadUxDiagGeocode && window.__clearRoadUxDiagGeocode({
+            lat, lng, picked: fallbackCoord, reason: "Geocoder class missing", expectUAE
+          });
+        } catch (_) {}
+        resolve(fallbackCoord);
+        return;
+      }
+      new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
+        let picked = fallbackCoord;
+        let reason = "";
+        if (status !== "OK" || !results?.length) {
+          reason = "no results or status " + String(status);
+        } else {
+          const addr = pickFormattedAddressFromGeocoderResults(results, { lat, lng });
+          const uaeCand = results.filter(_geocodeResultHasUAECountry);
+          picked = addr || fallbackCoord;
+          if (addr) {
+            if (expectUAE && !uaeCand.length) {
+              reason = "UAE bbox: no country AE in results — using first formatted_address as best-effort (verify on map)";
+            } else if (expectUAE) {
+              reason = "formatted address from UAE-filtered geocoder candidate";
+            } else {
+              reason = "formatted address (non-UAE coords, first suitable)";
+            }
+          } else if (expectUAE) {
+            reason = "no formatted address from geocoder — coordinates only";
+          } else {
+            reason = "pick returned null — coordinates only";
+          }
+        }
+        try {
+          window.__clearRoadUxDiagGeocode && window.__clearRoadUxDiagGeocode({
+            lat, lng, status, expectUAE, picked, reason, resultCount: results?.length || 0
+          });
+        } catch (_) {}
+        resolve(picked);
       });
-    } catch { resolve(`${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`); }
+    } catch {
+      try {
+        const { lat, lng } = _normalizeLatLngForGeocode(latLng);
+        const fb = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        window.__clearRoadUxDiagGeocode && window.__clearRoadUxDiagGeocode({ picked: fb, reason: "reverseGeocodeLatLng exception" });
+        resolve(fb);
+      } catch {
+        resolve("");
+      }
+    }
   });
 }
 
 async function applyResolvedStartLocation(latLng, shouldRoute = true) {
   const startInput = document.getElementById("start");
   if (!startInput) return;
-  currentUserCoords = { lat: latLng.lat, lng: latLng.lng };
-  const address = await reverseGeocodeLatLng(latLng);
-  startInput.value = address;
-  startInput.placeholder = t("gps_current");
-  if (map) map.panTo(latLng);
-  if (shouldRoute) tryCalculateRoutesFromInputs();
+  const latN = Number(latLng.lat);
+  const lngN = Number(latLng.lng);
+  const coordStr = `${latN.toFixed(5)}, ${lngN.toFixed(5)}`;
+  try {
+    currentUserCoords = { lat: latN, lng: lngN };
+    let address = "";
+    try {
+      address = await reverseGeocodeLatLng({ lat: latN, lng: lngN });
+    } catch (geoErr) {
+      console.error("[Clear Road UX] reverse geocode threw", geoErr);
+    }
+    const line = (address && String(address).trim()) ? String(address).trim() : coordStr;
+    startInput.value = line;
+    startInput.placeholder = t("gps_current");
+    startInput.title = line;
+    if (map) map.panTo({ lat: latN, lng: lngN });
+    if (shouldRoute) tryCalculateRoutesFromInputs();
+  } catch (e) {
+    console.error("[Clear Road UX] applyResolvedStartLocation failed", e);
+    startInput.value = coordStr;
+    startInput.placeholder = t("gps_current");
+    startInput.title = coordStr;
+    if (shouldRoute) tryCalculateRoutesFromInputs();
+  }
 }
 
 async function requestGPSPatched() {
   if (!navigator.geolocation) {
     const si = document.getElementById("start");
     if (si) si.placeholder = t("gps_unsupported");
+    try {
+      if (typeof window.__clearRoadUxDiagGps === "function") {
+        window.__clearRoadUxDiagGps(false, { code: 0, message: "geolocation not supported", via: "requestGPSPatched" });
+      }
+    } catch (_) {}
     return;
   }
   setGpsLoading(true);
+  setGpsResolving(true);
   const si = document.getElementById("start");
   if (si) si.placeholder = t("gps_detecting");
 
@@ -5824,8 +6185,14 @@ async function requestGPSPatched() {
     async (pos) => {
       await applyResolvedStartLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }, true);
       setGpsLoading(false);
+      setGpsResolving(false);
+      try {
+        if (typeof window.__clearRoadUxDiagGps === "function") {
+          window.__clearRoadUxDiagGps(true, { lat: pos.coords.latitude, lng: pos.coords.longitude, via: "requestGPSPatched" });
+        }
+      } catch (_) {}
     },
-    (err) => { handleGeoError(err); },
+    (err) => { setGpsResolving(false); handleGeoError(err); },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
   );
 }
@@ -5834,7 +6201,15 @@ async function requestGPS() { await requestGPSPatched(); }
 
 function patchGpsEntrypoints() {
   const btn = document.getElementById("gps-btn");
-  if (btn) btn.onclick = requestGPSPatched;
+  if (!btn) return;
+  btn.onclick = function () {
+    console.info("[Clear Road UX] GPS button → requestGPS()");
+    if (typeof requestGPS !== "function") {
+      console.error("[Clear Road UX] requestGPS is not available");
+      return;
+    }
+    requestGPS();
+  };
 }
 
 // ── Step Stability ──
@@ -8078,7 +8453,10 @@ function startDrive(index) {
 
   function tz2SetStartStatus(message) {
     const startInput = tz2El('start');
-    if (startInput && message) startInput.placeholder = message;
+    if (startInput && message) {
+      startInput.placeholder = message;
+      startInput.title = message;
+    }
   }
 
   function tz2SetDriveStatus(message) {
@@ -8160,12 +8538,19 @@ function startDrive(index) {
   const tz2OriginalRequestGPS = typeof requestGPS === 'function' ? requestGPS : null;
   requestGPS = async function() {
     if (!navigator.geolocation) {
-      tz2SetStartStatus('GPS not supported');
+      tz2SetStartStatus(typeof t === 'function' ? t('gps_unsupported') : 'GPS not supported');
+      try { setGpsResolving(false); } catch (_) {}
+      try {
+        if (typeof window.__clearRoadUxDiagGps === "function") {
+          window.__clearRoadUxDiagGps(false, { code: 0, message: "not supported", via: "TZ2 requestGPS" });
+        }
+      } catch (_) {}
       return;
     }
 
     tz2SetGpsLoading(true);
-    tz2SetStartStatus('Detecting GPS…');
+    try { setGpsResolving(true); } catch (_) {}
+    tz2SetStartStatus(typeof t === 'function' ? t('gps_detecting') : 'Detecting location…');
 
     try {
       const pos = await tz2GetCurrentPosition(TZ2_GPS_OPTIONS_STRICT).catch(async function(firstErr) {
@@ -8182,12 +8567,24 @@ function startDrive(index) {
         await tz2OriginalRequestGPS.apply(this, arguments);
       }
 
-      tz2SetStartStatus('Current location');
+      tz2SetStartStatus(typeof t === 'function' ? t('gps_current') : 'Current location');
+      try {
+        if (typeof window.__clearRoadUxDiagGps === 'function') {
+          window.__clearRoadUxDiagGps(true, { lat: pos.coords.latitude, lng: pos.coords.longitude, via: 'TZ2 requestGPS' });
+        }
+      } catch (_) {}
     } catch (err) {
       tz2Log('requestGPS', err);
+      console.error('[Clear Road UX] TZ2 requestGPS failed', err);
       tz2SetStartStatus(tz2ErrorMessage(err));
+      try {
+        if (typeof window.__clearRoadUxDiagGps === 'function') {
+          window.__clearRoadUxDiagGps(false, { code: err && err.code, message: tz2ErrorMessage(err), via: 'TZ2 requestGPS' });
+        }
+      } catch (_) {}
     } finally {
       tz2SetGpsLoading(false);
+      try { setGpsResolving(false); } catch (_) {}
     }
   };
 
@@ -10391,6 +10788,7 @@ function startDrive(index) {
     refresh: function(){ addI18n(); installButtons(); refreshVoiceLabels(); }
   };
 })();
+
 </script>
 
 <!-- ============================================================
@@ -11787,35 +12185,44 @@ function startDrive(index) {
   };
   try { window.__CLEAR_ROAD_ROUTE_CALC_CORE__ = calculateRoutes; } catch (_) {}
 
-  // Install UAE-restricted autocomplete and store geometry. This prevents routing by raw text / global plus codes.
+  // Wire TZ2 geometry capture to the single core Places Autocomplete (no second widget per input).
   function installUAEAutocomplete(){
     if (!window.google || !google.maps || !google.maps.places || !google.maps.places.Autocomplete) return false;
+    function getCoreAc(kind){
+      try {
+        if (kind === 'start' && window.__clearRoadStartAutocomplete) return window.__clearRoadStartAutocomplete;
+        if (kind === 'end' && window.__clearRoadEndAutocomplete) return window.__clearRoadEndAutocomplete;
+      } catch (_) {}
+      return null;
+    }
     ['start','end'].forEach((kind) => {
       const input = $(kind);
       if (!input || input.dataset.tz2AutocompleteFinal === '1') return;
-      const ac = new google.maps.places.Autocomplete(input, {
-        fields: ['geometry','place_id','name','formatted_address'],
-        componentRestrictions: { country: 'ae' },
-        strictBounds: false
-      });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        const saved = saveSelectedPoint(kind, place);
-        if (!saved) {
-          tz2State.selected[kind] = null;
+      const ac = getCoreAc(kind);
+      if (!ac || typeof ac.addListener !== 'function') return;
+      if (!ac.__tz2SavePointWired) {
+        ac.__tz2SavePointWired = true;
+        ac.addListener('place_changed', () => {
+          const place = ac.getPlace();
+          const saved = saveSelectedPoint(kind, place);
+          if (!saved) {
+            tz2State.selected[kind] = null;
+            input.__tz2SelectedPoint = null;
+            return;
+          }
+          if (saved.address) input.value = saved.address;
+          const s = ($('start') && $('start').value || '').trim();
+          const e = ($('end') && $('end').value || '').trim();
+          if (s && e) setTimeout(() => window.calculateRoutes(), 50);
+        });
+      }
+      if (!input.__tz2ManualEditWired) {
+        input.__tz2ManualEditWired = true;
+        input.addEventListener('input', () => {
           input.__tz2SelectedPoint = null;
-          return;
-        }
-        if (saved.address) input.value = saved.address;
-        const s = ($('start') && $('start').value || '').trim();
-        const e = ($('end') && $('end').value || '').trim();
-        if (s && e) setTimeout(() => window.calculateRoutes(), 50);
-      });
-      input.addEventListener('input', () => {
-        // If user edits manually, old geometry may no longer match the visible text.
-        input.__tz2SelectedPoint = null;
-        tz2State.selected[kind] = null;
-      });
+          tz2State.selected[kind] = null;
+        });
+      }
       input.dataset.tz2AutocompleteFinal = '1';
       tz2State[kind + 'Autocomplete'] = ac;
     });
@@ -12070,6 +12477,11 @@ function startDrive(index) {
     }
   }
   function renderLocal(input){
+    try {
+      if (typeof window.__clearRoadUxDiagFallback === 'function') {
+        window.__clearRoadUxDiagFallback('__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ is false or Places API unavailable — UAE local list');
+      }
+    } catch (_) {}
     const matches = localMatches(input.value);
     const panel = ensurePanel(input);
     positionPanel(input, panel);
@@ -12087,14 +12499,24 @@ function startDrive(index) {
     input.dataset.crTz2Bound = VERSION;
     let timer = null;
     input.setAttribute('autocomplete','off');
+    function placesReady(){
+      try {
+        return window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ === true;
+      } catch (_) { return false; }
+    }
     input.addEventListener('input', function(){
+      if (placesReady()) { hidePanel(input); return; }
       clearTimeout(timer);
       timer = setTimeout(function(){ renderLocal(input); }, 220);
     });
-    input.addEventListener('focus', function(){ renderLocal(input); });
+    input.addEventListener('focus', function(){
+      if (placesReady()) return;
+      renderLocal(input);
+    });
     input.addEventListener('blur', function(){ setTimeout(function(){ hidePanel(input); }, 180); });
     input.addEventListener('keydown', function(ev){
       if (ev.key !== 'Enter') return;
+      if (placesReady()) return;
       const matches = localMatches(input.value);
       if (matches.length) {
         ev.preventDefault();
@@ -12104,41 +12526,9 @@ function startDrive(index) {
     window.addEventListener('resize', function(){ const p = document.getElementById('cr-ac-panel-' + input.id); if (p && p.style.display !== 'none') positionPanel(input, p); });
     window.addEventListener('scroll', function(){ const p = document.getElementById('cr-ac-panel-' + input.id); if (p && p.style.display !== 'none') positionPanel(input, p); }, true);
   }
-  function installGoogleAutocomplete(){
-    if (!window.google || !google.maps || !google.maps.places || !google.maps.places.Autocomplete) return false;
-    ['start','end'].forEach(function(id){
-      const input = document.getElementById(id);
-      if (!input || input.dataset.crGooglePlacesBound === VERSION) return;
-      input.dataset.crGooglePlacesBound = VERSION;
-      try {
-        const ac = new google.maps.places.Autocomplete(input, {
-          componentRestrictions: { country: 'ae' },
-          fields: ['formatted_address','geometry','name','place_id'],
-          types: ['geocode','establishment']
-        });
-        ac.addListener('place_changed', function(){
-          const place = ac.getPlace ? ac.getPlace() : null;
-          if (place && (place.formatted_address || place.name)) {
-            input.value = place.formatted_address || place.name;
-            input.dataset.crResolvedName = place.name || '';
-            input.dataset.crPlaceId = place.place_id || '';
-            hidePanel(input);
-            input.dispatchEvent(new Event('change', {bubbles:true}));
-            const start = document.getElementById('start');
-            const end = document.getElementById('end');
-            if (start && end && start.value.trim() && end.value.trim() && typeof calculateRoutes === 'function') {
-              setTimeout(function(){ try { calculateRoutes(); } catch(e){ console.warn('[TZ2] calculate after Google place skipped', e); } }, 80);
-            }
-          }
-        });
-      } catch(e){ console.warn('[TZ2] Google Places autocomplete init skipped', e); }
-    });
-    return true;
-  }
   function installTZ2Autocomplete(){
     bindInputAssist(document.getElementById('start'));
     bindInputAssist(document.getElementById('end'));
-    installGoogleAutocomplete();
     document.documentElement.setAttribute('data-cr-tz2-autocomplete', VERSION);
   }
 
@@ -12167,6 +12557,7 @@ function startDrive(index) {
   setTimeout(installAll, 500);
   console.info('[Clear Road UAE] TZ1+TZ2 final patch installed', VERSION);
 })();
+
 </script>
 
 
@@ -12461,10 +12852,11 @@ function startDrive(index) {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 </script>
 
 
-<script>
+<script id="cr-tz4-mobile-layout-guard">
 /* ===== ТЗ-4: Mobile layout cleanup verification marker ===== */
 (function tz4MobileLayoutGuard(){
   function applyTz4ViewportVars(){
@@ -12477,8 +12869,9 @@ function startDrive(index) {
   window.addEventListener('orientationchange', applyTz4ViewportVars, { passive: true });
   window.__TZ4_MOBILE_LAYOUT_CLEANUP__ = true;
 })();
+
 </script>
-<script>
+<script id="cr-tz6-ai-decision-clean">
 /* ===== ТЗ-6: AI Decision Engine Clean / product-safe AI text layer ===== */
 (function clearRoadTZ6AIDecisionClean(){
   'use strict';
@@ -12746,10 +13139,11 @@ function startDrive(index) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyAll, 0); });
   else setTimeout(applyAll, 0);
 })();
+
 </script>
 
 
-<script>
+<script id="cr-tz6b-final-fix">
 /* ===== ТЗ-6B: AI + TIME FINAL SAFETY PATCH ===== */
 (function clearRoadTZ6BFinalFix(){
   'use strict';
@@ -13001,9 +13395,10 @@ function startDrive(index) {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule); else schedule();
 })();
+
 </script>
 
-<script>
+<script id="cr-tz7-tz8-ai-bundle">
 // ============================================================
 //  ТЗ-7 FINAL — ROUTE CONTROL LOGIC
 //  Purpose: make route preference/filter buttons and bottom Route/Drive nav real controls.
@@ -13754,6 +14149,14 @@ function startDrive(index) {
 (function crFixRouteEmptyStateFinalV2(){
   'use strict';
   const VERSION = 'CR_FIX_ROUTE_EMPTY_STATE_FINAL_V2_2026_04_25';
+  /**
+   * AUDIT фаза 1: задержки повторного installAll. Ядро маршрута (__CLEAR_ROAD_ROUTE_CALC_CORE__),
+   * экземпляр DirectionsService и цепочка initMap навешиваются не синхронно с парсингом скрипта.
+   * Пять точек (0 → 120 → 450 → 1200 → 2800 ms): немедленный повтор, ранний пост-DOM/initMap,
+   * типичная гонка с Maps/Places, поздняя регистрация обёрток, крайний случай медленной среды.
+   * Укорочение массива — только после регресс-теста пустого списка маршрутов и empty-state.
+   */
+  const CR_EMPTY_STATE_INSTALL_RETRY_DELAYS_MS = Object.freeze([0, 120, 450, 1200, 2800]);
   const FALLBACK_TEXT_RE = /Route data unavailable\s*[·-]\s*recalculate route|Route display fallback\s*[·-]\s*recalculate route/i;
   const API_ERROR_TEXT_RE = /Map service unavailable|Could not find|Could not calculate|No route returned|Address not found|outside UAE|Route rejected|Directions/i;
   let realDirectionsRequestStarted = false;
@@ -13910,15 +14313,67 @@ function startDrive(index) {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installAll, {once:true});
   else installAll();
-  /* AUDIT phase 1: повторные installAll — сознательный workaround: __CLEAR_ROAD_ROUTE_CALC_CORE__ / Directions
-     инициализируются не синхронно с парсингом скрипта; сокращение списка задержек — только после регресс-теста маршрутов. */
-  var __CR_EMPTY_STATE_RETRY_MS = [0, 120, 450, 1200, 2800];
-  __CR_EMPTY_STATE_RETRY_MS.forEach(function(ms){ setTimeout(installAll, ms); });
+  CR_EMPTY_STATE_INSTALL_RETRY_DELAYS_MS.forEach(function(ms){ setTimeout(installAll, ms); });
+})();
+
+</script>
+<script id="cr-ux-self-check">
+(function () {
+  'use strict';
+  window.__clearRoadRunUxSelfCheck = function (opts) {
+    var rows = [];
+    function row(name, pass, detail) {
+      rows.push({ check: name, pass: !!pass, detail: detail || '' });
+    }
+    try {
+      row('google.maps', !!(window.google && google.maps));
+      row('google.maps.geometry', !!(google && google.maps && google.maps.geometry && google.maps.geometry.spherical));
+      row('google.maps.places.Autocomplete', !!(google && google.maps && google.maps.places && google.maps.places.Autocomplete));
+      row('map_instance', !!window.__CLEAR_ROAD_MAP_READY__, window.__CLEAR_ROAD_MAP_READY__ ? 'google.maps.Map created in initMap' : 'Map not constructed — initMap error or gm_authFailure');
+      row('maps_js_gm_authFailure', !window.__CLEAR_ROAD_MAPS_AUTH_FAILED__, window.__CLEAR_ROAD_MAPS_AUTH_FAILED__ ? 'Key/referrer/API/billing — see [Clear Road UX] console error' : '');
+      row('navigator.geolocation', !!navigator.geolocation);
+      row('window.requestGPS', typeof window.requestGPS === 'function');
+      row('places_autocomplete_ready', window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ === true, 'If false: Places did not bind — check legacy Places API + libraries=places');
+      try {
+        var d = window.__CLEAR_ROAD_UX_DIAG__;
+        row('ux_strip_places', !(d && d.places === 'fail'), d ? ('diag places: ' + d.places) : 'diag n/a');
+        row('ux_strip_gps_ok', true, d ? ('last GPS UX: ' + d.gpsLast) : 'GPS not tried yet');
+      } catch (e2) {
+        row('ux_diag_read', false, String(e2 && e2.message));
+      }
+    } catch (e) {
+      row('self-check runner', false, (e && e.message) ? String(e.message) : 'error');
+    }
+    var criticalOk = rows.every(function (r) {
+      if (r.check === 'places_autocomplete_ready') return true;
+      return r.pass;
+    });
+    var allOk = rows.every(function (r) { return r.pass; });
+    var src = (opts && opts.source) ? opts.source : 'manual';
+    console.info('[Clear Road UAE] UX self-check (' + src + ') — critical:', criticalOk, 'full:', allOk);
+    console.table(rows);
+    return { criticalOk: criticalOk, allOk: allOk, rows: rows, source: src };
+  };
+  if (/\bcr_selfcheck=1\b/.test(location.search)) {
+    window.addEventListener('load', function () {
+      setTimeout(function () { window.__clearRoadRunUxSelfCheck({ source: 'query_cr_selfcheck=1' }); }, 2500);
+    });
+  }
+  /* If Maps never calls initMap (e.g. blocked key), still emit a diagnostic table once. */
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (window.__CLEAR_ROAD_MAP_READY__) return;
+      if (typeof window.__clearRoadRunUxSelfCheck === 'function') {
+        window.__clearRoadRunUxSelfCheck({ source: 'load_no_initMap' });
+      }
+    }, 4000);
+  });
+  window.__clearRoadUxSelfCheck = window.__clearRoadRunUxSelfCheck;
 })();
 
 </script>
 <script async
-src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&callback=initMap">
+src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4&libraries=places,geometry&callback=initMap">
 </script>
 </body>
 </html>
