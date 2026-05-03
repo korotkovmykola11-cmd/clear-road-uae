@@ -1,6 +1,14 @@
 (function crFixRouteEmptyStateFinalV2(){
   'use strict';
   const VERSION = 'CR_FIX_ROUTE_EMPTY_STATE_FINAL_V2_2026_04_25';
+  /**
+   * AUDIT фаза 1: задержки повторного installAll. Ядро маршрута (__CLEAR_ROAD_ROUTE_CALC_CORE__),
+   * экземпляр DirectionsService и цепочка initMap навешиваются не синхронно с парсингом скрипта.
+   * Пять точек (0 → 120 → 450 → 1200 → 2800 ms): немедленный повтор, ранний пост-DOM/initMap,
+   * типичная гонка с Maps/Places, поздняя регистрация обёрток, крайний случай медленной среды.
+   * Укорочение массива — только после регресс-теста пустого списка маршрутов и empty-state.
+   */
+  const CR_EMPTY_STATE_INSTALL_RETRY_DELAYS_MS = Object.freeze([0, 120, 450, 1200, 2800]);
   const FALLBACK_TEXT_RE = /Route data unavailable\s*[·-]\s*recalculate route|Route display fallback\s*[·-]\s*recalculate route/i;
   const API_ERROR_TEXT_RE = /Map service unavailable|Could not find|Could not calculate|No route returned|Address not found|outside UAE|Route rejected|Directions/i;
   let realDirectionsRequestStarted = false;
@@ -157,8 +165,5 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installAll, {once:true});
   else installAll();
-  /* AUDIT phase 1: повторные installAll — сознательный workaround: __CLEAR_ROAD_ROUTE_CALC_CORE__ / Directions
-     инициализируются не синхронно с парсингом скрипта; сокращение списка задержек — только после регресс-теста маршрутов. */
-  var __CR_EMPTY_STATE_RETRY_MS = [0, 120, 450, 1200, 2800];
-  __CR_EMPTY_STATE_RETRY_MS.forEach(function(ms){ setTimeout(installAll, ms); });
+  CR_EMPTY_STATE_INSTALL_RETRY_DELAYS_MS.forEach(function(ms){ setTimeout(installAll, ms); });
 })();
