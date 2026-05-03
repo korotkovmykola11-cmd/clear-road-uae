@@ -4,6 +4,8 @@
  * i18n: src/i18n/app-i18n.js → __CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__
  * cr-empty-state: src/js/cr-route-empty-state-final-v2.js → __CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__
  * tz8-rtl: src/js/tz8-rtl-layer.js → __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
+ * ux-self-check: src/js/cr-ux-self-check.js → __CLEAR_ROAD_BUILD_JS_UX_SELF_CHECK__
+ * tz9-voice: src/js/tz9-voice-layer.js → __CLEAR_ROAD_BUILD_JS_TZ9_VOICE__
  * Maps key: CLEAR_ROAD_MAPS_API_KEY или GOOGLE_MAPS_API_KEY, иначе src/secrets/maps-api-key.txt (первая строка), иначе встроенный dev-ключ + предупреждение. Флаг --require-maps-key — без env/файла сборка падает (прод).
  * Вход: input/index.html; иначе ../index.html; иначе CLEAR_ROAD_INPUT=...
  * После записи dist: копия в ../index.html (родитель clear-road-uae), чтобы в Загрузках рядом с desktop.ini был актуальный файл. Отключить: --no-copy-parent
@@ -23,6 +25,8 @@ const cssFile = join(projectRoot, "src", "styles", "app.css");
 const i18nFile = join(projectRoot, "src", "i18n", "app-i18n.js");
 const emptyStateJsFile = join(projectRoot, "src", "js", "cr-route-empty-state-final-v2.js");
 const tz8RtlJsFile = join(projectRoot, "src", "js", "tz8-rtl-layer.js");
+const uxSelfCheckJsFile = join(projectRoot, "src", "js", "cr-ux-self-check.js");
+const tz9VoiceJsFile = join(projectRoot, "src", "js", "tz9-voice-layer.js");
 const mapsKeySecretFile = join(projectRoot, "src", "secrets", "maps-api-key.txt");
 /** Только для локальной сборки без env/secrets; для прод задайте CLEAR_ROAD_MAPS_API_KEY */
 const MAPS_KEY_DEV_FALLBACK = "AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4";
@@ -30,6 +34,8 @@ const PLACEHOLDER_CSS = "__CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__";
 const PLACEHOLDER_I18N = "__CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__";
 const PLACEHOLDER_EMPTY_STATE_JS = "__CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__";
 const PLACEHOLDER_TZ8_RTL_JS = "__CLEAR_ROAD_BUILD_JS_TZ8_RTL__";
+const PLACEHOLDER_UX_SELF_CHECK_JS = "__CLEAR_ROAD_BUILD_JS_UX_SELF_CHECK__";
+const PLACEHOLDER_TZ9_VOICE_JS = "__CLEAR_ROAD_BUILD_JS_TZ9_VOICE__";
 const PLACEHOLDER_MAPS_KEY = "__CLEAR_ROAD_BUILD_MAPS_API_KEY__";
 
 const args = process.argv.slice(2);
@@ -111,6 +117,34 @@ function injectTz8RtlJs(html) {
   return html.split(PLACEHOLDER_TZ8_RTL_JS).join(js);
 }
 
+function injectUxSelfCheckJs(html) {
+  if (!html.includes(PLACEHOLDER_UX_SELF_CHECK_JS)) return html;
+  if (!existsSync(uxSelfCheckJsFile)) {
+    console.error("В HTML есть плейсхолдер UX self-check, но нет файла:", uxSelfCheckJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(uxSelfCheckJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой UX self-check:", uxSelfCheckJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_UX_SELF_CHECK_JS).join(js);
+}
+
+function injectTz9VoiceJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ9_VOICE_JS)) return html;
+  if (!existsSync(tz9VoiceJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ9 voice, но нет файла:", tz9VoiceJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz9VoiceJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ9 voice:", tz9VoiceJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ9_VOICE_JS).join(js);
+}
+
 function resolveMapsApiKey() {
   const env =
     (process.env.CLEAR_ROAD_MAPS_API_KEY && String(process.env.CLEAR_ROAD_MAPS_API_KEY).trim()) ||
@@ -160,6 +194,14 @@ function validateArtifact(html) {
     console.error("В артефакте остался плейсхолдер TZ8 RTL JS — сборка не завершена.");
     process.exit(1);
   }
+  if (html.includes(PLACEHOLDER_UX_SELF_CHECK_JS)) {
+    console.error("В артефакте остался плейсхолдер UX self-check JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ9_VOICE_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ9 voice JS — сборка не завершена.");
+    process.exit(1);
+  }
   if (html.includes(PLACEHOLDER_MAPS_KEY)) {
     console.error("В артефакте остался плейсхолдер Maps API key — сборка не завершена.");
     process.exit(1);
@@ -173,7 +215,9 @@ function validateArtifact(html) {
     ["closing html", /<\/html>\s*$/i.test(html.trim())],
     ["css bulk", html.includes("clear-road.css block") || html.includes(":root {")],
     ["cr-empty-state JS", html.includes("crFixRouteEmptyStateFinalV2")],
-    ["tz8 RTL", html.includes("clearRoadTZ8RTL")]
+    ["tz8 RTL", html.includes("clearRoadTZ8RTL")],
+    ["UX self-check", html.includes("__clearRoadRunUxSelfCheck")],
+    ["tz9 voice", html.includes("clearRoadTZ9VoiceInput")]
   ];
   const bad = checks.filter(([, ok]) => !ok).map(([name]) => name);
   if (bad.length) {
@@ -207,6 +251,18 @@ function validateSourceInput(html) {
       process.exit(1);
     }
   }
+  if (html.includes(PLACEHOLDER_UX_SELF_CHECK_JS)) {
+    if (!existsSync(uxSelfCheckJsFile) || !readFileSync(uxSelfCheckJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер UX self-check — нужен непустой", uxSelfCheckJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ9_VOICE_JS)) {
+    if (!existsSync(tz9VoiceJsFile) || !readFileSync(tz9VoiceJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ9 voice — нужен непустой", tz9VoiceJsFile);
+      process.exit(1);
+    }
+  }
 }
 
 function main() {
@@ -216,7 +272,9 @@ function main() {
 
   const mapsKeyInfo = resolveMapsApiKey();
   let out = injectMapsApiKey(
-    injectEmptyStateJs(injectTz8RtlJs(injectI18n(injectCss(html)))),
+    injectUxSelfCheckJs(
+      injectTz9VoiceJs(injectEmptyStateJs(injectTz8RtlJs(injectI18n(injectCss(html)))))
+    ),
     mapsKeyInfo.key
   );
   validateArtifact(out);
@@ -254,6 +312,8 @@ function main() {
   console.log("   i18n:", i18nFile);
   console.log("   empty-state JS:", emptyStateJsFile);
   console.log("   TZ8 RTL JS:", tz8RtlJsFile);
+  console.log("   UX self-check JS:", uxSelfCheckJsFile);
+  console.log("   TZ9 voice JS:", tz9VoiceJsFile);
   console.log("   Maps API key:", mapsKeyInfo.source);
   console.log("   размер", bytes, "байт");
 
