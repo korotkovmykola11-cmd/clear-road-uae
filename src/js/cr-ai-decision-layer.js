@@ -62,11 +62,100 @@ function validateAIDecision(decision) {
 }
 
 function selectBestRouteDecision(routes) {
-  return buildAIDecision(routes);
+  try {
+    return buildCanonicalDecisionState(routes).decision;
+  } catch (e) {
+    try {
+      console.warn("[ClearRoad] selectBestRouteDecision → canonical failed, using buildAIDecision", e);
+    } catch (_) {}
+    return buildAIDecision(Array.isArray(routes) ? routes.filter(Boolean) : []);
+  }
 }
 
 function selectBestRoute(routes) {
-  return buildAIDecision(routes).bestRoute;
+  try {
+    return buildCanonicalDecisionState(routes).bestRoute;
+  } catch (_) {
+    return buildAIDecision(Array.isArray(routes) ? routes.filter(Boolean) : []).bestRoute;
+  }
+}
+
+/** Salik / toll snapshot before TZ8 decision (TZ4 or AED fallback). */
+function applySalikPricingBeforeDecision(routes) {
+  if (!Array.isArray(routes) || !routes.length) return;
+  try {
+    if (window.clearRoadTZ4UAE && typeof clearRoadTZ4UAE.refreshRoutesSalikPricing === "function") {
+      clearRoadTZ4UAE.refreshRoutesSalikPricing(routes, new Date());
+      return;
+    }
+  } catch (_) {}
+  try {
+    if (typeof window.getSalikPriceUAE === "function") {
+      var ppg = getSalikPriceUAE(new Date());
+      routes.forEach(function(r) {
+        if (!r) return;
+        var cnt = Number(r.salikCount != null ? r.salikCount : r.tollCount) || 0;
+        r.salikCount = Math.max(0, Math.round(cnt));
+        r.salikPricePerGate = ppg;
+        var raw = r.salikCount * ppg;
+        r.salikCost = Math.round(raw * 100) / 100;
+        r.tollCost = r.salikCost;
+        r.hasToll = r.salikCost > 0;
+        r.tolls = r.salikCost > 0;
+      });
+    }
+  } catch (_) {}
+}
+
+/** SSOT: decision lists point at objects inside canonical.routes. */
+function alignDecisionRouteReferences(decision, routes) {
+  if (!decision || !Array.isArray(routes) || !routes.length) return;
+  function byIndex(idx) {
+    if (!Number.isFinite(Number(idx))) return null;
+    return (
+      routes.find(function(r) {
+        return r && Number(r.index) === Number(idx);
+      }) || null
+    );
+  }
+  var rawBest = decision.bestRoute;
+  var bi = rawBest && Number.isFinite(Number(rawBest.index)) ? Number(rawBest.index) : NaN;
+  var aligned = byIndex(bi);
+  if (!aligned) {
+    try {
+      console.warn("[ClearRoad] alignDecisionRouteReferences: bestRoute index not in routes", bi);
+    } catch (_) {}
+    aligned = routes[0] || rawBest;
+  }
+  decision.bestRoute = aligned;
+  if (decision.fastestRoute) {
+    const fr = decision.fastestRoute;
+    const fi = fr && Number.isFinite(Number(fr.index)) ? Number(fr.index) : NaN;
+    let fAl = byIndex(fi);
+    if (!fAl) {
+      try {
+        console.warn("[ClearRoad] alignDecisionRouteReferences: fastestRoute index not in routes", fi);
+      } catch (_) {}
+      fAl = aligned || routes[0];
+    }
+    decision.fastestRoute = fAl;
+  }
+  if (Array.isArray(decision.alternatives)) {
+    decision.alternatives = decision.alternatives
+      .map(function(alt) {
+        if (!alt || !Number.isFinite(Number(alt.index))) return null;
+        return byIndex(alt.index);
+      })
+      .filter(Boolean);
+  }
+  if (Array.isArray(decision.rankedRoutes)) {
+    decision.rankedRoutes = decision.rankedRoutes
+      .map(function(r) {
+        if (!r || !Number.isFinite(Number(r.index))) return null;
+        return byIndex(r.index);
+      })
+      .filter(Boolean);
+  }
 }
 
 function buildCanonicalDecisionState(routesInput, options) {
@@ -97,15 +186,19 @@ function buildCanonicalDecisionState(routesInput, options) {
   const scoreCheck = validateScoredRoutes(scored);
   if (!scoreCheck.ok) throw new Error(scoreCheck.message);
 
-  const firstDecision = selectBestRouteDecision(scored);
+  applySalikPricingBeforeDecision(scored);
+
+  const firstDecision = buildAIDecision(scored);
   const decisionCheck = validateAIDecision(firstDecision);
   if (!decisionCheck.ok) throw new Error(decisionCheck.message);
 
-  const best = firstDecision.bestRoute;
-  const fastest = scored.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0] || best || null;
-  const withWhy = applyWhyToRoutes(scored, best);
+  alignDecisionRouteReferences(firstDecision, scored);
+
+  const bestRef = firstDecision.bestRoute;
+  const fastestRaw = scored.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0] || bestRef || null;
+  const withWhy = applyWhyToRoutes(scored, bestRef);
   const withRoles = withWhy.map(function(route, index) {
-    route.role = getRouteRole(route, best, fastest, withWhy);
+    route.role = getRouteRole(route, bestRef, fastestRaw, withWhy);
     route.decisionRank = Number.isFinite(route.decisionRank) ? route.decisionRank : (index + 1);
     route.decisionScore = Number.isFinite(route.decisionScore)
       ? Math.round(route.decisionScore * 10) / 10
@@ -113,12 +206,33 @@ function buildCanonicalDecisionState(routesInput, options) {
     return route;
   });
 
-  // SSOT этап 1: один вызов buildRealDecision на scored; withRoles — те же объекты маршрутов
+  alignDecisionRouteReferences(firstDecision, withRoles);
+
+  var fastestRoute = firstDecision.fastestRoute;
+  if (fastestRaw && Number.isFinite(Number(fastestRaw.index))) {
+    var frFound = withRoles.find(function(r) {
+      return r && Number(r.index) === Number(fastestRaw.index);
+    });
+    if (frFound) fastestRoute = frFound;
+  }
+  firstDecision.fastestRoute = fastestRoute || firstDecision.bestRoute;
+
+  var selectedRoute = null;
+  try {
+    var u = window.__clearRoadUserPickIndex;
+    if (u !== null && u !== undefined && String(u) !== "" && Number.isFinite(Number(u))) {
+      var ui = Number(u);
+      selectedRoute = withRoles.find(function(r) { return r && Number(r.index) === ui; }) || null;
+    }
+  } catch (_) {}
+  if (!selectedRoute) selectedRoute = firstDecision.bestRoute;
+
   return {
     routes: withRoles,
     decision: firstDecision,
-    bestRoute: best,
-    fastestRoute: fastest
+    bestRoute: firstDecision.bestRoute,
+    fastestRoute: fastestRoute || firstDecision.fastestRoute,
+    selectedRoute: selectedRoute
   };
 }
 

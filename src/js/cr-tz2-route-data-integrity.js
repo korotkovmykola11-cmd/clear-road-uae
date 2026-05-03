@@ -347,7 +347,11 @@
     currentDecision = canonical.decision;
     _bestRoute = canonical.bestRoute;
     _fastestRoute = canonical.fastestRoute;
-    selectedRoute = _bestRoute;
+    selectedRoute = canonical.selectedRoute || canonical.bestRoute;
+
+    try {
+      if (selectedRoute && selectedRoute.id != null) window.selectedRouteId = selectedRoute.id;
+    } catch (_) {}
 
     try {
       document.documentElement.setAttribute("data-route-state", "READY");

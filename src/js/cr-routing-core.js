@@ -99,23 +99,21 @@ function calculateRoutes() {
       return;
     }
 
-    currentDecision = selectBestRouteDecision(analyzedRoutes);
+    const canonical = buildCanonicalDecisionState(analyzedRoutes, { assumeScored: true });
+    analyzedRoutes = canonical.routes;
+    currentDecision = canonical.decision;
     const decisionCheck = validateAIDecision(currentDecision);
     if (!decisionCheck.ok) {
       document.getElementById("results").innerHTML = `<div class="error">${decisionCheck.message}</div>`;
       return;
     }
 
-    _bestRoute = currentDecision.bestRoute;
-    _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-    selectedRoute = _bestRoute;
-
-    // SSOT этап 1: не пересчитывать выбор маршрута вторым buildRealDecision — только WHY-тексты
-    analyzedRoutes = applyWhyToRoutes(analyzedRoutes, _bestRoute);
-
-    analyzedRoutes.forEach(r => {
-      r.role = getRouteRole(r, _bestRoute, _fastestRoute, analyzedRoutes);
-    });
+    _bestRoute = canonical.bestRoute;
+    _fastestRoute = canonical.fastestRoute;
+    selectedRoute = canonical.selectedRoute || canonical.bestRoute;
+    try {
+      window.selectedRouteId = selectedRoute && selectedRoute.id != null ? selectedRoute.id : null;
+    } catch (_) {}
 
     renderResults();
     drawRoutes(result);

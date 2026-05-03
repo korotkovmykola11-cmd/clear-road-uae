@@ -7981,11 +7981,100 @@ function validateAIDecision(decision) {
 }
 
 function selectBestRouteDecision(routes) {
-  return buildAIDecision(routes);
+  try {
+    return buildCanonicalDecisionState(routes).decision;
+  } catch (e) {
+    try {
+      console.warn("[ClearRoad] selectBestRouteDecision → canonical failed, using buildAIDecision", e);
+    } catch (_) {}
+    return buildAIDecision(Array.isArray(routes) ? routes.filter(Boolean) : []);
+  }
 }
 
 function selectBestRoute(routes) {
-  return buildAIDecision(routes).bestRoute;
+  try {
+    return buildCanonicalDecisionState(routes).bestRoute;
+  } catch (_) {
+    return buildAIDecision(Array.isArray(routes) ? routes.filter(Boolean) : []).bestRoute;
+  }
+}
+
+/** Salik / toll snapshot before TZ8 decision (TZ4 or AED fallback). */
+function applySalikPricingBeforeDecision(routes) {
+  if (!Array.isArray(routes) || !routes.length) return;
+  try {
+    if (window.clearRoadTZ4UAE && typeof clearRoadTZ4UAE.refreshRoutesSalikPricing === "function") {
+      clearRoadTZ4UAE.refreshRoutesSalikPricing(routes, new Date());
+      return;
+    }
+  } catch (_) {}
+  try {
+    if (typeof window.getSalikPriceUAE === "function") {
+      var ppg = getSalikPriceUAE(new Date());
+      routes.forEach(function(r) {
+        if (!r) return;
+        var cnt = Number(r.salikCount != null ? r.salikCount : r.tollCount) || 0;
+        r.salikCount = Math.max(0, Math.round(cnt));
+        r.salikPricePerGate = ppg;
+        var raw = r.salikCount * ppg;
+        r.salikCost = Math.round(raw * 100) / 100;
+        r.tollCost = r.salikCost;
+        r.hasToll = r.salikCost > 0;
+        r.tolls = r.salikCost > 0;
+      });
+    }
+  } catch (_) {}
+}
+
+/** SSOT: decision lists point at objects inside canonical.routes. */
+function alignDecisionRouteReferences(decision, routes) {
+  if (!decision || !Array.isArray(routes) || !routes.length) return;
+  function byIndex(idx) {
+    if (!Number.isFinite(Number(idx))) return null;
+    return (
+      routes.find(function(r) {
+        return r && Number(r.index) === Number(idx);
+      }) || null
+    );
+  }
+  var rawBest = decision.bestRoute;
+  var bi = rawBest && Number.isFinite(Number(rawBest.index)) ? Number(rawBest.index) : NaN;
+  var aligned = byIndex(bi);
+  if (!aligned) {
+    try {
+      console.warn("[ClearRoad] alignDecisionRouteReferences: bestRoute index not in routes", bi);
+    } catch (_) {}
+    aligned = routes[0] || rawBest;
+  }
+  decision.bestRoute = aligned;
+  if (decision.fastestRoute) {
+    const fr = decision.fastestRoute;
+    const fi = fr && Number.isFinite(Number(fr.index)) ? Number(fr.index) : NaN;
+    let fAl = byIndex(fi);
+    if (!fAl) {
+      try {
+        console.warn("[ClearRoad] alignDecisionRouteReferences: fastestRoute index not in routes", fi);
+      } catch (_) {}
+      fAl = aligned || routes[0];
+    }
+    decision.fastestRoute = fAl;
+  }
+  if (Array.isArray(decision.alternatives)) {
+    decision.alternatives = decision.alternatives
+      .map(function(alt) {
+        if (!alt || !Number.isFinite(Number(alt.index))) return null;
+        return byIndex(alt.index);
+      })
+      .filter(Boolean);
+  }
+  if (Array.isArray(decision.rankedRoutes)) {
+    decision.rankedRoutes = decision.rankedRoutes
+      .map(function(r) {
+        if (!r || !Number.isFinite(Number(r.index))) return null;
+        return byIndex(r.index);
+      })
+      .filter(Boolean);
+  }
 }
 
 function buildCanonicalDecisionState(routesInput, options) {
@@ -8016,15 +8105,19 @@ function buildCanonicalDecisionState(routesInput, options) {
   const scoreCheck = validateScoredRoutes(scored);
   if (!scoreCheck.ok) throw new Error(scoreCheck.message);
 
-  const firstDecision = selectBestRouteDecision(scored);
+  applySalikPricingBeforeDecision(scored);
+
+  const firstDecision = buildAIDecision(scored);
   const decisionCheck = validateAIDecision(firstDecision);
   if (!decisionCheck.ok) throw new Error(decisionCheck.message);
 
-  const best = firstDecision.bestRoute;
-  const fastest = scored.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0] || best || null;
-  const withWhy = applyWhyToRoutes(scored, best);
+  alignDecisionRouteReferences(firstDecision, scored);
+
+  const bestRef = firstDecision.bestRoute;
+  const fastestRaw = scored.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0] || bestRef || null;
+  const withWhy = applyWhyToRoutes(scored, bestRef);
   const withRoles = withWhy.map(function(route, index) {
-    route.role = getRouteRole(route, best, fastest, withWhy);
+    route.role = getRouteRole(route, bestRef, fastestRaw, withWhy);
     route.decisionRank = Number.isFinite(route.decisionRank) ? route.decisionRank : (index + 1);
     route.decisionScore = Number.isFinite(route.decisionScore)
       ? Math.round(route.decisionScore * 10) / 10
@@ -8032,12 +8125,33 @@ function buildCanonicalDecisionState(routesInput, options) {
     return route;
   });
 
-  // SSOT этап 1: один вызов buildRealDecision на scored; withRoles — те же объекты маршрутов
+  alignDecisionRouteReferences(firstDecision, withRoles);
+
+  var fastestRoute = firstDecision.fastestRoute;
+  if (fastestRaw && Number.isFinite(Number(fastestRaw.index))) {
+    var frFound = withRoles.find(function(r) {
+      return r && Number(r.index) === Number(fastestRaw.index);
+    });
+    if (frFound) fastestRoute = frFound;
+  }
+  firstDecision.fastestRoute = fastestRoute || firstDecision.bestRoute;
+
+  var selectedRoute = null;
+  try {
+    var u = window.__clearRoadUserPickIndex;
+    if (u !== null && u !== undefined && String(u) !== "" && Number.isFinite(Number(u))) {
+      var ui = Number(u);
+      selectedRoute = withRoles.find(function(r) { return r && Number(r.index) === ui; }) || null;
+    }
+  } catch (_) {}
+  if (!selectedRoute) selectedRoute = firstDecision.bestRoute;
+
   return {
     routes: withRoles,
     decision: firstDecision,
-    bestRoute: best,
-    fastestRoute: fastest
+    bestRoute: firstDecision.bestRoute,
+    fastestRoute: fastestRoute || firstDecision.fastestRoute,
+    selectedRoute: selectedRoute
   };
 }
 
@@ -10913,23 +11027,21 @@ function calculateRoutes() {
       return;
     }
 
-    currentDecision = selectBestRouteDecision(analyzedRoutes);
+    const canonical = buildCanonicalDecisionState(analyzedRoutes, { assumeScored: true });
+    analyzedRoutes = canonical.routes;
+    currentDecision = canonical.decision;
     const decisionCheck = validateAIDecision(currentDecision);
     if (!decisionCheck.ok) {
       document.getElementById("results").innerHTML = `<div class="error">${decisionCheck.message}</div>`;
       return;
     }
 
-    _bestRoute = currentDecision.bestRoute;
-    _fastestRoute = [...analyzedRoutes].sort((a, b) => a.time - b.time)[0];
-    selectedRoute = _bestRoute;
-
-    // SSOT этап 1: не пересчитывать выбор маршрута вторым buildRealDecision — только WHY-тексты
-    analyzedRoutes = applyWhyToRoutes(analyzedRoutes, _bestRoute);
-
-    analyzedRoutes.forEach(r => {
-      r.role = getRouteRole(r, _bestRoute, _fastestRoute, analyzedRoutes);
-    });
+    _bestRoute = canonical.bestRoute;
+    _fastestRoute = canonical.fastestRoute;
+    selectedRoute = canonical.selectedRoute || canonical.bestRoute;
+    try {
+      window.selectedRouteId = selectedRoute && selectedRoute.id != null ? selectedRoute.id : null;
+    } catch (_) {}
 
     renderResults();
     drawRoutes(result);
@@ -12139,7 +12251,7 @@ function startDrive(index) {
     if (!normalizationCheck.ok) throw new Error(normalizationCheck.message || "Route normalization failed");
 
     const canonical = buildCanonicalDecisionState(freshRoutes);
-    return { routes: canonical.routes, decision: canonical.decision };
+    return canonical;
   }
 
   function tz7BuildLiveDecision(currentRoute, freshBest) {
@@ -12169,28 +12281,26 @@ function startDrive(index) {
     };
   }
 
-  function tz7ApplyFreshRoutes(freshRoutes, freshDecision, result) {
+  function tz7ApplyFreshRoutes(canonical, result) {
+    if (!canonical || !canonical.routes || !canonical.decision) return;
     currentDirectionsResult = result;
-    analyzedRoutes = freshRoutes;
-    currentDecision = freshDecision;
-    _bestRoute = freshDecision.bestRoute;
-    _fastestRoute = freshRoutes.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
-
-    if (selectedRoute) {
-      const sameIndex = freshRoutes.find(function(route) { return Number(route.index) === Number(selectedRoute.index); });
-      selectedRoute = sameIndex || freshDecision.bestRoute;
-    } else {
-      selectedRoute = freshDecision.bestRoute;
-    }
+    analyzedRoutes = canonical.routes;
+    currentDecision = canonical.decision;
+    _bestRoute = canonical.bestRoute;
+    _fastestRoute = canonical.fastestRoute;
+    selectedRoute = canonical.selectedRoute || canonical.bestRoute;
+    try {
+      window.selectedRouteId = selectedRoute && selectedRoute.id != null ? selectedRoute.id : null;
+    } catch (_) {}
 
     if (typeof renderResults === "function") renderResults();
     if (typeof drawRoutes === "function") drawRoutes(result);
   }
 
-  function tz7ShowBetterRouteIfNeeded(previousSelected, freshDecision, freshRoutes, result) {
-    if (!freshDecision || !freshDecision.bestRoute || !previousSelected) return;
+  function tz7ShowBetterRouteIfNeeded(previousSelected, canonical, result) {
+    if (!canonical || !canonical.decision || !canonical.decision.bestRoute || !previousSelected) return;
 
-    const freshBest = freshDecision.bestRoute;
+    const freshBest = canonical.decision.bestRoute;
     const liveDecision = tz7BuildLiveDecision(previousSelected, freshBest);
     if (!liveDecision) return;
 
@@ -12198,7 +12308,7 @@ function startDrive(index) {
     const signature = Number(previousSelected.index) + "→" + Number(freshBest.index) + ":" + Math.round(liveDecision.scoreGain || 0) + ":" + Math.round(liveDecision.timeGain || 0);
     if (signature === tz7LastSignature && now - tz7LastAlertAt < TZ7_MIN_ALERT_GAP_MS) return;
 
-    tz7ApplyFreshRoutes(freshRoutes, freshDecision, result);
+    tz7ApplyFreshRoutes(canonical, result);
 
     betterRouteIndex = freshBest.index;
     _rerouteDecision = {
@@ -12272,7 +12382,7 @@ function startDrive(index) {
 
         const liveDecision = tz7BuildLiveDecision(previousSelected, freshBest);
         if (liveDecision) {
-          tz7ShowBetterRouteIfNeeded(previousSelected, fresh.decision, fresh.routes, result);
+          tz7ShowBetterRouteIfNeeded(previousSelected, fresh, result);
         }
       } catch (e) {
         tz7Log("runLiveRecalculation callback", e);
@@ -15752,7 +15862,11 @@ function startDrive(index) {
     currentDecision = canonical.decision;
     _bestRoute = canonical.bestRoute;
     _fastestRoute = canonical.fastestRoute;
-    selectedRoute = _bestRoute;
+    selectedRoute = canonical.selectedRoute || canonical.bestRoute;
+
+    try {
+      if (selectedRoute && selectedRoute.id != null) window.selectedRouteId = selectedRoute.id;
+    } catch (_) {}
 
     try {
       document.documentElement.setAttribute("data-route-state", "READY");
@@ -17204,7 +17318,7 @@ function startDrive(index) {
       window.analyzedRoutes = canonical.routes;
       currentDecision = canonical.decision;
       _bestRoute = canonical.bestRoute;
-      selectedRoute = canonical.bestRoute;
+      selectedRoute = canonical.selectedRoute || canonical.bestRoute;
       _fastestRoute = canonical.fastestRoute;
     } catch (_) {}
     syncRouteControlUI();
@@ -17845,8 +17959,6 @@ function startDrive(index) {
   window.buildRealDecision = buildRealDecision;
   try { window.__CLEAR_ROAD_ROUTE_DECISION_SSOT__ = buildRealDecision; } catch (_) {}
   window.buildAIDecision = buildRealDecision;
-  window.selectBestRouteDecision = buildRealDecision;
-  window.selectBestRoute = function(routes){ return buildRealDecision(routes).bestRoute; };
   window.calculateDecisionConfidence = function(bestRoute, alternatives){
     try {
       if (typeof currentDecision !== "undefined" && currentDecision && currentDecision.confidence && currentDecision.bestRoute && bestRoute) {
@@ -17858,8 +17970,6 @@ function startDrive(index) {
     return buildRealDecision(routes).confidence;
   };
   try { buildAIDecision = buildRealDecision; } catch (_) {}
-  try { selectBestRouteDecision = buildRealDecision; } catch (_) {}
-  try { selectBestRoute = window.selectBestRoute; } catch (_) {}
   try { calculateDecisionConfidence = window.calculateDecisionConfidence; } catch (_) {}
 
   window.generateWhy = function(route, bestRoute, allRoutes){

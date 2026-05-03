@@ -155,7 +155,7 @@
       window.analyzedRoutes = canonical.routes;
       currentDecision = canonical.decision;
       _bestRoute = canonical.bestRoute;
-      selectedRoute = canonical.bestRoute;
+      selectedRoute = canonical.selectedRoute || canonical.bestRoute;
       _fastestRoute = canonical.fastestRoute;
     } catch (_) {}
     syncRouteControlUI();
@@ -796,8 +796,6 @@
   window.buildRealDecision = buildRealDecision;
   try { window.__CLEAR_ROAD_ROUTE_DECISION_SSOT__ = buildRealDecision; } catch (_) {}
   window.buildAIDecision = buildRealDecision;
-  window.selectBestRouteDecision = buildRealDecision;
-  window.selectBestRoute = function(routes){ return buildRealDecision(routes).bestRoute; };
   window.calculateDecisionConfidence = function(bestRoute, alternatives){
     try {
       if (typeof currentDecision !== "undefined" && currentDecision && currentDecision.confidence && currentDecision.bestRoute && bestRoute) {
@@ -809,8 +807,6 @@
     return buildRealDecision(routes).confidence;
   };
   try { buildAIDecision = buildRealDecision; } catch (_) {}
-  try { selectBestRouteDecision = buildRealDecision; } catch (_) {}
-  try { selectBestRoute = window.selectBestRoute; } catch (_) {}
   try { calculateDecisionConfidence = window.calculateDecisionConfidence; } catch (_) {}
 
   window.generateWhy = function(route, bestRoute, allRoutes){

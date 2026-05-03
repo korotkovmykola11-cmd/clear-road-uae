@@ -61,7 +61,7 @@
     if (!normalizationCheck.ok) throw new Error(normalizationCheck.message || "Route normalization failed");
 
     const canonical = buildCanonicalDecisionState(freshRoutes);
-    return { routes: canonical.routes, decision: canonical.decision };
+    return canonical;
   }
 
   function tz7BuildLiveDecision(currentRoute, freshBest) {
@@ -91,28 +91,26 @@
     };
   }
 
-  function tz7ApplyFreshRoutes(freshRoutes, freshDecision, result) {
+  function tz7ApplyFreshRoutes(canonical, result) {
+    if (!canonical || !canonical.routes || !canonical.decision) return;
     currentDirectionsResult = result;
-    analyzedRoutes = freshRoutes;
-    currentDecision = freshDecision;
-    _bestRoute = freshDecision.bestRoute;
-    _fastestRoute = freshRoutes.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
-
-    if (selectedRoute) {
-      const sameIndex = freshRoutes.find(function(route) { return Number(route.index) === Number(selectedRoute.index); });
-      selectedRoute = sameIndex || freshDecision.bestRoute;
-    } else {
-      selectedRoute = freshDecision.bestRoute;
-    }
+    analyzedRoutes = canonical.routes;
+    currentDecision = canonical.decision;
+    _bestRoute = canonical.bestRoute;
+    _fastestRoute = canonical.fastestRoute;
+    selectedRoute = canonical.selectedRoute || canonical.bestRoute;
+    try {
+      window.selectedRouteId = selectedRoute && selectedRoute.id != null ? selectedRoute.id : null;
+    } catch (_) {}
 
     if (typeof renderResults === "function") renderResults();
     if (typeof drawRoutes === "function") drawRoutes(result);
   }
 
-  function tz7ShowBetterRouteIfNeeded(previousSelected, freshDecision, freshRoutes, result) {
-    if (!freshDecision || !freshDecision.bestRoute || !previousSelected) return;
+  function tz7ShowBetterRouteIfNeeded(previousSelected, canonical, result) {
+    if (!canonical || !canonical.decision || !canonical.decision.bestRoute || !previousSelected) return;
 
-    const freshBest = freshDecision.bestRoute;
+    const freshBest = canonical.decision.bestRoute;
     const liveDecision = tz7BuildLiveDecision(previousSelected, freshBest);
     if (!liveDecision) return;
 
@@ -120,7 +118,7 @@
     const signature = Number(previousSelected.index) + "→" + Number(freshBest.index) + ":" + Math.round(liveDecision.scoreGain || 0) + ":" + Math.round(liveDecision.timeGain || 0);
     if (signature === tz7LastSignature && now - tz7LastAlertAt < TZ7_MIN_ALERT_GAP_MS) return;
 
-    tz7ApplyFreshRoutes(freshRoutes, freshDecision, result);
+    tz7ApplyFreshRoutes(canonical, result);
 
     betterRouteIndex = freshBest.index;
     _rerouteDecision = {
@@ -194,7 +192,7 @@
 
         const liveDecision = tz7BuildLiveDecision(previousSelected, freshBest);
         if (liveDecision) {
-          tz7ShowBetterRouteIfNeeded(previousSelected, fresh.decision, fresh.routes, result);
+          tz7ShowBetterRouteIfNeeded(previousSelected, fresh, result);
         }
       } catch (e) {
         tz7Log("runLiveRecalculation callback", e);
