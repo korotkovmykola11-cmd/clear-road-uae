@@ -29,14 +29,14 @@ __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
       <div class="route-panel">
         <div class="route-row">
           <span class="route-dot green"></span>
-          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="Current location" value="">
-          <button class="gps-btn-top" id="gps-btn" onclick="requestGPS()" title="Use my location">
+          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+          <button type="button" class="gps-btn-top" id="gps-btn" title="Use my location" aria-label="Use GPS location">
             <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
           </button>
         </div>
         <div class="route-row">
           <span class="route-dot"></span>
-          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="Where to?" value="">
+          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
         </div>
       </div>
     </div>
@@ -261,6 +261,88 @@ window.__CLEAR_ROAD_ROUTE_CANON__ = Object.freeze({
     ]
   }
 });
+// ============================================================
+//  UX diagnostics (console + minimal strip; no route/AI behavior change)
+// ============================================================
+(function clearRoadUxDiagnosticsBootstrap() {
+  const LOG = "[Clear Road UX]";
+  try { window.__CLEAR_ROAD_MAPS_AUTH_FAILED__ = false; } catch (_) {}
+  window.__CLEAR_ROAD_UX_DIAG__ = {
+    places: "unknown",
+    gpsLast: "unknown",
+    mapsAuth: "unknown",
+    localFallbackLogged: false
+  };
+  function ensureStrip() {
+    let el = document.getElementById("cr-ux-diag-strip");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "cr-ux-diag-strip";
+      el.className = "cr-ux-diag-strip";
+      el.setAttribute("aria-hidden", "true");
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function renderStrip() {
+    const st = window.__CLEAR_ROAD_UX_DIAG__;
+    const p = st.places === "ok" ? "OK" : st.places === "fail" ? "FAIL" : "—";
+    const g = st.gpsLast === "ok" ? "OK" : st.gpsLast === "fail" ? "FAIL" : "—";
+    const auth = st.mapsAuth === "fail" ? "  Maps:FAIL" : "";
+    ensureStrip().textContent = "Places:" + p + "  GPS:" + g + auth;
+  }
+  window.__clearRoadUxDiagLog = function (tag, detail) {
+    if (detail !== undefined) console.info(LOG, tag, detail);
+    else console.info(LOG, tag);
+  };
+  window.__clearRoadUxDiagPlaces = function (ok, detail) {
+    window.__CLEAR_ROAD_UX_DIAG__.places = ok ? "ok" : "fail";
+    if (ok) window.__clearRoadUxDiagLog("Places ready", detail || "");
+    else console.error(LOG, "Places FAIL — autocomplete widgets will not work. Check Maps JS + Places API (legacy), libraries=places, and API key.", detail || "");
+    renderStrip();
+  };
+  window.__clearRoadUxDiagGps = function (ok, detail) {
+    window.__CLEAR_ROAD_UX_DIAG__.gpsLast = ok ? "ok" : "fail";
+    if (ok) {
+      window.__clearRoadUxDiagLog("GPS success", detail || "");
+    } else {
+      console.error(LOG, "GPS error", detail != null ? detail : "");
+    }
+    renderStrip();
+  };
+  window.__clearRoadUxDiagFallback = function (reason) {
+    if (window.__CLEAR_ROAD_UX_DIAG__.localFallbackLogged) return;
+    window.__CLEAR_ROAD_UX_DIAG__.localFallbackLogged = true;
+    console.warn(LOG, "Local autocomplete fallback on — Google Places suggestions unavailable for typing.", reason || "");
+    renderStrip();
+  };
+  window.__clearRoadUxDiagGeocode = function (payload) {
+    window.__clearRoadUxDiagLog("Reverse geocode", payload);
+  };
+  window.__clearRoadUxDiagMapsAuthFail = function () {
+    try { window.__CLEAR_ROAD_MAPS_AUTH_FAILED__ = true; } catch (_) {}
+    window.__CLEAR_ROAD_UX_DIAG__.mapsAuth = "fail";
+    try {
+      var mapEl = document.getElementById("map");
+      if (mapEl) {
+        mapEl.setAttribute("data-cr-maps-auth", "failed");
+        mapEl.title = "Google Maps could not load (API key / referrer / billing). Use http://localhost:3000 and check Cloud Console.";
+      }
+    } catch (_) {}
+    console.error(
+      LOG,
+      "Maps API key rejected (gm_authFailure). Check: HTTP referrer vs " + String(location.origin) + ", enabled APIs (Maps JS, Places, Directions, Geocoding), billing, and key embedded in build."
+    );
+    renderStrip();
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(false, "Maps JS auth failure — Places will not initialize");
+      }
+    } catch (_) {}
+  };
+  window.gm_authFailure = window.__clearRoadUxDiagMapsAuthFail;
+  if (document.body) renderStrip();
+})();
 // ============================================================
 //  GLOBAL STATE
 // ============================================================
@@ -3515,19 +3597,8 @@ function exitDriveMode() {
 // ============================================================
 
 function initMap() {
-    const darkStyle = [
-      { elementType: "geometry",           stylers: [{ color: "#0d1520" }] },
-      { elementType: "labels.text.fill",   stylers: [{ color: "#8e9ab0" }] },
-      { elementType: "labels.text.stroke", stylers: [{ color: "#0d1520" }] },
-      { featureType: "road",               elementType: "geometry", stylers: [{ color: "#1e2d42" }] },
-      { featureType: "road.highway",       elementType: "geometry", stylers: [{ color: "#243352" }] },
-      { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#1a2740" }] },
-      { featureType: "water",              elementType: "geometry", stylers: [{ color: "#0a111d" }] },
-      { featureType: "poi",                stylers: [{ visibility: "off" }] },
-      { featureType: "transit",            stylers: [{ visibility: "off" }] },
-      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#60a5fa" }] }
-    ];
-    map = new google.maps.Map(document.getElementById("map"), {
+    var mapHost = document.getElementById("map");
+    map = new google.maps.Map(mapHost, {
     center: { lat: 25.2048, lng: 55.2708 },
     zoom: 11,
     disableDefaultUI: true,
@@ -3536,6 +3607,13 @@ function initMap() {
       { featureType: "transit", stylers: [{ visibility: "off" }] }
     ]
   });
+    try {
+      if (mapHost) {
+        mapHost.removeAttribute("data-cr-maps-auth");
+        mapHost.title = "";
+      }
+      window.__CLEAR_ROAD_MAP_READY__ = !!map;
+    } catch (_) {}
 
   directionsService = new google.maps.DirectionsService();
 
@@ -3550,27 +3628,77 @@ function initMap() {
   patchAutocompleteBindings();
   patchGpsEntrypoints();
   wireInputAssist();
+  try {
+    window.__clearRoadUxDiagLog && window.__clearRoadUxDiagLog("initMap finished");
+  } catch (_) {}
+  try {
+    setTimeout(function () {
+      if (typeof window.__clearRoadRunUxSelfCheck === "function") {
+        window.__clearRoadRunUxSelfCheck({ source: "afterInitMap" });
+      }
+    }, 0);
+  } catch (_) {}
 }
 
 
 function initAutocomplete() {
-  if (startAutocomplete && endAutocomplete) return;
+  if (startAutocomplete && endAutocomplete) {
+    try {
+      window.__clearRoadStartAutocomplete = startAutocomplete;
+      window.__clearRoadEndAutocomplete = endAutocomplete;
+      window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = true;
+    } catch (_) {}
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(true, "Existing Autocomplete instances reused");
+      }
+      if (typeof window.__clearRoadUxDiagLog === "function") {
+        window.__clearRoadUxDiagLog("Autocomplete active", "reused instances");
+      }
+    } catch (_) {}
+    return;
+  }
   const startInput = document.getElementById("start");
   const endInput   = document.getElementById("end");
   if (!startInput || !endInput) return;
   if (!google?.maps?.places) {
-    console.error("Google Places library is not loaded.");
+    console.error("[Clear Road UX] Google Places library is not loaded (google.maps.places missing). Check: libraries=places on script URL, Maps JS load, API key; in Cloud Console enable Maps JavaScript API and Places API (legacy widget Autocomplete), not only Places API (New).");
+    try { window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = false; } catch (_) {}
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(false, "google.maps.places missing after Maps load");
+      }
+    } catch (_) {}
     wireInputAssist();
     return;
   }
 
   const options = {
-    fields: ["formatted_address", "geometry", "name"],
+    fields: ["formatted_address", "geometry", "name", "place_id"],
     componentRestrictions: { country: "ae" }
   };
 
   startAutocomplete = new google.maps.places.Autocomplete(startInput, options);
   endAutocomplete   = new google.maps.places.Autocomplete(endInput, options);
+  try {
+    window.__clearRoadStartAutocomplete = startAutocomplete;
+    window.__clearRoadEndAutocomplete = endAutocomplete;
+    window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = true;
+  } catch (_) {}
+
+  try {
+    if (typeof window.__clearRoadUxDiagPlaces === "function") {
+      window.__clearRoadUxDiagPlaces(true, "Autocomplete bound to #start and #end (componentRestrictions: ae)");
+    }
+  } catch (_) {}
+  try {
+    if (typeof window.__clearRoadUxDiagLog === "function") {
+      window.__clearRoadUxDiagLog("Autocomplete active", "Google Places suggestions on #start and #end");
+    }
+  } catch (_) {}
+  try {
+    if (window.__CLEAR_ROAD_UX_DIAG__) window.__CLEAR_ROAD_UX_DIAG__.localFallbackLogged = false;
+  } catch (_) {}
 
   patchAutocompleteBindings();
   wireInputAssist();
@@ -3726,6 +3854,13 @@ function setGpsLoading(on) {
   if (btn) btn.classList.toggle("gps-loading", !!on);
 }
 
+function setGpsResolving(on) {
+  const si = document.getElementById("start");
+  if (!si) return;
+  si.classList.toggle("gps-resolving", !!on);
+  si.setAttribute("aria-busy", on ? "true" : "false");
+}
+
 function tryCalculateRoutesFromInputs() {
   const now   = Date.now();
   const start = document.getElementById("start")?.value?.trim() || "";
@@ -3776,7 +3911,13 @@ function wireInputAssist() {
 
 function ensureAutocompleteReady() {
   if (!google?.maps?.places) {
-    console.error("Google Places library is not loaded.");
+    console.error("[Clear Road UX] Google Places library is not loaded (ensureAutocompleteReady). Same checks as initAutocomplete: libraries=places, legacy Places API for Autocomplete widget.");
+    try { window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ = false; } catch (_) {}
+    try {
+      if (typeof window.__clearRoadUxDiagPlaces === "function") {
+        window.__clearRoadUxDiagPlaces(false, "places missing in ensureAutocompleteReady");
+      }
+    } catch (_) {}
     wireInputAssist();
     return;
   }
@@ -3792,6 +3933,11 @@ function bindAutocompletePlaceChanged(autocomplete, kind) {
 
     const input = document.getElementById(kind === "start" ? "start" : "end");
     if (!input) return;
+
+    try {
+      const lp = document.getElementById("cr-ac-panel-" + input.id);
+      if (lp) lp.style.display = "none";
+    } catch (_) {}
 
     input.value = place.formatted_address || place.name || input.value || "";
 
@@ -3814,42 +3960,179 @@ function patchAutocompleteBindings() {
 
 function handleGeoError(err) {
   setGpsLoading(false);
+  try { setGpsResolving(false); } catch (_) {}
   const startInput = document.getElementById("start");
   if (!startInput) return;
-  if (err?.code === 1) { startInput.placeholder = t("gps_blocked"); return; }
-  if (err?.code === 2) { startInput.placeholder = t("gps_unavail"); return; }
-  if (err?.code === 3) { startInput.placeholder = t("gps_timeout"); return; }
-  startInput.placeholder = t("gps_error");
+  let msg;
+  if (err?.code === 1) { startInput.placeholder = t("gps_blocked"); msg = startInput.placeholder; }
+  else if (err?.code === 2) { startInput.placeholder = t("gps_unavail"); msg = startInput.placeholder; }
+  else if (err?.code === 3) { startInput.placeholder = t("gps_timeout"); msg = startInput.placeholder; }
+  else { startInput.placeholder = t("gps_error"); msg = startInput.placeholder; }
+  startInput.title = msg;
+  try {
+    if (typeof window.__clearRoadUxDiagGps === "function") {
+      window.__clearRoadUxDiagGps(false, { code: err?.code, message: msg, via: "handleGeoError" });
+    }
+  } catch (_) {}
+}
+
+function _normalizeLatLngForGeocode(latLng) {
+  const lat = typeof latLng.lat === "function" ? latLng.lat() : Number(latLng.lat);
+  const lng = typeof latLng.lng === "function" ? latLng.lng() : Number(latLng.lng);
+  return { lat, lng };
+}
+
+function _latLngLikelyUAE(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return lat >= 22.4 && lat <= 26.25 && lng >= 51.3 && lng <= 56.75;
+}
+
+function _geocodeResultHasUAECountry(result) {
+  const comps = result && result.address_components;
+  if (!comps || !comps.length) return false;
+  return comps.some(
+    (c) => c.types && c.types.includes("country") && c.short_name === "AE"
+  );
+}
+
+function _geocodeGranularityRank(result) {
+  const order = ["street_address", "premise", "point_of_interest", "establishment", "route", "neighborhood", "sublocality", "locality", "administrative_area_level_1"];
+  let rank = 0;
+  for (const c of result.address_components || []) {
+    for (const t of c.types || []) {
+      const i = order.indexOf(t);
+      if (i >= 0 && i >= rank) rank = i + 1;
+    }
+  }
+  return rank;
+}
+
+/** Prefer AE country component when coords in UAE; else first formatted line (best-effort), not blind results[0] only for non-UAE. */
+function pickFormattedAddressFromGeocoderResults(results, latLng) {
+  if (!results || !results.length) return null;
+  const { lat, lng } = _normalizeLatLngForGeocode(latLng);
+  const expectUAE = _latLngLikelyUAE(lat, lng);
+  const uaeCandidates = results.filter(_geocodeResultHasUAECountry);
+  if (expectUAE) {
+    if (uaeCandidates.length) {
+      let best = uaeCandidates[0];
+      let bestR = _geocodeGranularityRank(best);
+      for (let i = 1; i < uaeCandidates.length; i++) {
+        const r = _geocodeGranularityRank(uaeCandidates[i]);
+        if (r > bestR) {
+          bestR = r;
+          best = uaeCandidates[i];
+        }
+      }
+      return best.formatted_address || null;
+    }
+    const first = results[0];
+    return (first && first.formatted_address) ? first.formatted_address : null;
+  }
+  const first = results[0];
+  return (first && first.formatted_address) ? first.formatted_address : null;
 }
 
 function reverseGeocodeLatLng(latLng) {
   return new Promise((resolve) => {
     try {
-      new google.maps.Geocoder().geocode({ location: latLng }, (results, status) => {
-        resolve((status === "OK" && results?.[0]) ? results[0].formatted_address : `${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`);
+      const { lat, lng } = _normalizeLatLngForGeocode(latLng);
+      const fallbackCoord = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      const expectUAE = _latLngLikelyUAE(lat, lng);
+      if (!google?.maps?.Geocoder) {
+        try {
+          window.__clearRoadUxDiagGeocode && window.__clearRoadUxDiagGeocode({
+            lat, lng, picked: fallbackCoord, reason: "Geocoder class missing", expectUAE
+          });
+        } catch (_) {}
+        resolve(fallbackCoord);
+        return;
+      }
+      new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
+        let picked = fallbackCoord;
+        let reason = "";
+        if (status !== "OK" || !results?.length) {
+          reason = "no results or status " + String(status);
+        } else {
+          const addr = pickFormattedAddressFromGeocoderResults(results, { lat, lng });
+          const uaeCand = results.filter(_geocodeResultHasUAECountry);
+          picked = addr || fallbackCoord;
+          if (addr) {
+            if (expectUAE && !uaeCand.length) {
+              reason = "UAE bbox: no country AE in results — using first formatted_address as best-effort (verify on map)";
+            } else if (expectUAE) {
+              reason = "formatted address from UAE-filtered geocoder candidate";
+            } else {
+              reason = "formatted address (non-UAE coords, first suitable)";
+            }
+          } else if (expectUAE) {
+            reason = "no formatted address from geocoder — coordinates only";
+          } else {
+            reason = "pick returned null — coordinates only";
+          }
+        }
+        try {
+          window.__clearRoadUxDiagGeocode && window.__clearRoadUxDiagGeocode({
+            lat, lng, status, expectUAE, picked, reason, resultCount: results?.length || 0
+          });
+        } catch (_) {}
+        resolve(picked);
       });
-    } catch { resolve(`${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`); }
+    } catch {
+      try {
+        const { lat, lng } = _normalizeLatLngForGeocode(latLng);
+        const fb = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        window.__clearRoadUxDiagGeocode && window.__clearRoadUxDiagGeocode({ picked: fb, reason: "reverseGeocodeLatLng exception" });
+        resolve(fb);
+      } catch {
+        resolve("");
+      }
+    }
   });
 }
 
 async function applyResolvedStartLocation(latLng, shouldRoute = true) {
   const startInput = document.getElementById("start");
   if (!startInput) return;
-  currentUserCoords = { lat: latLng.lat, lng: latLng.lng };
-  const address = await reverseGeocodeLatLng(latLng);
-  startInput.value = address;
-  startInput.placeholder = t("gps_current");
-  if (map) map.panTo(latLng);
-  if (shouldRoute) tryCalculateRoutesFromInputs();
+  const latN = Number(latLng.lat);
+  const lngN = Number(latLng.lng);
+  const coordStr = `${latN.toFixed(5)}, ${lngN.toFixed(5)}`;
+  try {
+    currentUserCoords = { lat: latN, lng: lngN };
+    let address = "";
+    try {
+      address = await reverseGeocodeLatLng({ lat: latN, lng: lngN });
+    } catch (geoErr) {
+      console.error("[Clear Road UX] reverse geocode threw", geoErr);
+    }
+    const line = (address && String(address).trim()) ? String(address).trim() : coordStr;
+    startInput.value = line;
+    startInput.placeholder = t("gps_current");
+    startInput.title = line;
+    if (map) map.panTo({ lat: latN, lng: lngN });
+    if (shouldRoute) tryCalculateRoutesFromInputs();
+  } catch (e) {
+    console.error("[Clear Road UX] applyResolvedStartLocation failed", e);
+    startInput.value = coordStr;
+    startInput.placeholder = t("gps_current");
+    startInput.title = coordStr;
+    if (shouldRoute) tryCalculateRoutesFromInputs();
+  }
 }
 
 async function requestGPSPatched() {
   if (!navigator.geolocation) {
     const si = document.getElementById("start");
     if (si) si.placeholder = t("gps_unsupported");
+    try {
+      if (typeof window.__clearRoadUxDiagGps === "function") {
+        window.__clearRoadUxDiagGps(false, { code: 0, message: "geolocation not supported", via: "requestGPSPatched" });
+      }
+    } catch (_) {}
     return;
   }
   setGpsLoading(true);
+  setGpsResolving(true);
   const si = document.getElementById("start");
   if (si) si.placeholder = t("gps_detecting");
 
@@ -3857,8 +4140,14 @@ async function requestGPSPatched() {
     async (pos) => {
       await applyResolvedStartLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }, true);
       setGpsLoading(false);
+      setGpsResolving(false);
+      try {
+        if (typeof window.__clearRoadUxDiagGps === "function") {
+          window.__clearRoadUxDiagGps(true, { lat: pos.coords.latitude, lng: pos.coords.longitude, via: "requestGPSPatched" });
+        }
+      } catch (_) {}
     },
-    (err) => { handleGeoError(err); },
+    (err) => { setGpsResolving(false); handleGeoError(err); },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
   );
 }
@@ -3867,7 +4156,15 @@ async function requestGPS() { await requestGPSPatched(); }
 
 function patchGpsEntrypoints() {
   const btn = document.getElementById("gps-btn");
-  if (btn) btn.onclick = requestGPSPatched;
+  if (!btn) return;
+  btn.onclick = function () {
+    console.info("[Clear Road UX] GPS button → requestGPS()");
+    if (typeof requestGPS !== "function") {
+      console.error("[Clear Road UX] requestGPS is not available");
+      return;
+    }
+    requestGPS();
+  };
 }
 
 // ── Step Stability ──
@@ -6111,7 +6408,10 @@ function startDrive(index) {
 
   function tz2SetStartStatus(message) {
     const startInput = tz2El('start');
-    if (startInput && message) startInput.placeholder = message;
+    if (startInput && message) {
+      startInput.placeholder = message;
+      startInput.title = message;
+    }
   }
 
   function tz2SetDriveStatus(message) {
@@ -6193,12 +6493,19 @@ function startDrive(index) {
   const tz2OriginalRequestGPS = typeof requestGPS === 'function' ? requestGPS : null;
   requestGPS = async function() {
     if (!navigator.geolocation) {
-      tz2SetStartStatus('GPS not supported');
+      tz2SetStartStatus(typeof t === 'function' ? t('gps_unsupported') : 'GPS not supported');
+      try { setGpsResolving(false); } catch (_) {}
+      try {
+        if (typeof window.__clearRoadUxDiagGps === "function") {
+          window.__clearRoadUxDiagGps(false, { code: 0, message: "not supported", via: "TZ2 requestGPS" });
+        }
+      } catch (_) {}
       return;
     }
 
     tz2SetGpsLoading(true);
-    tz2SetStartStatus('Detecting GPS…');
+    try { setGpsResolving(true); } catch (_) {}
+    tz2SetStartStatus(typeof t === 'function' ? t('gps_detecting') : 'Detecting location…');
 
     try {
       const pos = await tz2GetCurrentPosition(TZ2_GPS_OPTIONS_STRICT).catch(async function(firstErr) {
@@ -6215,12 +6522,24 @@ function startDrive(index) {
         await tz2OriginalRequestGPS.apply(this, arguments);
       }
 
-      tz2SetStartStatus('Current location');
+      tz2SetStartStatus(typeof t === 'function' ? t('gps_current') : 'Current location');
+      try {
+        if (typeof window.__clearRoadUxDiagGps === 'function') {
+          window.__clearRoadUxDiagGps(true, { lat: pos.coords.latitude, lng: pos.coords.longitude, via: 'TZ2 requestGPS' });
+        }
+      } catch (_) {}
     } catch (err) {
       tz2Log('requestGPS', err);
+      console.error('[Clear Road UX] TZ2 requestGPS failed', err);
       tz2SetStartStatus(tz2ErrorMessage(err));
+      try {
+        if (typeof window.__clearRoadUxDiagGps === 'function') {
+          window.__clearRoadUxDiagGps(false, { code: err && err.code, message: tz2ErrorMessage(err), via: 'TZ2 requestGPS' });
+        }
+      } catch (_) {}
     } finally {
       tz2SetGpsLoading(false);
+      try { setGpsResolving(false); } catch (_) {}
     }
   };
 
@@ -9690,35 +10009,44 @@ __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
   };
   try { window.__CLEAR_ROAD_ROUTE_CALC_CORE__ = calculateRoutes; } catch (_) {}
 
-  // Install UAE-restricted autocomplete and store geometry. This prevents routing by raw text / global plus codes.
+  // Wire TZ2 geometry capture to the single core Places Autocomplete (no second widget per input).
   function installUAEAutocomplete(){
     if (!window.google || !google.maps || !google.maps.places || !google.maps.places.Autocomplete) return false;
+    function getCoreAc(kind){
+      try {
+        if (kind === 'start' && window.__clearRoadStartAutocomplete) return window.__clearRoadStartAutocomplete;
+        if (kind === 'end' && window.__clearRoadEndAutocomplete) return window.__clearRoadEndAutocomplete;
+      } catch (_) {}
+      return null;
+    }
     ['start','end'].forEach((kind) => {
       const input = $(kind);
       if (!input || input.dataset.tz2AutocompleteFinal === '1') return;
-      const ac = new google.maps.places.Autocomplete(input, {
-        fields: ['geometry','place_id','name','formatted_address'],
-        componentRestrictions: { country: 'ae' },
-        strictBounds: false
-      });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        const saved = saveSelectedPoint(kind, place);
-        if (!saved) {
-          tz2State.selected[kind] = null;
+      const ac = getCoreAc(kind);
+      if (!ac || typeof ac.addListener !== 'function') return;
+      if (!ac.__tz2SavePointWired) {
+        ac.__tz2SavePointWired = true;
+        ac.addListener('place_changed', () => {
+          const place = ac.getPlace();
+          const saved = saveSelectedPoint(kind, place);
+          if (!saved) {
+            tz2State.selected[kind] = null;
+            input.__tz2SelectedPoint = null;
+            return;
+          }
+          if (saved.address) input.value = saved.address;
+          const s = ($('start') && $('start').value || '').trim();
+          const e = ($('end') && $('end').value || '').trim();
+          if (s && e) setTimeout(() => window.calculateRoutes(), 50);
+        });
+      }
+      if (!input.__tz2ManualEditWired) {
+        input.__tz2ManualEditWired = true;
+        input.addEventListener('input', () => {
           input.__tz2SelectedPoint = null;
-          return;
-        }
-        if (saved.address) input.value = saved.address;
-        const s = ($('start') && $('start').value || '').trim();
-        const e = ($('end') && $('end').value || '').trim();
-        if (s && e) setTimeout(() => window.calculateRoutes(), 50);
-      });
-      input.addEventListener('input', () => {
-        // If user edits manually, old geometry may no longer match the visible text.
-        input.__tz2SelectedPoint = null;
-        tz2State.selected[kind] = null;
-      });
+          tz2State.selected[kind] = null;
+        });
+      }
       input.dataset.tz2AutocompleteFinal = '1';
       tz2State[kind + 'Autocomplete'] = ac;
     });
@@ -9973,6 +10301,11 @@ __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
     }
   }
   function renderLocal(input){
+    try {
+      if (typeof window.__clearRoadUxDiagFallback === 'function') {
+        window.__clearRoadUxDiagFallback('__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ is false or Places API unavailable — UAE local list');
+      }
+    } catch (_) {}
     const matches = localMatches(input.value);
     const panel = ensurePanel(input);
     positionPanel(input, panel);
@@ -9990,14 +10323,24 @@ __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
     input.dataset.crTz2Bound = VERSION;
     let timer = null;
     input.setAttribute('autocomplete','off');
+    function placesReady(){
+      try {
+        return window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ === true;
+      } catch (_) { return false; }
+    }
     input.addEventListener('input', function(){
+      if (placesReady()) { hidePanel(input); return; }
       clearTimeout(timer);
       timer = setTimeout(function(){ renderLocal(input); }, 220);
     });
-    input.addEventListener('focus', function(){ renderLocal(input); });
+    input.addEventListener('focus', function(){
+      if (placesReady()) return;
+      renderLocal(input);
+    });
     input.addEventListener('blur', function(){ setTimeout(function(){ hidePanel(input); }, 180); });
     input.addEventListener('keydown', function(ev){
       if (ev.key !== 'Enter') return;
+      if (placesReady()) return;
       const matches = localMatches(input.value);
       if (matches.length) {
         ev.preventDefault();
@@ -10007,41 +10350,9 @@ __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
     window.addEventListener('resize', function(){ const p = document.getElementById('cr-ac-panel-' + input.id); if (p && p.style.display !== 'none') positionPanel(input, p); });
     window.addEventListener('scroll', function(){ const p = document.getElementById('cr-ac-panel-' + input.id); if (p && p.style.display !== 'none') positionPanel(input, p); }, true);
   }
-  function installGoogleAutocomplete(){
-    if (!window.google || !google.maps || !google.maps.places || !google.maps.places.Autocomplete) return false;
-    ['start','end'].forEach(function(id){
-      const input = document.getElementById(id);
-      if (!input || input.dataset.crGooglePlacesBound === VERSION) return;
-      input.dataset.crGooglePlacesBound = VERSION;
-      try {
-        const ac = new google.maps.places.Autocomplete(input, {
-          componentRestrictions: { country: 'ae' },
-          fields: ['formatted_address','geometry','name','place_id'],
-          types: ['geocode','establishment']
-        });
-        ac.addListener('place_changed', function(){
-          const place = ac.getPlace ? ac.getPlace() : null;
-          if (place && (place.formatted_address || place.name)) {
-            input.value = place.formatted_address || place.name;
-            input.dataset.crResolvedName = place.name || '';
-            input.dataset.crPlaceId = place.place_id || '';
-            hidePanel(input);
-            input.dispatchEvent(new Event('change', {bubbles:true}));
-            const start = document.getElementById('start');
-            const end = document.getElementById('end');
-            if (start && end && start.value.trim() && end.value.trim() && typeof calculateRoutes === 'function') {
-              setTimeout(function(){ try { calculateRoutes(); } catch(e){ console.warn('[TZ2] calculate after Google place skipped', e); } }, 80);
-            }
-          }
-        });
-      } catch(e){ console.warn('[TZ2] Google Places autocomplete init skipped', e); }
-    });
-    return true;
-  }
   function installTZ2Autocomplete(){
     bindInputAssist(document.getElementById('start'));
     bindInputAssist(document.getElementById('end'));
-    installGoogleAutocomplete();
     document.documentElement.setAttribute('data-cr-tz2-autocomplete', VERSION);
   }
 
@@ -11656,8 +11967,62 @@ __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
 <script id="cr-fix-route-empty-state-final-v2">
 __CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__
 </script>
+<script id="cr-ux-self-check">
+(function () {
+  'use strict';
+  window.__clearRoadRunUxSelfCheck = function (opts) {
+    var rows = [];
+    function row(name, pass, detail) {
+      rows.push({ check: name, pass: !!pass, detail: detail || '' });
+    }
+    try {
+      row('google.maps', !!(window.google && google.maps));
+      row('google.maps.geometry', !!(google && google.maps && google.maps.geometry && google.maps.geometry.spherical));
+      row('google.maps.places.Autocomplete', !!(google && google.maps && google.maps.places && google.maps.places.Autocomplete));
+      row('map_instance', !!window.__CLEAR_ROAD_MAP_READY__, window.__CLEAR_ROAD_MAP_READY__ ? 'google.maps.Map created in initMap' : 'Map not constructed — initMap error or gm_authFailure');
+      row('maps_js_gm_authFailure', !window.__CLEAR_ROAD_MAPS_AUTH_FAILED__, window.__CLEAR_ROAD_MAPS_AUTH_FAILED__ ? 'Key/referrer/API/billing — see [Clear Road UX] console error' : '');
+      row('navigator.geolocation', !!navigator.geolocation);
+      row('window.requestGPS', typeof window.requestGPS === 'function');
+      row('places_autocomplete_ready', window.__CLEAR_ROAD_PLACES_AUTOCOMPLETE_READY__ === true, 'If false: Places did not bind — check legacy Places API + libraries=places');
+      try {
+        var d = window.__CLEAR_ROAD_UX_DIAG__;
+        row('ux_strip_places', !(d && d.places === 'fail'), d ? ('diag places: ' + d.places) : 'diag n/a');
+        row('ux_strip_gps_ok', true, d ? ('last GPS UX: ' + d.gpsLast) : 'GPS not tried yet');
+      } catch (e2) {
+        row('ux_diag_read', false, String(e2 && e2.message));
+      }
+    } catch (e) {
+      row('self-check runner', false, (e && e.message) ? String(e.message) : 'error');
+    }
+    var criticalOk = rows.every(function (r) {
+      if (r.check === 'places_autocomplete_ready') return true;
+      return r.pass;
+    });
+    var allOk = rows.every(function (r) { return r.pass; });
+    var src = (opts && opts.source) ? opts.source : 'manual';
+    console.info('[Clear Road UAE] UX self-check (' + src + ') — critical:', criticalOk, 'full:', allOk);
+    console.table(rows);
+    return { criticalOk: criticalOk, allOk: allOk, rows: rows, source: src };
+  };
+  if (/\bcr_selfcheck=1\b/.test(location.search)) {
+    window.addEventListener('load', function () {
+      setTimeout(function () { window.__clearRoadRunUxSelfCheck({ source: 'query_cr_selfcheck=1' }); }, 2500);
+    });
+  }
+  /* If Maps never calls initMap (e.g. blocked key), still emit a diagnostic table once. */
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (window.__CLEAR_ROAD_MAP_READY__) return;
+      if (typeof window.__clearRoadRunUxSelfCheck === 'function') {
+        window.__clearRoadRunUxSelfCheck({ source: 'load_no_initMap' });
+      }
+    }, 4000);
+  });
+  window.__clearRoadUxSelfCheck = window.__clearRoadRunUxSelfCheck;
+})();
+</script>
 <script async
-src="https://maps.googleapis.com/maps/api/js?key=__CLEAR_ROAD_BUILD_MAPS_API_KEY__&callback=initMap">
+src="https://maps.googleapis.com/maps/api/js?key=__CLEAR_ROAD_BUILD_MAPS_API_KEY__&libraries=places,geometry&callback=initMap">
 </script>
 </body>
 </html>
