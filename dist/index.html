@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- clear-road-uae build 2026-05-03T07:14:12.193Z sha256:6561a645d7caa6c4 source:C:/Users/korot/Downloads/clear-road-uae/input/index.html -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -10798,7 +10799,7 @@ function startDrive(index) {
      i18n, RTL or Voice Input.
 ============================================================ -->
 
-<script>
+<script id="cr-tz10-ai-assistant">
 (function(){
   'use strict';
   if (window.__CLEAR_ROAD_TZ10_AI_ASSISTANT__) return;
@@ -10940,9 +10941,10 @@ function startDrive(index) {
   };
 
 })();
+
 </script>
 <!-- ===== ТЗ-11: CODE CLEANUP / STABILIZATION LAYER ===== -->
-<script>
+<script id="cr-tz11-cleanup">
 (function(){
   'use strict';
   const TZ11_VERSION = 'TZ11_CLEANUP_STABILITY_2026_04_25';
@@ -11067,12 +11069,13 @@ function startDrive(index) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once:true });
   else run();
 })();
+
 </script>
 
 
 
 <!-- ===== ТЗ-12: FINAL AUDIT + DEMO READINESS LAYER ===== -->
-<script>
+<script id="cr-tz12-final-audit">
 (function(){
   'use strict';
   const TZ12_VERSION = 'TZ12_FINAL_AUDIT_DEMO_2026_04_25';
@@ -11256,12 +11259,13 @@ function startDrive(index) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once:true });
   else run();
 })();
+
 </script>
 
 
 
 <!-- ===== ТЗ-13 FINAL: PREMIUM MULTILANGUAGE + VOICE ENGINE ===== -->
-<script>
+<script id="cr-tz13-premium-voice">
 (function(){
   'use strict';
 
@@ -11656,12 +11660,13 @@ function startDrive(index) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })();
+
 </script>
 
 
 
 <!-- ===== ТЗ-1 FINAL: ElevenLabs native-quality TTS layer ===== -->
-<script>
+<script id="cr-tz1-elevenlabs-tts">
 (function(){
   'use strict';
 
@@ -11885,10 +11890,11 @@ function startDrive(index) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installTZ1TTS, { once: true });
   else installTZ1TTS();
 })();
+
 </script>
 
 
-<script>
+<script id="cr-tz2-route-data-integrity">
 // ============================================================
 //  ТЗ-2 FINAL — ROUTE DATA INTEGRITY / UAE ROUTING LOCK
 //  Fixes: huge ETA/distance numbers, NOT_FOUND stale UI, plus-code text routing,
@@ -12292,6 +12298,7 @@ function startDrive(index) {
   document.documentElement.setAttribute('data-tz2-route-integrity', TZ2_VERSION);
   console.info('[TZ2] Route Data Integrity installed', { version: TZ2_VERSION });
 })();
+
 </script>
 
 

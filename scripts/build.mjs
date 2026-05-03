@@ -13,6 +13,12 @@
  * tz6-ai-clean: src/js/cr-tz6-ai-decision-clean.js → __CLEAR_ROAD_BUILD_JS_TZ6_AI_CLEAN__
  * tz6b-final: src/js/cr-tz6b-final-fix.js → __CLEAR_ROAD_BUILD_JS_TZ6B_FINAL__
  * tz7+tz8: src/js/cr-tz7-tz8-ai-bundle.js → __CLEAR_ROAD_BUILD_JS_TZ7_TZ8_BUNDLE__
+ * tz10-ai-assistant: src/js/cr-tz10-ai-assistant.js → __CLEAR_ROAD_BUILD_JS_TZ10_AI_ASSISTANT__
+ * tz11-cleanup: src/js/cr-tz11-cleanup.js → __CLEAR_ROAD_BUILD_JS_TZ11_CLEANUP__
+ * tz12-audit: src/js/cr-tz12-final-audit.js → __CLEAR_ROAD_BUILD_JS_TZ12_FINAL_AUDIT__
+ * tz13-voice: src/js/cr-tz13-premium-voice.js → __CLEAR_ROAD_BUILD_JS_TZ13_PREMIUM_VOICE__
+ * tz1-tts-elevenlabs: src/js/cr-tz1-elevenlabs-tts.js → __CLEAR_ROAD_BUILD_JS_TZ1_TTS_ELEVENLABS__
+ * tz2-route-integrity: src/js/cr-tz2-route-data-integrity.js → __CLEAR_ROAD_BUILD_JS_TZ2_ROUTE_INTEGRITY__
  * Maps key: CLEAR_ROAD_MAPS_API_KEY или GOOGLE_MAPS_API_KEY, иначе src/secrets/maps-api-key.txt (первая строка), иначе встроенный dev-ключ + предупреждение. Флаг --require-maps-key — без env/файла сборка падает (прод).
  * Вход: input/index.html; иначе ../index.html; иначе CLEAR_ROAD_INPUT=...
  * После записи dist: копия в ../index.html (родитель clear-road-uae), чтобы в Загрузках рядом с desktop.ini был актуальный файл. Отключить: --no-copy-parent
@@ -34,6 +40,12 @@ const emptyStateJsFile = join(projectRoot, "src", "js", "cr-route-empty-state-fi
 const tz8RtlJsFile = join(projectRoot, "src", "js", "tz8-rtl-layer.js");
 const uxSelfCheckJsFile = join(projectRoot, "src", "js", "cr-ux-self-check.js");
 const tz9VoiceJsFile = join(projectRoot, "src", "js", "tz9-voice-layer.js");
+const tz10AiAssistantJsFile = join(projectRoot, "src", "js", "cr-tz10-ai-assistant.js");
+const tz11CleanupJsFile = join(projectRoot, "src", "js", "cr-tz11-cleanup.js");
+const tz12FinalAuditJsFile = join(projectRoot, "src", "js", "cr-tz12-final-audit.js");
+const tz13PremiumVoiceJsFile = join(projectRoot, "src", "js", "cr-tz13-premium-voice.js");
+const tz1ElevenlabsTtsJsFile = join(projectRoot, "src", "js", "cr-tz1-elevenlabs-tts.js");
+const tz2RouteIntegrityJsFile = join(projectRoot, "src", "js", "cr-tz2-route-data-integrity.js");
 const uxDiagBootstrapJsFile = join(projectRoot, "src", "js", "cr-ux-diag-bootstrap.js");
 const tz1Tz2FinalPatchJsFile = join(projectRoot, "src", "js", "cr-tz1-tz2-final-patch.js");
 const tz3I18nCleanJsFile = join(projectRoot, "src", "js", "cr-tz3-i18n-clean-layer.js");
@@ -50,6 +62,12 @@ const PLACEHOLDER_EMPTY_STATE_JS = "__CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__";
 const PLACEHOLDER_TZ8_RTL_JS = "__CLEAR_ROAD_BUILD_JS_TZ8_RTL__";
 const PLACEHOLDER_UX_SELF_CHECK_JS = "__CLEAR_ROAD_BUILD_JS_UX_SELF_CHECK__";
 const PLACEHOLDER_TZ9_VOICE_JS = "__CLEAR_ROAD_BUILD_JS_TZ9_VOICE__";
+const PLACEHOLDER_TZ10_AI_ASSISTANT_JS = "__CLEAR_ROAD_BUILD_JS_TZ10_AI_ASSISTANT__";
+const PLACEHOLDER_TZ11_CLEANUP_JS = "__CLEAR_ROAD_BUILD_JS_TZ11_CLEANUP__";
+const PLACEHOLDER_TZ12_FINAL_AUDIT_JS = "__CLEAR_ROAD_BUILD_JS_TZ12_FINAL_AUDIT__";
+const PLACEHOLDER_TZ13_PREMIUM_VOICE_JS = "__CLEAR_ROAD_BUILD_JS_TZ13_PREMIUM_VOICE__";
+const PLACEHOLDER_TZ1_TTS_ELEVENLABS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_TTS_ELEVENLABS__";
+const PLACEHOLDER_TZ2_ROUTE_INTEGRITY_JS = "__CLEAR_ROAD_BUILD_JS_TZ2_ROUTE_INTEGRITY__";
 const PLACEHOLDER_UX_DIAG_BOOTSTRAP_JS = "__CLEAR_ROAD_BUILD_JS_UX_DIAG_BOOTSTRAP__";
 const PLACEHOLDER_TZ1_TZ2_FINAL_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_TZ2_FINAL__";
 const PLACEHOLDER_TZ3_I18N_CLEAN_JS = "__CLEAR_ROAD_BUILD_JS_TZ3_I18N_CLEAN__";
@@ -164,6 +182,90 @@ function injectTz9VoiceJs(html) {
     process.exit(1);
   }
   return html.split(PLACEHOLDER_TZ9_VOICE_JS).join(js);
+}
+
+function injectTz10AiAssistantJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ10_AI_ASSISTANT_JS)) return html;
+  if (!existsSync(tz10AiAssistantJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ10 AI assistant, но нет файла:", tz10AiAssistantJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz10AiAssistantJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ10:", tz10AiAssistantJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ10_AI_ASSISTANT_JS).join(js);
+}
+
+function injectTz11CleanupJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ11_CLEANUP_JS)) return html;
+  if (!existsSync(tz11CleanupJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ11, но нет файла:", tz11CleanupJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz11CleanupJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ11:", tz11CleanupJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ11_CLEANUP_JS).join(js);
+}
+
+function injectTz12FinalAuditJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ12_FINAL_AUDIT_JS)) return html;
+  if (!existsSync(tz12FinalAuditJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ12, но нет файла:", tz12FinalAuditJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz12FinalAuditJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ12:", tz12FinalAuditJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ12_FINAL_AUDIT_JS).join(js);
+}
+
+function injectTz13PremiumVoiceJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ13_PREMIUM_VOICE_JS)) return html;
+  if (!existsSync(tz13PremiumVoiceJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ13, но нет файла:", tz13PremiumVoiceJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz13PremiumVoiceJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ13:", tz13PremiumVoiceJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ13_PREMIUM_VOICE_JS).join(js);
+}
+
+function injectTz1ElevenlabsTtsJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_TTS_ELEVENLABS_JS)) return html;
+  if (!existsSync(tz1ElevenlabsTtsJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 ElevenLabs TTS, но нет файла:", tz1ElevenlabsTtsJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1ElevenlabsTtsJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 TTS:", tz1ElevenlabsTtsJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_TTS_ELEVENLABS_JS).join(js);
+}
+
+function injectTz2RouteIntegrityJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ2_ROUTE_INTEGRITY_JS)) return html;
+  if (!existsSync(tz2RouteIntegrityJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ2 route integrity, но нет файла:", tz2RouteIntegrityJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz2RouteIntegrityJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ2 integrity:", tz2RouteIntegrityJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ2_ROUTE_INTEGRITY_JS).join(js);
 }
 
 function injectUxDiagBootstrapJs(html) {
@@ -321,6 +423,30 @@ function validateArtifact(html) {
     console.error("В артефакте остался плейсхолдер TZ9 voice JS — сборка не завершена.");
     process.exit(1);
   }
+  if (html.includes(PLACEHOLDER_TZ10_AI_ASSISTANT_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ10 AI assistant JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ11_CLEANUP_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ11 cleanup JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ12_FINAL_AUDIT_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ12 final audit JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ13_PREMIUM_VOICE_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ13 premium voice JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_TTS_ELEVENLABS_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 ElevenLabs TTS JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ2_ROUTE_INTEGRITY_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ2 route integrity JS — сборка не завершена.");
+    process.exit(1);
+  }
   if (html.includes(PLACEHOLDER_UX_DIAG_BOOTSTRAP_JS)) {
     console.error("В артефакте остался плейсхолдер UX diag bootstrap JS — сборка не завершена.");
     process.exit(1);
@@ -365,6 +491,12 @@ function validateArtifact(html) {
     ["tz8 RTL", html.includes("clearRoadTZ8RTL")],
     ["UX self-check", html.includes("__clearRoadRunUxSelfCheck")],
     ["tz9 voice", html.includes("clearRoadTZ9VoiceInput")],
+    ["TZ10 AI assistant", html.includes("tz10BuildAIAssistantText")],
+    ["TZ11 cleanup", html.includes("clearRoadTZ11")],
+    ["TZ12 audit", html.includes("clearRoadTZ12")],
+    ["TZ13 language engine", html.includes("clearRoadLanguageEngine")],
+    ["TZ1 ElevenLabs TTS", html.includes("clearRoadTZ1TTS")],
+    ["TZ2 route integrity", html.includes("tz2RouteDataIntegrity")],
     ["UX diag bootstrap", html.includes("clearRoadUxDiagnosticsBootstrap")],
     ["TZ1+TZ2 final patch", html.includes("crTZ1TZ2FinalPatch")],
     ["TZ3 i18n clean", html.includes("clearRoadTZ3Apply")],
@@ -414,6 +546,42 @@ function validateSourceInput(html) {
   if (html.includes(PLACEHOLDER_TZ9_VOICE_JS)) {
     if (!existsSync(tz9VoiceJsFile) || !readFileSync(tz9VoiceJsFile, "utf8").trim()) {
       console.error("input содержит плейсхолдер TZ9 voice — нужен непустой", tz9VoiceJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ10_AI_ASSISTANT_JS)) {
+    if (!existsSync(tz10AiAssistantJsFile) || !readFileSync(tz10AiAssistantJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ10 — нужен непустой", tz10AiAssistantJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ11_CLEANUP_JS)) {
+    if (!existsSync(tz11CleanupJsFile) || !readFileSync(tz11CleanupJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ11 — нужен непустой", tz11CleanupJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ12_FINAL_AUDIT_JS)) {
+    if (!existsSync(tz12FinalAuditJsFile) || !readFileSync(tz12FinalAuditJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ12 — нужен непустой", tz12FinalAuditJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ13_PREMIUM_VOICE_JS)) {
+    if (!existsSync(tz13PremiumVoiceJsFile) || !readFileSync(tz13PremiumVoiceJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ13 — нужен непустой", tz13PremiumVoiceJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_TTS_ELEVENLABS_JS)) {
+    if (!existsSync(tz1ElevenlabsTtsJsFile) || !readFileSync(tz1ElevenlabsTtsJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 TTS — нужен непустой", tz1ElevenlabsTtsJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ2_ROUTE_INTEGRITY_JS)) {
+    if (!existsSync(tz2RouteIntegrityJsFile) || !readFileSync(tz2RouteIntegrityJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ2 route integrity — нужен непустой", tz2RouteIntegrityJsFile);
       process.exit(1);
     }
   }
@@ -470,14 +638,28 @@ function main() {
   let out = injectMapsApiKey(
     injectUxSelfCheckJs(
       injectTz9VoiceJs(
-        injectEmptyStateJs(
-          injectTz8RtlJs(
-            injectTz7Tz8BundleJs(
-              injectTz6bFinalJs(
-                injectTz6AiCleanJs(
-                  injectTz4MobileJs(
-                    injectTz3I18nCleanJs(
-                      injectTz1Tz2FinalJs(injectUxDiagBootstrapJs(injectI18n(injectCss(html))))
+        injectTz2RouteIntegrityJs(
+          injectTz1ElevenlabsTtsJs(
+            injectTz13PremiumVoiceJs(
+              injectTz12FinalAuditJs(
+                injectTz11CleanupJs(
+                  injectTz10AiAssistantJs(
+                    injectEmptyStateJs(
+                      injectTz8RtlJs(
+                        injectTz7Tz8BundleJs(
+                          injectTz6bFinalJs(
+                            injectTz6AiCleanJs(
+                              injectTz4MobileJs(
+                                injectTz3I18nCleanJs(
+                                  injectTz1Tz2FinalJs(
+                                    injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
                     )
                   )
                 )
@@ -526,6 +708,12 @@ function main() {
   console.log("   TZ8 RTL JS:", tz8RtlJsFile);
   console.log("   UX self-check JS:", uxSelfCheckJsFile);
   console.log("   TZ9 voice JS:", tz9VoiceJsFile);
+  console.log("   TZ10 AI assistant JS:", tz10AiAssistantJsFile);
+  console.log("   TZ11 cleanup JS:", tz11CleanupJsFile);
+  console.log("   TZ12 final audit JS:", tz12FinalAuditJsFile);
+  console.log("   TZ13 premium voice JS:", tz13PremiumVoiceJsFile);
+  console.log("   TZ1 ElevenLabs TTS JS:", tz1ElevenlabsTtsJsFile);
+  console.log("   TZ2 route integrity JS:", tz2RouteIntegrityJsFile);
   console.log("   UX diag bootstrap JS:", uxDiagBootstrapJsFile);
   console.log("   TZ1+TZ2 final patch JS:", tz1Tz2FinalPatchJsFile);
   console.log("   TZ3 i18n clean JS:", tz3I18nCleanJsFile);
