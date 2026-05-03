@@ -161,47 +161,20 @@
       source: source || "heuristic"
     };
     _departureDecision = getDepartureDecision(nowSafe, laterSafe, TZ3_WAIT_MINUTES, _predictiveData.source);
-    if (typeof renderPredictiveDecision === "function") renderPredictiveDecision();
+    if (typeof renderResults === "function") {
+      try {
+        renderResults();
+      } catch (_) {}
+    } else if (typeof renderPredictiveDecision === "function") {
+      renderPredictiveDecision();
+    }
   }
 
   function renderPredictiveDecision() {
     const waitHint = document.getElementById("dh-wait-hint");
-    const waitTitle = waitHint ? waitHint.querySelector(".dh-wait-title") : null;
-    const waitTimes = document.getElementById("dh-wait-times");
-    const waitSave = document.getElementById("dh-wait-save");
+    if (waitHint) waitHint.style.display = "none";
     const card = document.getElementById("predictive-card");
-    const advice = document.getElementById("ai-advice-line");
-
     if (card) card.style.display = "none";
-    if (!waitHint || !_departureDecision || !_predictiveData) {
-      if (waitHint) waitHint.style.display = "none";
-      return;
-    }
-
-    const d = _departureDecision;
-    const p = _predictiveData;
-    const sourceText = p.source === "traffic-api" ? "live traffic" : "safe estimate";
-
-    if (d.type === "wait") {
-      if (waitTitle) waitTitle.textContent = "BETTER TIMING";
-      if (waitTimes) waitTimes.textContent = `Wait ${p.waitMinutes} min → ${p.laterMin} min instead of ${p.nowMin} min`;
-      if (waitSave) waitSave.textContent = `Save about ${Math.max(1, p.saving)} min · ${sourceText}`;
-      waitHint.style.display = "block";
-    } else {
-      if (waitTitle) waitTitle.textContent = "AI TIMING";
-      if (waitTimes) waitTimes.textContent = `Go now → ${p.nowMin} min; after ${p.waitMinutes} min ≈ ${p.laterMin} min`;
-      if (waitSave) waitSave.textContent = `${d.why || "No clear advantage from waiting"}`;
-      waitHint.style.display = "block";
-    }
-
-    if (advice && !advice.dataset.tz3Locked) {
-      const base = advice.innerHTML;
-      if (!advice.dataset.originalHtml) advice.dataset.originalHtml = base;
-      const original = advice.dataset.originalHtml;
-      advice.innerHTML = original + `<br><span>WHEN</span>${d.message}`;
-      advice.dataset.tz3Locked = "1";
-      setTimeout(function() { if (advice) advice.dataset.tz3Locked = ""; }, 0);
-    }
   }
 
   function runPredictiveCheck(origin, destination, nowBestMin) {

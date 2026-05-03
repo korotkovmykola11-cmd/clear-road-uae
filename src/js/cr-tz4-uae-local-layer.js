@@ -4,9 +4,69 @@
 //  Predictive Engine, route cards, or core UI rendering.
 // ============================================================
 (function() {
-  const TZ4_SALIK_AED_PER_GATE = 4;
-
   function tz4uaeSafeNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  /** Dubai-local Salik price per gate (AED). Mon–Sat peak 06:00–10:00 & 16:00–20:00 = 6; night 01:00–06:00 = 0; else 4. */
+  function tz4uaeGetSalikPricePerGate(at) {
+    const d = at && at instanceof Date ? at : new Date();
+    let hour = 0;
+    let minute = 0;
+    let wd = "";
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Dubai",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        weekday: "short"
+      }).formatToParts(d);
+      const hP = parts.find(function(p) { return p.type === "hour"; });
+      const mP = parts.find(function(p) { return p.type === "minute"; });
+      const wP = parts.find(function(p) { return p.type === "weekday"; });
+      hour = hP ? Number(hP.value) : d.getUTCHours();
+      minute = mP ? Number(mP.value) : 0;
+      wd = wP ? String(wP.value) : "";
+    } catch (_) {
+      hour = d.getHours();
+      minute = d.getMinutes();
+      wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+    }
+    const h = hour + minute / 60;
+    const isSun = wd === "Sun";
+    const monSat = !isSun;
+
+    if (h >= 1 && h < 6) return 0;
+
+    if (monSat) {
+      if (h >= 6 && h < 10) return 6;
+      if (h >= 16 && h < 20) return 6;
+    }
+    return 4;
+  }
+
+  function tz4uaeApplySalikPricingToRoute(route, at) {
+    if (!route || typeof route !== "object") return route;
+    const when = at instanceof Date ? at : new Date();
+    const cnt = tz4uaeSafeNumber(
+      route.salikCount != null ? route.salikCount : route.tollCount,
+      0
+    );
+    route.salikCount = Math.max(0, Math.round(cnt));
+    const ppg = tz4uaeGetSalikPricePerGate(when);
+    route.salikPricePerGate = ppg;
+    const raw = route.salikCount * ppg;
+    route.salikCost = Math.round(raw * 100) / 100;
+    route.tollCount = route.salikCount;
+    route.tollCost = route.salikCost;
+    route.hasToll = route.salikCost > 0;
+    route.tolls = route.salikCost > 0;
+    return route;
+  }
+
+  const TZ4_SALIK_LEGACY_FALLBACK_PER_GATE = 4;
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   }
@@ -98,20 +158,37 @@
     let count = gates.length;
 
     if (count === 0 && previousCost > 0) {
-      count = Math.max(1, Math.round(previousCost / TZ4_SALIK_AED_PER_GATE));
+      count = Math.max(1, Math.round(previousCost / TZ4_SALIK_LEGACY_FALLBACK_PER_GATE));
       gates.push({ id: "estimated", label: "Estimated Salik area" });
     } else if (count === 0 && previousCount > 0) {
       count = previousCount;
       gates.push({ id: "estimated", label: "Estimated Salik area" });
+    } else if (count === 0 && route && tz4uaeSafeNumber(route.highwayShare, 0) >= 0.42 && /\be11\b|sheikh zayed|szr/.test(s) && /dubai|jumeirah|marina|downtown|business bay|jebel ali|barsha|safa/.test(s)) {
+      const hs = tz4uaeSafeNumber(route.highwayShare, 0);
+      count = Math.min(4, Math.max(1, 1 + Math.floor(hs * 2)));
+      gates.push({ id: "segment-estimate", label: "Salik-prone segments (estimate)" });
     }
 
-    const cost = count * TZ4_SALIK_AED_PER_GATE;
     return {
       gates: gates.slice(0, Math.max(0, count)),
       count: count,
-      cost: cost,
-      confidence: gates.length && gates[0].id !== "estimated" ? "medium" : (cost > 0 ? "low" : "high"),
-      source: gates.length && gates[0].id !== "estimated" ? "route-text" : (cost > 0 ? "existing-estimate" : "no-salik")
+      costPreview: count * TZ4_SALIK_LEGACY_FALLBACK_PER_GATE,
+      confidence:
+        gates.length && gates[0].id !== "estimated" && gates[0].id !== "segment-estimate"
+          ? "medium"
+          : gates[0] && gates[0].id === "segment-estimate"
+            ? "low"
+            : count > 0
+              ? "low"
+              : "high",
+      source:
+        gates.length && gates[0].id !== "estimated" && gates[0].id !== "segment-estimate"
+          ? "route-text"
+          : count > 0
+            ? gates[0] && gates[0].id === "segment-estimate"
+              ? "segment-estimate"
+              : "existing-estimate"
+            : "no-salik"
     };
   }
 
@@ -157,7 +234,9 @@
   }
 
   function tz4uaeBuildAdvice(meta, route) {
-    const tollPart = meta.salik.cost > 0 ? (meta.salik.cost + " AED Salik estimate") : "no Salik detected";
+    const ppg = tz4uaeGetSalikPricePerGate(new Date());
+    const sc = tz4uaeSafeNumber(meta.salik.count, 0) * ppg;
+    const tollPart = sc > 0 ? Math.round(sc * 100) / 100 + " AED Salik" : "no Salik detected";
     const peakPart = meta.pattern.peakWindow.active ? (meta.pattern.peakWindow.label + ", " + meta.pattern.peakLabel + " local risk") : (meta.pattern.peakLabel + " local risk now");
     const corridor = meta.pattern.corridors[0] ? meta.pattern.corridors[0].label : meta.pattern.personality;
     return corridor + " · " + tollPart + " · " + peakPart;
@@ -176,18 +255,29 @@
     };
 
     route.uaeLocal = meta;
-    route.tollCount = salik.count;
-    route.tollCost = salik.cost;
-    route.hasToll = salik.cost > 0;
-    route.tolls = salik.cost > 0;
+    route.salikCount = Math.max(0, Math.round(tz4uaeSafeNumber(salik.count, 0)));
+    route.salikMeta = {
+      confidence: salik.confidence,
+      source: salik.source,
+      gateCount: route.salikCount
+    };
+    route.salikEstimateUncertain =
+      route.salikCount > 0 &&
+      (salik.confidence === "low" ||
+        salik.source === "segment-estimate" ||
+        salik.source === "existing-estimate" ||
+        !!(salik.gates && salik.gates[0] && salik.gates[0].id === "estimated"));
+
+    tz4uaeApplySalikPricingToRoute(route, new Date());
+
     route.uaePeakRisk = pattern.peakRisk;
     route.uaePeakLabel = pattern.peakLabel;
     route.uaeRoutePersonality = pattern.personality;
     route.uaeAdvice = tz4uaeBuildAdvice(meta, route);
 
     if (route.scoreBreakdown) {
-      route.scoreBreakdown.tollCost = salik.cost;
-      route.scoreBreakdown.tollPenalty = salik.cost > 0 ? 6 : 0;
+      route.scoreBreakdown.tollCost = route.salikCost;
+      route.scoreBreakdown.tollPenalty = route.salikCost > 0 ? 6 : 0;
       route.scoreBreakdown.uaePeakRisk = pattern.peakRisk;
       route.scoreBreakdown.uaePeakLabel = pattern.peakLabel;
     }
@@ -230,6 +320,19 @@
     enrichRoutes: tz4uaeEnrichRoutes,
     detectSalik: function(route) { return tz4uaeDetectSalik(tz4uaeRouteText(route), route); },
     detectPattern: function(route) { return tz4uaeDetectLocalPattern(tz4uaeRouteText(route), route); },
-    peakWindow: tz4uaePeakWindow
+    peakWindow: tz4uaePeakWindow,
+    getSalikPricePerGate: tz4uaeGetSalikPricePerGate,
+    applySalikPricingToRoute: tz4uaeApplySalikPricingToRoute,
+    refreshRoutesSalikPricing: function(routes, at) {
+      if (!Array.isArray(routes)) return routes;
+      const when = at instanceof Date ? at : new Date();
+      routes.forEach(function(r) { tz4uaeApplySalikPricingToRoute(r, when); });
+      return routes;
+    }
   }; } catch (_) {}
+  try {
+    window.getSalikPriceUAE = function(currentTime) {
+      return tz4uaeGetSalikPricePerGate(currentTime || new Date());
+    };
+  } catch (_) {}
 })();

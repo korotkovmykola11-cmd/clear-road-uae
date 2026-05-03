@@ -9,8 +9,6 @@
 
   const TZ2_VERSION = 'TZ2_ROUTE_DATA_INTEGRITY_2026_04_25_FINAL';
   const UAE_BOUNDS = { minLat: 22.45, maxLat: 26.35, minLng: 51.45, maxLng: 56.55 };
-  const MAX_UAE_DISTANCE_M = 450000;       // safety cap: no 7,000 km routes in UAE mode
-  const MAX_UAE_DURATION_SEC = 8 * 60 * 60; // safety cap: no 5,000+ minute routes
   const ROUTE_TIMEOUT_MS = 14000;
   const PLUS_CODE_RE = /^[23456789CFGHJMPQRVWX]{4,}\+[23456789CFGHJMPQRVWX]{2,}/i;
 
@@ -65,6 +63,47 @@
     return p.lat >= UAE_BOUNDS.minLat && p.lat <= UAE_BOUNDS.maxLat && p.lng >= UAE_BOUNDS.minLng && p.lng <= UAE_BOUNDS.maxLng;
   }
   function looksLikePlusCode(text){ return PLUS_CODE_RE.test(String(text || '').trim()); }
+  /** Loose match so Autocomplete full address ↔ truncated input still pairs with Places geometry. */
+  function tz2AddressesLooselyMatch(a, b){
+    const x = String(a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const y = String(b || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!x || !y) return false;
+    if (x === y) return true;
+    if (x.includes(y) || y.includes(x)) return true;
+    const strip = function(s){ return s.replace(/[,،]/g, '').replace(/\s+/g, ''); };
+    const xs = strip(x); const ys = strip(y);
+    if (xs === ys) return true;
+    if (ys.includes(xs) || xs.includes(ys)) return true;
+    return false;
+  }
+  /**
+   * Autocomplete binding runs calculateRoutes before TZ2 place_changed saves geometry.
+   * Sync from Autocomplete.getPlace() when text matches — avoids bad geocodes / empty routes.
+   */
+  function syncAutocompleteGeometryIntoTz2(){
+    ['start','end'].forEach(function(kind){
+      const input = $(kind);
+      const ac = kind === 'start'
+        ? window.__clearRoadStartAutocomplete
+        : window.__clearRoadEndAutocomplete;
+      if (!input || !ac || typeof ac.getPlace !== 'function') return;
+      const place = ac.getPlace();
+      if (!place || !place.geometry || !place.geometry.location) return;
+      const addr = (place.formatted_address || place.name || '').trim();
+      const val = (input.value || '').trim();
+      if (!val) return;
+      if (addr && !tz2AddressesLooselyMatch(addr, val)) return;
+      saveSelectedPoint(kind, place);
+    });
+  }
+  function routeDebugOn(){
+    try { return window.__CLEAR_ROAD_ROUTE_DEBUG__ === true; } catch (e) { return false; }
+  }
+  function routeCalcDebug(label, payload){
+    try {
+      if (routeDebugOn()) console.info('[ClearRoad route]', label, payload);
+    } catch (_) {}
+  }
   function appendUAE(text){
     const raw = String(text || '').trim();
     if (!raw) return raw;
@@ -160,13 +199,16 @@
     return { duration: numeric(duration), distance: numeric(distance) };
   }
   function validateRealUaeDirections(result){
-    if (!result || !Array.isArray(result.routes) || !result.routes.length) return { ok:false, message:'No route returned by Google Directions' };
+    if (!result || !Array.isArray(result.routes) || !result.routes.length) {
+      return { ok:false, message:'No route returned by Google Directions' };
+    }
     for (const route of result.routes) {
       const v = routeLegValues(route);
-      if (!v || !Number.isFinite(v.duration) || !Number.isFinite(v.distance)) return { ok:false, message:'Route data is incomplete' };
-      if (v.duration <= 0 || v.distance <= 0) return { ok:false, message:'Route data is invalid' };
-      if (v.duration > MAX_UAE_DURATION_SEC || v.distance > MAX_UAE_DISTANCE_M) {
-        return { ok:false, message:'Route rejected: result is outside realistic UAE range. Choose UAE address from suggestions.' };
+      if (!v || !Number.isFinite(v.duration) || !Number.isFinite(v.distance)) {
+        return { ok:false, message:'Route data is incomplete' };
+      }
+      if (v.duration <= 0 || v.distance <= 0) {
+        return { ok:false, message:'Route data is invalid' };
       }
     }
     return { ok:true };
@@ -188,9 +230,42 @@
     });
   }
   function prepareAnalyzedRoutes(result){
+    const dbg = routeDebugOn();
+    if (dbg && result && Array.isArray(result.routes)) {
+      result.routes.forEach(function(gr, idx) {
+        var L = gr.legs || [];
+        var A = L[0];
+        console.log('[ROUTE PRE] directions-raw', idx, {
+          summary: gr.summary,
+          legs: L.length,
+          durationValue: A && A.duration && A.duration.value,
+          distanceValue: A && A.distance && A.distance.value,
+          startAddress: A && A.start_address,
+          endAddress: A && A.end_address
+        });
+      });
+    }
+
     const routeData = extractRoutesFromDirectionsResult(result);
+    if (dbg) {
+      routeData.forEach(function(r, i) {
+        console.log('[ROUTE PRE] extracted', i, {
+          id: r.id,
+          summary: r.summary,
+          duration: r.duration,
+          duration_in_traffic: r.duration_in_traffic,
+          distance: r.distance,
+          legs: r.legs ? r.legs.length : 0,
+          steps: r.steps ? r.steps.length : 0
+        });
+      });
+    }
+
     const extractionCheck = validateExtractedRoutes(routeData);
-    if (!extractionCheck.ok) throw new Error(extractionCheck.message);
+    if (!extractionCheck.ok) {
+      if (dbg) console.warn('[ROUTE REJECT]', 'validateExtractedRoutes', extractionCheck.message);
+      throw new Error(extractionCheck.message);
+    }
 
     let routes = routeData.map((data, i) => {
       const route = data.rawRoute || data.route;
@@ -212,16 +287,57 @@
       }, i);
     });
 
+    if (dbg) {
+      routes.forEach(function(r, i) {
+        console.log('[ROUTE PRE] normalized', i, {
+          id: r.id,
+          summary: r.summary,
+          durationSec: r.durationSec,
+          durationTrafficSec: r.durationTrafficSec,
+          distanceKm: r.distanceKm,
+          legs: r.legs ? r.legs.length : 0,
+          steps: r.steps ? r.steps.length : 0
+        });
+      });
+    }
+
     const normalizationCheck = validateNormalizedRoutes(routes);
-    if (!normalizationCheck.ok) throw new Error(normalizationCheck.message);
+    if (!normalizationCheck.ok) {
+      if (dbg) console.warn('[ROUTE REJECT]', 'validateNormalizedRoutes', normalizationCheck.message);
+      throw new Error(normalizationCheck.message);
+    }
 
     routes = scoreRoutes(routes);
     const scoreCheck = validateScoredRoutes(routes);
-    if (!scoreCheck.ok) throw new Error(scoreCheck.message);
+    if (!scoreCheck.ok) {
+      if (dbg) console.warn('[ROUTE REJECT]', 'validateScoredRoutes', scoreCheck.message);
+      throw new Error(scoreCheck.message);
+    }
 
     applyClearRoadRouteSanityMarks(routes);
+    const beforeFilter = routes.slice();
     routes = routes.filter(function(r){ return r && !r.invalidRoute; });
-    if (!routes.length) throw new Error("Route data looks incorrect. Please choose a more specific destination.");
+
+    if (!routes.length && beforeFilter.length) {
+      if (dbg) {
+        console.warn('[ROUTE REJECT] prepareAnalyzedRoutes all sanity-filtered — recovering Google routes', beforeFilter.length);
+      }
+      beforeFilter.forEach(function(r) {
+        if (r) {
+          r.invalidRoute = false;
+          delete r.invalidReason;
+        }
+      });
+      routes = beforeFilter.filter(Boolean);
+    }
+
+    if (!routes.length) {
+      routeCalcDebug('prepareAnalyzedRoutes-empty', {
+        reason: 'no routes after processing',
+        rawRouteCount: routeData && routeData.length
+      });
+      throw new Error("Route data looks incorrect. Please choose a more specific destination.");
+    }
     return routes;
   }
   function renderPreparedRoutes(result, routes, originPoint, destinationPoint){
@@ -264,13 +380,24 @@
     if (results) results.innerHTML = '<div class="loading">Finding best UAE routes...</div>';
 
     try {
+      syncAutocompleteGeometryIntoTz2();
       const originPoint = await resolveRoutePoint('start');
       const destinationPoint = await resolveRoutePoint('end');
+      routeCalcDebug('resolved-points', {
+        startInput: startText,
+        endInput: endText,
+        origin: originPoint && originPoint.latLng,
+        destination: destinationPoint && destinationPoint.latLng
+      });
       if (!originPoint || !destinationPoint || !isInsideUAE(originPoint.latLng) || !isInsideUAE(destinationPoint.latLng)) {
         throw new Error('Choose valid UAE start and destination from suggestions.');
       }
 
       const { result, status } = await requestDirectionsSafe(originPoint, destinationPoint);
+      routeCalcDebug('directions-response', {
+        status,
+        routesCount: result && Array.isArray(result.routes) ? result.routes.length : 0
+      });
       if (status !== 'OK') {
         clearRouteStateOnly();
         showRouteError('Could not find UAE route: ' + status + '. Choose address from suggestions.');
@@ -290,6 +417,12 @@
       clearRouteStateOnly();
       showRouteError(err && err.message ? err.message : 'Could not calculate route. Choose UAE address from suggestions.');
       console.warn('[TZ2] calculateRoutes blocked bad route data:', err);
+      routeCalcDebug('calculate-error', {
+        message: err && err.message,
+        startInput: startText,
+        endInput: endText,
+        hints: 'Set window.__CLEAR_ROAD_ROUTE_DEBUG__ = true for full traces'
+      });
     }
   };
   try { window.__CLEAR_ROAD_ROUTE_CALC_CORE__ = calculateRoutes; } catch (_) {}

@@ -2,40 +2,831 @@
 // Загружается после cr-route-cards-ui-cleanup; onclick openRouteDetails / toggleAlternatives — в cr-route-compare-modal-ui.js [v04].
 // Зависит от main: глобалей маршрута, t(), _tz1*, _tz2BuildWhy/TradeOff, …
 
+function crAltRoutesComputeRefs(allRoutes) {
+  const list = Array.isArray(allRoutes)
+    ? allRoutes.filter(function(r) { return r && Number.isFinite(r.index); })
+    : [];
+  let fastest = null;
+  let calmest = null;
+  if (list.length) {
+    fastest = list.slice().sort(function(a, b) { return _tz1Minutes(a) - _tz1Minutes(b); })[0];
+    calmest = list.slice().sort(function(a, b) {
+      const ca = Number.isFinite(a.calmStressScore) ? a.calmStressScore : (Number(a.stressScore) || 999);
+      const cb = Number.isFinite(b.calmStressScore) ? b.calmStressScore : (Number(b.stressScore) || 999);
+      if (ca !== cb) return ca - cb;
+      return _tz1Minutes(a) - _tz1Minutes(b);
+    })[0];
+  }
+  return { fastest: fastest, calmest: calmest };
+}
+
+function crAltRouteHasNoTolls(route) {
+  if (!route) return true;
+  const tc = Number(route.tollCost);
+  if (Number.isFinite(tc) && tc > 0) return false;
+  if (route.hasToll) return false;
+  return true;
+}
+
+function crRefreshRoutesSalikPricing(routes) {
+  if (!Array.isArray(routes) || !routes.length) return;
+  try {
+    if (window.clearRoadTZ4UAE && typeof clearRoadTZ4UAE.refreshRoutesSalikPricing === "function") {
+      clearRoadTZ4UAE.refreshRoutesSalikPricing(routes, new Date());
+      return;
+    }
+  } catch (_) {}
+  const ppg =
+    typeof window.getSalikPriceUAE === "function"
+      ? getSalikPriceUAE(new Date())
+      : 4;
+  routes.forEach(function(r) {
+    if (!r) return;
+    const cnt = Number(r.salikCount != null ? r.salikCount : r.tollCount) || 0;
+    r.salikCount = Math.max(0, Math.round(cnt));
+    r.salikPricePerGate = ppg;
+    const raw = r.salikCount * ppg;
+    r.salikCost = Math.round(raw * 100) / 100;
+    r.tollCost = r.salikCost;
+    r.hasToll = r.salikCost > 0;
+    r.tolls = r.salikCost > 0;
+  });
+}
+
+function crRouteSalikAed(route) {
+  if (!route) return 0;
+  const c = Number(route.salikCost != null ? route.salikCost : route.tollCost);
+  return Number.isFinite(c) ? c : 0;
+}
+
+function crSalikUncertain(route) {
+  return !!(route && route.salikEstimateUncertain);
+}
+
+function crComputeSalikWaitHint(route, tk, sub) {
+  const cnt = route ? Number(route.salikCount != null ? route.salikCount : route.tollCount) || 0 : 0;
+  if (cnt < 1) return null;
+  const getP =
+    window.clearRoadTZ4UAE && typeof clearRoadTZ4UAE.getSalikPricePerGate === "function"
+      ? function(d) { return clearRoadTZ4UAE.getSalikPricePerGate(d); }
+      : typeof window.getSalikPriceUAE === "function"
+        ? window.getSalikPriceUAE
+        : null;
+  if (typeof getP !== "function") return null;
+  const now = new Date();
+  const later = new Date(now.getTime() + 15 * 60 * 1000);
+  const p0 = Number(getP(now));
+  const p1 = Number(getP(later));
+  if (!(p1 < p0)) return null;
+  if (p0 === 6 && p1 === 4) {
+    return {
+      decision: sub(tk("salik_wait_peak_to_off"), { n: 15 }),
+      reason: sub(tk("salik_wait_peak_to_off_reason"), { aed: cnt * (p0 - p1) })
+    };
+  }
+  if (p1 === 0 && p0 > 0) {
+    return {
+      decision: tk("salik_wait_to_free_decision"),
+      reason: sub(tk("salik_wait_to_free_reason"), { n: cnt * p0 })
+    };
+  }
+  return {
+    decision: sub(tk("salik_wait_generic_decision"), { n: 15, from: p0, to: p1 }),
+    reason: sub(tk("salik_wait_generic_reason"), { aed: cnt * (p0 - p1) })
+  };
+}
+
+function crFindFastestFreeRoute(routes) {
+  const list = Array.isArray(routes)
+    ? routes.filter(function(r) { return r && Number.isFinite(r.index); })
+    : [];
+  const frees = list.filter(function(r) { return crRouteSalikAed(r) < 0.01; });
+  if (!frees.length) return null;
+  return frees.slice().sort(function(a, b) {
+    return crHeroMinutesForRoute(a) - crHeroMinutesForRoute(b);
+  })[0];
+}
+
+function crBuildSalikHeroExtras(panelRoute, matchedBest, analyzedRoutes, tk, sub) {
+  const out = {
+    salikLine: "",
+    salikPick: "",
+    disclaimer: "",
+    salikWaitOverride: null
+  };
+  const list = Array.isArray(analyzedRoutes) ? analyzedRoutes : [];
+  if (!panelRoute || !list.length) return out;
+
+  var sw = crComputeSalikWaitHint(panelRoute, tk, sub);
+  if (sw) out.salikWaitOverride = sw;
+
+  if (crSalikUncertain(panelRoute)) {
+    out.disclaimer = tk("salik_disclaimer_uncertain");
+  }
+
+  const counter =
+    matchedBest && panelRoute && Number(panelRoute.index) !== Number(matchedBest.index)
+      ? matchedBest
+      : null;
+  let other = counter;
+  if (!other && matchedBest && list.length > 1) {
+    const cand = list
+      .filter(function(r) { return r && Number(r.index) !== Number(panelRoute.index); })
+      .slice()
+      .sort(function(a, b) {
+        return Math.abs(crHeroMinutesForRoute(a) - crHeroMinutesForRoute(panelRoute)) -
+          Math.abs(crHeroMinutesForRoute(b) - crHeroMinutesForRoute(panelRoute));
+      });
+    other = cand[0] || null;
+  }
+  if (!other || Number(other.index) === Number(panelRoute.index)) {
+    const engineBest = matchedBest;
+    const freeBest = crFindFastestFreeRoute(list);
+    if (engineBest && freeBest && Number(engineBest.index) !== Number(freeBest.index)) {
+      const tE = crHeroMinutesForRoute(engineBest);
+      const tF = crHeroMinutesForRoute(freeBest);
+      const cE = crRouteSalikAed(engineBest);
+      const save = tF - tE;
+      if (cE > 4 && save < 5) {
+        out.salikPick = tk("salik_rule_recommend_free");
+      } else if (cE > 0 && save >= 8) {
+        out.salikPick = tk("salik_rule_recommend_paid");
+      } else if (cE > 0) {
+        out.salikPick = tk("salik_rule_either");
+      }
+    }
+    return out;
+  }
+
+  const pMin = crHeroMinutesForRoute(panelRoute);
+  const oMin = crHeroMinutesForRoute(other);
+  const pCost = crRouteSalikAed(panelRoute);
+  const oCost = crRouteSalikAed(other);
+  const dMin = pMin - oMin;
+  const dCost = pCost - oCost;
+
+  if (Math.abs(dMin) < 2 && Math.abs(dCost) < 1.5) {
+    out.salikLine = tk("salik_compare_same_time_cost");
+    out.salikPick = tk("salik_pick_either");
+  } else if (dMin <= -3 && dCost > 0.5) {
+    out.salikLine = sub(tk("salik_line_faster_costs"), { m: Math.abs(dMin), aed: Math.round(dCost) });
+    out.salikPick = tk("salik_pick_time_priority");
+  } else if (dMin >= 3 && oCost < pCost - 0.5) {
+    out.salikLine = sub(tk("salik_line_free_slower"), { m: Math.abs(dMin) });
+    out.salikPick = tk("salik_pick_money_priority");
+  } else if (Math.abs(dMin) < 5 && pCost > 4 && matchedBest && Number(panelRoute.index) === Number(matchedBest.index)) {
+    out.salikLine = sub(tk("salik_line_small_time_paid"), { m: Math.abs(dMin), aed: Math.round(pCost) });
+    out.salikPick = tk("salik_pick_consider_free");
+  } else if (pCost > 0.5 && oCost < 0.5 && dMin < 0) {
+    out.salikLine = sub(tk("salik_line_faster_costs"), { m: Math.abs(dMin), aed: Math.round(pCost) });
+    out.salikPick = tk("salik_pick_time_priority");
+  } else if (pCost < 0.5 && oCost > 0.5 && dMin > 0) {
+    out.salikLine = sub(tk("salik_line_free_slower"), { m: Math.abs(dMin) });
+    out.salikPick = tk("salik_pick_money_priority");
+  } else {
+    out.salikLine = tk("salik_compare_same_time_cost");
+    out.salikPick = tk("salik_pick_either");
+  }
+
+  const engineBest = matchedBest;
+  const freeBest = crFindFastestFreeRoute(list);
+  if (engineBest && freeBest && crRouteSalikAed(engineBest) > 4) {
+    const save = crHeroMinutesForRoute(freeBest) - crHeroMinutesForRoute(engineBest);
+    if (save < 5 && Number(panelRoute.index) === Number(engineBest.index)) out.salikPick = tk("salik_rule_recommend_free");
+  }
+  if (engineBest && freeBest && crRouteSalikAed(engineBest) > 0) {
+    const save = crHeroMinutesForRoute(freeBest) - crHeroMinutesForRoute(engineBest);
+    if (save >= 8 && Number(panelRoute.index) === Number(engineBest.index)) out.salikPick = tk("salik_rule_recommend_paid");
+  }
+
+  return out;
+}
+
+/**
+ * Premium decision copy: max 2 phrases, outcome-first (existing metrics only).
+ * @param {object} route
+ * @param {number} [displayNum] — UI route # (1-based), for lead-row treatment
+ */
+function buildRouteSellingPoints(route, displayNum) {
+  if (!route) return [];
+  const tk = typeof t === "function" ? t : function(k) { return k; };
+  const best = currentDecision && currentDecision.bestRoute;
+  const routes = Array.isArray(analyzedRoutes)
+    ? analyzedRoutes.filter(function(r) { return r && Number.isFinite(r.index); })
+    : [];
+
+  const num =
+    Number(displayNum) > 0
+      ? Number(displayNum)
+      : Number(route.displayIndex) > 0
+        ? Number(route.displayIndex)
+        : Number(route.index) + 1;
+
+  const rankOf = function(r) {
+    return typeof _tz1TrafficRank === "function" ? _tz1TrafficRank(r.traffic) : 2;
+  };
+  const minOf = function(r) {
+    return typeof _tz1Minutes === "function" ? Math.round(_tz1Minutes(r)) : 0;
+  };
+
+  let fastest = null;
+  let calmest = null;
+  if (routes.length) {
+    fastest = routes.slice().sort(function(a, b) { return minOf(a) - minOf(b); })[0];
+    calmest = routes.slice().sort(function(a, b) {
+      const ca = Number.isFinite(a.calmStressScore) ? a.calmStressScore : (Number(a.stressScore) || 999);
+      const cb = Number.isFinite(b.calmStressScore) ? b.calmStressScore : (Number(b.stressScore) || 999);
+      if (ca !== cb) return ca - cb;
+      return minOf(a) - minOf(b);
+    })[0];
+  }
+
+  const rMin = minOf(route);
+  const bMin = best ? minOf(best) : rMin;
+  const deltaVsBest = bMin - rMin;
+  const rankR = rankOf(route);
+  const rankB = best ? rankOf(best) : rankR;
+  const isFastest =
+    fastest &&
+    routes.length >= 1 &&
+    Number(fastest.index) === Number(route.index);
+  const isCalmest =
+    calmest &&
+    routes.length >= 1 &&
+    Number(calmest.index) === Number(route.index);
+  const isAi = best && Number(route.index) === Number(best.index);
+
+  const delayR = Number(route.delayMinutes) || 0;
+  const delayB = best ? Number(best.delayMinutes) || 0 : delayR;
+  const compR = Number(route.complexity) || 0;
+  const compB = best ? Number(best.complexity) || 0 : compR;
+  const stressR = Number(route.stressScore);
+  const stressB = best ? Number(best.stressScore) : NaN;
+  const hwR = Number(route.highwayShare) || 0;
+  const hwB = best ? Number(best.highwayShare) || 0 : hwR;
+  const noToll = crAltRouteHasNoTolls(route);
+  const bestHasToll = best && !crAltRouteHasNoTolls(best);
+
+  const pushPair = function(a, b) {
+    const out = [];
+    if (a) out.push(a);
+    if (b && b !== a) out.push(b);
+    return out.slice(0, 2);
+  };
+
+  /** #1 in list = headline lane: reads as the default recommendation. */
+  if (num === 1) {
+    if (isAi) return pushPair(tk("alt_pv_r1_ai_a"), tk("alt_pv_r1_ai_b"));
+    if (isFastest) return pushPair(tk("alt_pv_r1_fast_a"), tk("alt_pv_r1_fast_b"));
+    if (isCalmest) return pushPair(tk("alt_pv_r1_calm_a"), tk("alt_pv_r1_calm_b"));
+    if (noToll && bestHasToll) return pushPair(tk("alt_pv_r1_cash_a"), tk("alt_pv_r1_cash_b"));
+    if (rankR === 1 && rankB > 1) {
+      return pushPair(tk("alt_pv_r1_clear_a"), tk("alt_pv_r1_clear_b"));
+    }
+    if (deltaVsBest >= 1) {
+      return pushPair(
+        tk("alt_pv_save_a").replace(/\{n\}/g, String(Math.max(1, deltaVsBest))),
+        tk("alt_pv_save_b_clear")
+      );
+    }
+    return pushPair(tk("alt_pv_r1_default_a"), tk("alt_pv_r1_default_b"));
+  }
+
+  if (isAi) return pushPair(tk("alt_pv_ai_alt_a"), tk("alt_pv_ai_alt_b"));
+
+  if (isFastest) {
+    return pushPair(
+      tk("alt_pv_fast_a"),
+      hwR >= 0.42 ? tk("alt_pv_fast_hwy_b") : tk("alt_pv_fast_b")
+    );
+  }
+
+  if (isCalmest) return pushPair(tk("alt_pv_calm_a"), tk("alt_pv_calm_b"));
+
+  if (deltaVsBest >= 1) {
+    return pushPair(
+      tk("alt_pv_save_a").replace(/\{n\}/g, String(Math.max(1, deltaVsBest))),
+      rankR < rankB ? tk("alt_pv_save_b_spike") : tk("alt_pv_save_b_run")
+    );
+  }
+
+  if (noToll && bestHasToll) {
+    const add = Math.max(1, Math.abs(deltaVsBest));
+    return pushPair(
+      tk("alt_pv_toll_a"),
+      deltaVsBest <= -1
+        ? tk("alt_pv_toll_b_long").replace(/\{n\}/g, String(add))
+        : tk("alt_pv_toll_b_same")
+    );
+  }
+
+  if (rankR < rankB || (rankR === 1 && rankB > 1)) {
+    return pushPair(tk("alt_pv_spike_a"), tk("alt_pv_spike_b"));
+  }
+
+  if (delayR + 2 <= delayB && delayB > 2) {
+    return pushPair(tk("alt_pv_jam_a"), tk("alt_pv_jam_b"));
+  }
+
+  if (compR + 2 <= compB && compR <= 10) {
+    return pushPair(tk("alt_pv_turns_easy_a"), tk("alt_pv_turns_easy_b"));
+  }
+
+  if (Number.isFinite(stressR) && Number.isFinite(stressB) && stressR < stressB - 1) {
+    return pushPair(tk("alt_pv_calm_a"), tk("alt_pv_stress_b"));
+  }
+
+  if (hwR >= hwB + 0.12 && hwR >= 0.4) {
+    return pushPair(tk("alt_pv_hwy_a"), tk("alt_pv_hwy_b"));
+  }
+
+  if (best && compR >= compB + 4 && compR >= 12) {
+    return pushPair(tk("alt_pv_turns_hard_a"), tk("alt_pv_turns_hard_b"));
+  }
+
+  if (deltaVsBest <= -2 && noToll) {
+    return pushPair(
+      tk("alt_pv_budget_a"),
+      tk("alt_pv_budget_b").replace(/\{n\}/g, String(Math.max(1, Math.abs(deltaVsBest))))
+    );
+  }
+
+  return pushPair(tk("alt_pv_alt_a"), tk("alt_pv_alt_b"));
+}
+try {
+  window.buildRouteSellingPoints = buildRouteSellingPoints;
+} catch (_) {}
+
+function crAltBadgesHtml(route, ctx) {
+  const best = ctx.best;
+  const fastest = ctx.fastest;
+  const calmest = ctx.calmest;
+  const badges = [];
+  if (fastest && route && Number(route.index) === Number(fastest.index)) {
+    badges.push({ cls: "alt-badge-fast", label: "FAST" });
+  }
+  if (calmest && route && Number(route.index) === Number(calmest.index)) {
+    badges.push({ cls: "alt-badge-calm", label: "CALM" });
+  }
+  if (crAltRouteHasNoTolls(route)) {
+    badges.push({ cls: "alt-badge-toll", label: "NO TOLLS" });
+  }
+  if (best && calmest && route && Number(route.index) !== Number(calmest.index)) {
+    const rs = Number(route.stressScore);
+    const bs = Number(best.stressScore);
+    if (Number.isFinite(rs) && Number.isFinite(bs) && rs < bs - 0.25) {
+      badges.push({ cls: "alt-badge-stress", label: "LESS STRESS" });
+    }
+  }
+  let h = "";
+  badges.forEach(function(b) {
+    h += '<span class="alt-route-badge ' + b.cls + '">' + _tz1EscapeHTML(b.label) + "</span>";
+  });
+  return h;
+}
+
+function crRouteKmForAi(route) {
+  if (!route) return 0;
+  if (Number.isFinite(route.distanceKm)) return Math.round(route.distanceKm * 10) / 10;
+  if (Number.isFinite(route.distance)) return Math.round((Number(route.distance) / 1000) * 10) / 10;
+  return 0;
+}
+
+function crMirrorTz3TimingBranch(saving) {
+  const s = Number(saving);
+  if (!Number.isFinite(s)) return "same";
+  if (s >= 3) return "wait";
+  if (s <= -3) return "leave_now";
+  if (s >= 2) return "wait";
+  return "same";
+}
+
+function crHeroMinutesForRoute(route) {
+  if (!route) return 1;
+  try {
+    if (typeof getDisplayMinutes === "function") {
+      const m = getDisplayMinutes(route);
+      if (Number.isFinite(Number(m))) return Math.max(1, Math.round(Number(m)));
+    }
+  } catch (_) {}
+  if (typeof _tz1Minutes === "function") return Math.max(1, Math.round(_tz1Minutes(route)));
+  if (Number.isFinite(Number(route.time))) return Math.max(1, Math.round(Number(route.time)));
+  return 1;
+}
+
+/** Hero panel: timing + Salik (syncs with selected route). */
+function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
+  const tk = typeof t === "function" ? t : function(k) { return k; };
+  const sub = function(str, o) {
+    let s = String(str || "");
+    Object.keys(o || {}).forEach(function(k) {
+      s = s.split("{" + k + "}").join(String(o[k]));
+    });
+    return s;
+  };
+  const isBest = !!(panelRoute && matchedBest && Number(panelRoute.index) === Number(matchedBest.index));
+  const waitMinutes =
+    window.clearRoadTZ3Predictive && Number.isFinite(Number(clearRoadTZ3Predictive.waitMinutes))
+      ? Number(clearRoadTZ3Predictive.waitMinutes)
+      : 15;
+
+  const salikX = crBuildSalikHeroExtras(panelRoute, matchedBest, analyzedRoutes || [], tk, sub);
+  const title = isBest ? tk("ai_hero_title_best") : tk("ai_hero_title_chosen");
+  let decision = "";
+  let reason = "";
+
+  if (salikX.salikWaitOverride) {
+    decision = salikX.salikWaitOverride.decision;
+    reason = salikX.salikWaitOverride.reason;
+  } else {
+    let nowMin = crHeroMinutesForRoute(panelRoute);
+    let laterMin = nowMin;
+
+    if (
+      isBest &&
+      typeof _predictiveData !== "undefined" &&
+      _predictiveData &&
+      Number.isFinite(Number(_predictiveData.nowMin)) &&
+      Number.isFinite(Number(_predictiveData.laterMin))
+    ) {
+      nowMin = Math.max(1, Math.round(Number(_predictiveData.nowMin)));
+      laterMin = Math.max(1, Math.round(Number(_predictiveData.laterMin)));
+    } else {
+      try {
+        if (window.clearRoadTZ3Predictive && typeof clearRoadTZ3Predictive.estimateLaterMinutes === "function") {
+          laterMin = clearRoadTZ3Predictive.estimateLaterMinutes(nowMin);
+        }
+      } catch (_) {}
+      laterMin = Math.max(1, Math.round(Number(laterMin) || nowMin));
+    }
+
+    const saving = nowMin - laterMin;
+    const branch = crMirrorTz3TimingBranch(saving);
+
+    if (branch === "wait") {
+      decision = sub(tk("ai_hero_decision_wait"), { n: waitMinutes });
+      reason = isBest ? tk("ai_hero_reason_wait_best") : tk("ai_hero_reason_wait_alt");
+    } else if (branch === "leave_now") {
+      decision = tk("ai_hero_decision_leave");
+      reason = isBest ? tk("ai_hero_reason_leave_best") : tk("ai_hero_reason_leave_alt");
+    } else {
+      decision = tk("ai_hero_decision_same");
+      reason = isBest ? tk("ai_hero_reason_same_best") : tk("ai_hero_reason_same_alt");
+    }
+  }
+
+  return {
+    title: title,
+    decision: decision,
+    reason: reason,
+    salikLine: salikX.salikLine,
+    salikPick: salikX.salikPick,
+    salikDisclaimer: salikX.disclaimer
+  };
+}
+try {
+  window.crBuildAiHeroCopy = crBuildAiHeroCopy;
+} catch (_) {}
+
+/** AI verdict + compact card copy (presentation only; uses existing route metrics). */
+function crBuildRouteAiCopy(route, best, fastest, calmest, allRoutes) {
+  const tk = typeof t === "function" ? t : function(k) { return k; };
+  const minOf = function(r) {
+    return typeof _tz1Minutes === "function" ? Math.round(_tz1Minutes(r)) : 0;
+  };
+  const isBest = best && route && Number(route.index) === Number(best.index);
+  const isFastest = fastest && route && Number(route.index) === Number(fastest.index);
+  let mostDirect = null;
+  if (Array.isArray(allRoutes) && allRoutes.length) {
+    const cand = allRoutes
+      .filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+      .slice();
+    cand.sort(function(a, b) {
+      return crRouteKmForAi(a) - crRouteKmForAi(b);
+    });
+    mostDirect = cand[0] || null;
+  }
+  const isMostDirect = !!(mostDirect && !isBest && Number(route.index) === Number(mostDirect.index));
+  const mR = minOf(route);
+  const mB = best ? minOf(best) : mR;
+  const delta = mR - mB;
+
+  let verdictKey = "ai_verdict_alt";
+  if (isBest) verdictKey = "ai_verdict_best_balance";
+  else if (isFastest) verdictKey = "ai_verdict_fastest_now";
+  else if (isMostDirect) verdictKey = "ai_verdict_most_direct";
+  else if (delta >= 9 && !isFastest) verdictKey = "ai_verdict_not_recommended";
+
+  let badgeKey = "ai_badge_calmer_route";
+  if (isBest) badgeKey = "ai_badge_best_balance";
+  else if (isFastest) badgeKey = "ai_badge_fastest_now";
+  else if (verdictKey === "ai_verdict_not_recommended") badgeKey = "ai_badge_avoid";
+  else badgeKey = "ai_badge_calmer_route";
+
+  const badgeLabel = tk(badgeKey);
+  let cardTitle = "";
+  let cardLine1 = "";
+  let cardRec = "";
+
+  if (isBest) {
+    cardTitle = tk("ai_card_title_balance");
+    cardLine1 = tk("ai_card_line_balance");
+    cardRec = tk("ai_card_rec_balance");
+  } else if (isFastest) {
+    cardTitle = tk("ai_card_title_fast");
+    cardLine1 = tk("ai_card_line_fast");
+    cardRec = tk("ai_card_rec_fast");
+  } else if (isMostDirect) {
+    cardTitle = tk("ai_card_title_shorter");
+    cardLine1 = tk("ai_card_line_shorter");
+    cardRec = tk("ai_card_rec_shorter");
+  } else if (verdictKey === "ai_verdict_not_recommended") {
+    cardTitle = tk("ai_card_title_skip");
+    cardLine1 = tk("ai_card_line_skip");
+    cardRec = tk("ai_card_rec_skip");
+  } else {
+    cardTitle = tk("ai_card_title_alt");
+    cardLine1 = tk("ai_card_line_alt");
+    cardRec = tk("ai_card_rec_alt");
+  }
+
+  return {
+    verdictKey: verdictKey,
+    badgeKey: badgeKey,
+    badgeLabel: badgeLabel,
+    cardTitle: cardTitle,
+    cardLine1: cardLine1,
+    cardRec: cardRec,
+    why: cardLine1,
+    trade: "",
+    when: cardRec
+  };
+}
+try {
+  window.crBuildRouteAiCopy = crBuildRouteAiCopy;
+} catch (_) {}
+
+function crSalikCardHtml(route, tk) {
+  const sub = function(str, o) {
+    let s = String(str || "");
+    Object.keys(o || {}).forEach(function(k) {
+      s = s.split("{" + k + "}").join(String(o[k]));
+    });
+    return s;
+  };
+  const aed = crRouteSalikAed(route);
+  const gates = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : route.tollCount) || 0));
+  const headline =
+    aed < 0.01 ? tk("salik_line_headline_free") : sub(tk("salik_line_headline_cost"), { aed: Math.round(aed * 100) / 100 });
+  const note = aed > 0.01 ? tk("salik_card_note_toll") : tk("salik_card_note_free");
+  const extra = crSalikUncertain(route) ? " " + tk("salik_disclaimer_uncertain") : "";
+  const gatePart =
+    gates > 0
+      ? ' · <span class="dashboard-route-salik-gates">' + _tz1EscapeHTML(sub(tk("salik_gates_label"), { n: gates })) + "</span>"
+      : "";
+  return (
+    '<div class="dashboard-route-salik">' +
+    '<div class="dashboard-route-salik-head">' +
+    _tz1EscapeHTML(headline) +
+    gatePart +
+    "</div>" +
+    '<div class="dashboard-route-salik-note">' +
+    _tz1EscapeHTML(note + extra) +
+    "</div></div>"
+  );
+}
+
+function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs) {
+  if (!Array.isArray(allRoutes) || !allRoutes.length || !best) return "";
+  const sorted =
+    typeof crSortRoutesByIndex === "function"
+      ? crSortRoutesByIndex(allRoutes)
+      : allRoutes
+          .filter(function(r) { return r && Number.isFinite(r.index); })
+          .slice()
+          .sort(function(a, b) { return Number(a.index) - Number(b.index); });
+  const selIdx =
+    selectedRoute && Number.isFinite(selectedRoute.index) ? Number(selectedRoute.index) : NaN;
+  const ctx = { best: best, fastest: refs.fastest, calmest: refs.calmest };
+  let inner = "";
+  sorted.forEach(function(route, slot) {
+    const idx = Number(route.index);
+    const isSel = Number.isFinite(selIdx) && idx === selIdx;
+    const num = route.displayIndex || idx + 1;
+    const min = typeof _tz1Minutes === "function" ? _tz1Minutes(route) : 0;
+    const road = typeof _tz1RouteName === "function" ? _tz1RouteName(route) : "";
+    const isBest = Number(route.index) === Number(best.index);
+    const minUnit =
+      typeof t === "function" ? t("dh_min_unit") : "min";
+    const tk = typeof t === "function" ? t : function(k) { return k; };
+    const isFastestRoute =
+      ctx.fastest && Number(route.index) === Number(ctx.fastest.index);
+    let roleBadgeLabel = tk("route_role_alt");
+    let roleBadgeEmoji = "";
+    if (isBest) {
+      roleBadgeEmoji = "🟢 ";
+      roleBadgeLabel = tk("route_role_best");
+    } else if (isFastestRoute) {
+      roleBadgeEmoji = "⚡ ";
+      roleBadgeLabel = tk("route_role_fastest");
+    }
+    const distKm =
+      route.distanceKm ||
+      (route.distance ? Math.round((Number(route.distance) / 1000) * 10) / 10 : 0);
+    const arrival = new Date(Date.now() + min * 60000);
+    const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const markerColor =
+      typeof crRoutePaletteColorForSlot === "function"
+        ? crRoutePaletteColorForSlot(slot)
+        : "#3b82f6";
+    const routeHeading =
+      tk("ai_route_option") + " " + num + " · " + (road || tk("ai_route_unnamed"));
+    inner +=
+      '<div tabindex="0" role="button" class="alt-route-row dashboard-route-card' +
+      (isBest ? " alt-route-row--best dashboard-route-card--ai-pick" : "") +
+      (isSel ? " is-selected" : "") +
+      '" data-route-index="' +
+      idx +
+      '" data-route-slot="' +
+      slot +
+      '" data-route-line-color="' +
+      _tz1EscapeHTML(markerColor) +
+      '" onclick="selectDisplayedRoute(' +
+      idx +
+      ')" onkeydown="if(event.key===&quot;Enter&quot;||event.key===&quot; &quot;){event.preventDefault();selectDisplayedRoute(' +
+      idx +
+      ');}">';
+    inner += '<span class="dashboard-route-line-marker" style="background-color:' + markerColor + '" aria-hidden="true"></span>';
+    inner += '<div class="dashboard-route-card-body">';
+    inner += '<div class="alt-route-row-main">';
+    inner += '<div class="dashboard-route-heading">' + _tz1EscapeHTML(routeHeading) + "</div>";
+    inner += '<div class="alt-route-time-block">';
+    inner +=
+      '<span class="alt-route-time">' +
+      _tz1EscapeHTML(String(Math.round(min))) +
+      "</span>";
+    inner +=
+      '<span class="alt-route-time-unit">' +
+      _tz1EscapeHTML(minUnit) +
+      "</span>";
+    inner +=
+      '<span class="dashboard-route-role-badge">' +
+      _tz1EscapeHTML(roleBadgeEmoji + roleBadgeLabel) +
+      "</span>";
+    inner += "</div>";
+    inner +=
+      '<div class="dashboard-route-meta">' +
+      _tz1EscapeHTML(String(distKm)) +
+      " km · " +
+      _tz1EscapeHTML(tk("dash_eta_arrival_prefix")) +
+      " " +
+      _tz1EscapeHTML(arrivalStr) +
+      "</div>";
+    inner += crSalikCardHtml(route, tk);
+    inner +=
+      '<button type="button" class="dashboard-route-select-btn" onclick="event.stopPropagation();selectDisplayedRoute(' +
+      idx +
+      ')">' +
+      _tz1EscapeHTML(tk("ai_default_route_cta")) +
+      "</button>";
+    inner += "</div></div></div>";
+  });
+  return (
+    '<section class="dashboard-routes-panel alt-routes-panel" id="alt-routes-panel">' +
+    '<h2 class="dashboard-routes-title">Alternative Routes</h2>' +
+    '<div class="alt-routes-list dashboard-routes-list">' +
+    inner +
+    "</div></section>"
+  );
+}
+
+function selectDisplayedRoute(routeIndex) {
+  try {
+    const idx = Number(routeIndex);
+    if (!Array.isArray(analyzedRoutes) || !Number.isFinite(idx)) return;
+    const picked = analyzedRoutes.find(function(r) { return r && Number(r.index) === idx; });
+    if (!picked) return;
+    try {
+      window.__clearRoadUserPickIndex = idx;
+    } catch (_) {}
+    try {
+      window.selectedRouteId = picked && picked.id != null ? picked.id : "route-" + (idx + 1);
+    } catch (_) {}
+    selectedRoute = picked;
+    if (
+      typeof currentDirectionsResult !== "undefined" &&
+      currentDirectionsResult &&
+      typeof drawRoutes === "function"
+    ) {
+      try {
+        drawRoutes(currentDirectionsResult);
+      } catch (e) {
+        console.warn("drawRoutes after pick", e);
+      }
+    }
+    if (typeof renderResults === "function") renderResults();
+  } catch (e) {
+    console.warn("selectDisplayedRoute", e);
+  }
+}
+try {
+  window.selectDisplayedRoute = selectDisplayedRoute;
+} catch (_) {}
+
+function selectRecommendedRoute() {
+  try {
+    if (!Array.isArray(analyzedRoutes) || !currentDecision || !currentDecision.bestRoute) return;
+    const best = currentDecision.bestRoute;
+    const bi = Number(best.index);
+    if (!Number.isFinite(bi)) return;
+    let pickRaw = null;
+    try {
+      pickRaw = window.__clearRoadUserPickIndex;
+    } catch (_) {
+      pickRaw = null;
+    }
+    const pickNum = pickRaw !== null && pickRaw !== undefined && String(pickRaw) !== "" ? Number(pickRaw) : NaN;
+    const onBest =
+      selectedRoute && best && Number(selectedRoute.index) === Number(best.index);
+    const pickIsBestOrUnset = !Number.isFinite(pickNum) || pickNum === bi;
+    if (onBest && pickIsBestOrUnset) return;
+    selectDisplayedRoute(bi);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        try {
+          var el = document.querySelector("#alt-routes-panel .dashboard-route-card[data-route-index=\"" + bi + '"]');
+          if (!el) el = document.querySelector(".dashboard-route-card[data-route-index=\"" + bi + '"]');
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        } catch (_) {}
+      });
+    });
+  } catch (e) {
+    console.warn("selectRecommendedRoute", e);
+  }
+}
+try {
+  window.selectRecommendedRoute = selectRecommendedRoute;
+} catch (_) {}
+
 function renderResults() {
   const container = document.getElementById("results");
   const quickAccess = document.getElementById("quick-access");
+  const aiPanel = document.getElementById("ai-decision-panel");
+
+  function clearAiPlaceholder() {
+    const ph = document.getElementById("ai-decision-placeholder");
+    if (ph && ph.parentNode) ph.parentNode.removeChild(ph);
+  }
 
   if (!container) return;
+  const tk =
+    typeof t === "function"
+      ? t
+      : function(k) {
+          return k;
+        };
   const lifecycleState = String(document.documentElement.getAttribute("data-route-state") || "").toUpperCase();
   const hasRenderableRoutes =
     Array.isArray(analyzedRoutes) &&
     analyzedRoutes.length > 0 &&
     currentDecision &&
     currentDecision.bestRoute;
+
+  function idlePlaceholderHtml() {
+    return (
+      '<div class="dashboard-routes-empty-placeholder">' +
+      _tz1EscapeHTML(tk("ai_panel_insights_empty")) +
+      "</div>"
+    );
+  }
+
+  function resetAiPanelIdle() {
+    if (!aiPanel) return;
+    aiPanel.innerHTML =
+      '<div class="dashboard-ai-placeholder" id="ai-decision-placeholder">' +
+      _tz1EscapeHTML(tk("ai_panel_insights_empty")) +
+      "</div>";
+  }
+
   if (lifecycleState === "IDLE") {
-    if (hasRenderableRoutes) {
-      try {
-        document.documentElement.setAttribute("data-route-state", "READY");
-      } catch (_s) {}
-    } else {
-      container.innerHTML = "";
-      if (quickAccess) quickAccess.classList.remove("hidden");
-      return;
-    }
+    container.innerHTML = idlePlaceholderHtml();
+    resetAiPanelIdle();
+    if (quickAccess) quickAccess.classList.remove("hidden");
+    return;
   }
   if (lifecycleState === "ERROR") {
-    if (hasRenderableRoutes) {
-      try {
-        document.documentElement.setAttribute("data-route-state", "READY");
-      } catch (_s2) {}
-    } else {
+    if (!hasRenderableRoutes) {
+      container.innerHTML = idlePlaceholderHtml();
       if (quickAccess) quickAccess.classList.remove("hidden");
+      resetAiPanelIdle();
       return;
     }
   }
   if (!Array.isArray(analyzedRoutes) || !analyzedRoutes.length) {
-    container.innerHTML = "";
+    container.innerHTML = idlePlaceholderHtml();
+    resetAiPanelIdle();
     if (quickAccess) quickAccess.classList.remove("hidden");
     return;
   }
@@ -44,11 +835,10 @@ function renderResults() {
 
   // ============================================================
   //  ТЗ-6 — DECISION UI BINDING
-  //  UI is driven by currentDecision, not by old manual route selection.
-  //  alternatives может временно отсутствовать у объекта решения — тогда tz8GetDecisionAlternatives возьмёт запасной список из analyzedRoutes.
   // ============================================================
   if (!currentDecision || !currentDecision.bestRoute) {
-    container.innerHTML = "";
+    container.innerHTML = idlePlaceholderHtml();
+    resetAiPanelIdle();
     return;
   }
   if (!Array.isArray(currentDecision.alternatives)) {
@@ -57,89 +847,105 @@ function renderResults() {
 
   const best = currentDecision.bestRoute;
   if (!best) {
-    container.innerHTML = "";
+    container.innerHTML = idlePlaceholderHtml();
+    resetAiPanelIdle();
     return;
   }
   const decisionBestIndex = Number(best.index);
+  let matchedBest = best;
   if (Number.isFinite(decisionBestIndex)) {
-    const matchedBest = analyzedRoutes.find(function(route) { return route && Number(route.index) === decisionBestIndex; });
-    if (matchedBest) {
-      _bestRoute = matchedBest;
-      selectedRoute = matchedBest;
+    const found = analyzedRoutes.find(function(route) { return route && Number(route.index) === decisionBestIndex; });
+    if (found) {
+      matchedBest = found;
+      _bestRoute = found;
     }
   }
+  let pickIdx = null;
+  try {
+    pickIdx = window.__clearRoadUserPickIndex;
+  } catch (_) {
+    pickIdx = null;
+  }
+  const pickNum = Number(pickIdx);
+  if (Number.isFinite(pickNum)) {
+    const picked = analyzedRoutes.find(function(route) { return route && Number(route.index) === pickNum; });
+    if (picked) {
+      selectedRoute = picked;
+    } else {
+      try {
+        window.__clearRoadUserPickIndex = null;
+      } catch (_) {}
+      try {
+        window.selectedRouteId = null;
+      } catch (_) {}
+      selectedRoute = matchedBest;
+    }
+  } else {
+    selectedRoute = matchedBest;
+  }
+  try {
+    if (selectedRoute && selectedRoute.id != null) window.selectedRouteId = selectedRoute.id;
+    else if (selectedRoute && Number.isFinite(selectedRoute.index))
+      window.selectedRouteId = "route-" + (Number(selectedRoute.index) + 1);
+  } catch (_sid) {}
   const decisionAlternatives = tz8GetDecisionAlternatives(currentDecision, best, analyzedRoutes);
   if (currentDecision) currentDecision.alternatives = decisionAlternatives;
 
-  // Этап 2: UI берёт confidence только из currentDecision (без повторного buildRealDecision в рендере)
-  let decisionConfidence = currentDecision.confidence;
-  if (!decisionConfidence || typeof decisionConfidence.level !== "string" || !Number.isFinite(decisionConfidence.percent)) {
-    decisionConfidence = {
-      level: "MEDIUM",
-      percent: 68,
-      margin: 0,
-      reason: "Confidence synced with decision card"
-    };
+  const altRefs = crAltRoutesComputeRefs(analyzedRoutes);
+
+  const panelRoute =
+    selectedRoute && analyzedRoutes.some(function(r) { return r && selectedRoute && Number(r.index) === Number(selectedRoute.index); })
+      ? selectedRoute
+      : best;
+  crRefreshRoutesSalikPricing(analyzedRoutes);
+  const aiHero = crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes);
+
+  if (aiPanel) {
+    clearAiPlaceholder();
+    const salikExtras =
+      (aiHero.salikLine
+        ? '<p class="dashboard-ai-compact-line dashboard-ai-salik-compare" id="ai-hero-salik">' +
+          _tz1EscapeHTML(aiHero.salikLine) +
+          "</p>"
+        : "") +
+      (aiHero.salikPick
+        ? '<p class="dashboard-ai-compact-rec dashboard-ai-salik-pick" id="ai-hero-salik-pick">' +
+          _tz1EscapeHTML(aiHero.salikPick) +
+          "</p>"
+        : "") +
+      (aiHero.salikDisclaimer
+        ? '<p class="dashboard-ai-salik-disclaimer">' + _tz1EscapeHTML(aiHero.salikDisclaimer) + "</p>"
+        : "");
+    aiPanel.innerHTML =
+      '<div class="dashboard-ai-inner decision-hero" data-bound-to="currentDecision" data-best-route-index="' +
+      _tz1EscapeHTML(String(best.index)) +
+      '" data-selected-route-index="' +
+      _tz1EscapeHTML(String(panelRoute && Number.isFinite(panelRoute.index) ? panelRoute.index : "")) +
+      '">' +
+      '<p class="dashboard-ai-compact-title" id="ai-hero-title">' +
+      _tz1EscapeHTML(aiHero.title) +
+      "</p>" +
+      '<p class="dashboard-ai-compact-line dashboard-ai-text" id="ai-hero-decision">' +
+      _tz1EscapeHTML(aiHero.decision) +
+      "</p>" +
+      '<p class="dashboard-ai-compact-rec" id="ai-hero-reason">' +
+      _tz1EscapeHTML(aiHero.reason) +
+      "</p>" +
+      salikExtras +
+      '<button type="button" class="dashboard-ai-primary-btn" id="ai-default-cta" onclick="selectRecommendedRoute()">' +
+      _tz1EscapeHTML(tk("ai_default_route_cta")) +
+      "</button>" +
+      "</div>";
   }
-  const conf = String(decisionConfidence.level).toUpperCase();
-  const confPct = decisionConfidence.percent;
-  const routeName = _tz1RouteName(best);
-  const distKm = best.distanceKm || (best.distance ? Math.round((best.distance / 1000) * 10) / 10 : 0);
-  const whyLine = Array.isArray(best.whyPoints) && best.whyPoints.length ? best.whyPoints.join(" · ") : (best.why || _tz2BuildWhy(best, analyzedRoutes));
-  const tradeOff = best.tradeOff || _tz2BuildTradeOff(best, best, analyzedRoutes);
-  const now = new Date();
-  const arrival = new Date(now.getTime() + _tz1Minutes(best) * 60000);
-  const arrivalStr = arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const decisionId = currentDecision.selectedRouteId || best.id || ("route-" + best.index);
 
   let h = "";
-  h += '<div class="decision-hero" data-bound-to="currentDecision" data-best-route-index="' + _tz1EscapeHTML(best.index) + '">';
-  h += '<div class="dh-overline" data-decision-id="' + _tz1EscapeHTML(decisionId) + '">' + _tz1EscapeHTML(t("dh_overline")) + '</div>';
-  h += '<div class="dh-headline">' + _tz1EscapeHTML(t("dh_headline")) + ' <span class="dh-check">&#10003;</span></div>';
-  h += '<div class="dh-eta">' + _tz1Minutes(best) + '<span class="dh-min">' + _tz1EscapeHTML(t("dh_min_unit")) + '</span></div>';
-  h += '<div class="dh-route-line">' + _tz1EscapeHTML(t("dh_route_via")) + ' ' + _tz1EscapeHTML(routeName) + '</div>';
-  h += '<div class="ai-advice-line" id="ai-advice-line"><span>' + _tz1EscapeHTML(t("dh_advice_tag")) + '</span>' + _tz1EscapeHTML(whyLine) + '<br><span>' + _tz1EscapeHTML(t("dh_trade_tag")) + '</span>' + _tz1EscapeHTML(tradeOff) + '</div>';
-  h += '<div class="decision-actions"><button type="button" class="decision-voice-btn" onclick="speakCurrentDecision()">🔊 ' + _tz1EscapeHTML(typeof t === "function" ? t("why_voice_button") : "Why this route") + '</button></div>';
-  h += '<div class="dh-wait-hint" id="dh-wait-hint" style="display:none"><div class="dh-wait-title">' + _tz1EscapeHTML(t("dh_better_timing")) + '</div><div class="dh-wait-times" id="dh-wait-times"></div><div class="dh-wait-save" id="dh-wait-save"></div></div>';
-  h += '<div class="dh-conf-slim" data-confidence-source="currentDecision.confidence">';
-  h += '<span class="dh-conf-label">' + _tz1EscapeHTML(t("dh_conf_label")) + '</span>';
-  h += '<span class="dh-conf-level ' + conf.toLowerCase() + '">' + conf + '</span>';
-  h += '<span class="dh-conf-pct">' + confPct + '%</span>';
-  h += '<div class="dh-conf-bar"><div class="dh-conf-fill" style="width:' + confPct + '%"></div></div>';
-  h += '</div>';
-  h += '</div>';
-
   h += '<div class="predictive-card" id="predictive-card" style="display:none"><div class="pc-icon">&#9200;</div><div class="pc-content"><div class="pc-title">' + _tz1EscapeHTML(t("dh_pred_title")) + '</div><div class="pc-main" id="pc-main"></div><div class="pc-sub" id="pc-sub"></div></div><div class="pc-save" id="pc-save"></div></div>';
 
-  h += '<div class="cta-row">';
-  h += '<button class="cta-start" onclick="startDrive(' + best.index + ')">&#9650; ' + _tz1EscapeHTML(t("cta_start_upper")) + '<small>' + _tz1EscapeHTML(t("dh_route_via")) + ' ' + _tz1EscapeHTML(routeName) + '</small></button>';
-  h += '<button class="cta-details" onclick="openRouteDetails(' + best.index + ')">' + _tz1EscapeHTML(t("cta_details_upper")) + '</button>';
-  h += '</div>';
+  h += crRenderAlternativeRoutesListHtml(analyzedRoutes, best, selectedRoute, altRefs);
 
-  const alternatives = decisionAlternatives;
-
-  h += '<div class="other-routes expanded tz8-visible tz9-clean" id="other-routes-section" data-source="currentDecision.alternatives" data-alternatives-count="' + alternatives.length + '">';
-  h += '<button class="see-alts-btn" onclick="toggleAlternatives()"><span>Compare alternatives: ' + alternatives.length + '</span><span class="arrow">&#9662;</span></button>';
-
-  if (alternatives.length) {
-    h += '<div class="alt-row">';
-    alternatives.forEach(function(route, idx) {
-      h += tz8RenderAlternativeCard(route, best, analyzedRoutes, idx);
-    });
-    h += '</div>';
-  } else {
-    h += '<div class="tz8-no-alts">Google returned only one route for this request. Route Compare is ready and will show alternatives when the API returns 2–4 routes.</div>';
-  }
-
-  h += '</div>';
-
-  h += '<div class="info-strip">';
-  h += '<div class="info-item"><div class="info-label">Distance</div><div class="info-value">' + distKm + ' km</div></div>';
-  h += '<div class="info-item"><div class="info-label">Est. Arrival</div><div class="info-value">' + _tz1EscapeHTML(arrivalStr) + '</div></div>';
-  h += '<div class="info-item"><div class="info-label">Tolls</div><div class="info-value">' + (best.tollCost > 0 ? 'AED ' + best.tollCost : 'None') + '</div></div>';
-  h += '<div class="info-item"><div class="info-label">Score</div><div class="info-value">' + Math.round(best.score) + '</div></div>';
-  h += '</div>';
   h += '<div class="predict-tip" id="predict-tip" style="display:none"></div>';
+  h +=
+    '<div id="other-routes-section" class="other-routes tz8-visible expanded dashboard-other-routes-stub" aria-hidden="true"></div>';
 
   container.innerHTML = h;
   if (typeof crNormalizeDurationNode === "function") {

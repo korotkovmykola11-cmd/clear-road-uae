@@ -9,6 +9,63 @@ function tz8SameRoute(a, b) {
   return false;
 }
 
+/** Map + cards: same palette index = same color (Google route order by index). */
+var CR_ROUTE_MAP_PALETTE = [
+  "#3b82f6",
+  "#22c55e",
+  "#f43f5e",
+  "#a78bfa",
+  "#06b6d4",
+  "#f59e0b",
+  "#94a3b8",
+  "#c084fc"
+];
+
+function crSortRoutesByIndex(routes) {
+  if (!Array.isArray(routes)) return [];
+  return routes
+    .filter(function(r) {
+      return r && Number.isFinite(r.index);
+    })
+    .slice()
+    .sort(function(a, b) {
+      return Number(a.index) - Number(b.index);
+    });
+}
+
+function crRoutePaletteColorForSlot(slotIndex) {
+  const i = Math.max(0, Math.floor(Number(slotIndex)) || 0);
+  return CR_ROUTE_MAP_PALETTE[i % CR_ROUTE_MAP_PALETTE.length];
+}
+
+function crRoutePolylineOptionsForMap(route, sortedRoutes, focusRoute, bestRoute, mapOpts) {
+  const opts = mapOpts || {};
+  const userPicked = !!opts.userPicked;
+  const idx = sortedRoutes.findIndex(function(r) {
+    return r && Number(r.index) === Number(route && route.index);
+  });
+  const slot = idx >= 0 ? idx : 0;
+  const isFocus =
+    userPicked &&
+    focusRoute &&
+    route &&
+    Number.isFinite(route.index) &&
+    Number(route.index) === Number(focusRoute.index);
+  const c = crRoutePaletteColorForSlot(slot);
+  if (userPicked && isFocus) {
+    return { strokeColor: "#f5ff2e", strokeWeight: 10, strokeOpacity: 1, zIndex: 1000 };
+  }
+  if (userPicked && !isFocus) {
+    return { strokeColor: c, strokeWeight: 3, strokeOpacity: 0.08, zIndex: 8 + slot };
+  }
+  return { strokeColor: c, strokeWeight: 5, strokeOpacity: 0.92, zIndex: 30 + slot };
+}
+try {
+  window.crSortRoutesByIndex = crSortRoutesByIndex;
+  window.crRoutePaletteColorForSlot = crRoutePaletteColorForSlot;
+  window.crRoutePolylineOptionsForMap = crRoutePolylineOptionsForMap;
+} catch (_) {}
+
 function tz8GetDecisionAlternatives(decision, best, routes) {
   const fromDecision = decision && Array.isArray(decision.alternatives) ? decision.alternatives : [];
   const fallback = Array.isArray(routes) ? routes.filter(function(route) { return !tz8SameRoute(route, best); }) : [];

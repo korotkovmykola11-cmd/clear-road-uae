@@ -157,46 +157,39 @@ function applyClearRoadRouteSanityMarks(routes) {
   var list = Array.isArray(routes) ? routes.filter(Boolean) : [];
   if (!list.length) return;
 
-  var minDurMin = Infinity;
-  var minDistKm = Infinity;
-  list.forEach(function(r) {
-    var sec = clearRoadDurSecTrafficForSanity(r);
-    var durMin = sec > 0 ? sec / 60 : 0;
-    var km = clearRoadDistanceKmForSanity(r);
-    if (durMin > 0 && durMin < minDurMin) minDurMin = durMin;
-    if (km > 0 && km < minDistKm) minDistKm = km;
-  });
-  if (!Number.isFinite(minDurMin) || minDurMin <= 0) minDurMin = 0;
-  if (!Number.isFinite(minDistKm) || minDistKm <= 0) minDistKm = 0;
+  var dbg = false;
+  try {
+    dbg = window.__CLEAR_ROAD_ROUTE_DEBUG__ === true;
+  } catch (e) {
+    dbg = false;
+  }
 
   list.forEach(function(route) {
     route.invalidRoute = false;
     delete route.invalidReason;
 
+    var raw = route.rawRoute || route.route;
+    var legCount = Array.isArray(route.legs) ? route.legs.length : 0;
+    if (!legCount && raw && Array.isArray(raw.legs)) legCount = raw.legs.length;
+
     var durSec = clearRoadDurSecTrafficForSanity(route);
-    var durMin = durSec > 0 ? durSec / 60 : 0;
-    var dKm = clearRoadDistanceKmForSanity(route);
-    var summary = String(route.summary || route.name || route.routeName || "");
+    var dM = tz2ToNumber(route.distanceMeters ?? route.distance, 0);
+    if (!(dM > 0)) {
+      var kmFallback = clearRoadDistanceKmForSanity(route);
+      if (Number.isFinite(kmFallback) && kmFallback > 0) dM = kmFallback * 1000;
+    }
 
-    var reasonCode = null;
-    if (durSec > 3 * 3600) reasonCode = "duration_over_3h";
+    var reason = null;
+    if (!legCount) reason = "no_legs";
+    else if (!Number.isFinite(durSec) || durSec <= 0) reason = "no_duration_or_nan";
+    else if (!Number.isFinite(dM) || dM <= 0) reason = "no_distance_or_nan";
 
-    var speedKmh = durMin > 0 && dKm > 0 ? dKm * 60 / durMin : NaN;
-    if (!reasonCode && dKm > 10 && Number.isFinite(speedKmh) && speedKmh < 5) reasonCode = "speed_impossibly_low";
-    if (!reasonCode && Number.isFinite(speedKmh) && speedKmh > 160) reasonCode = "speed_impossibly_high";
-
-    if (!reasonCode && minDurMin > 0 && durMin > minDurMin * 1.7 && durMin - minDurMin > 30) reasonCode = "time_outlier_vs_fastest";
-    if (!reasonCode && minDistKm > 0 && dKm > minDistKm * 2.2 && dKm - minDistKm > 30) reasonCode = "distance_outlier_vs_shortest";
-
-    if (reasonCode) {
+    if (reason) {
       route.invalidRoute = true;
-      route.invalidReason = "sanity_outlier";
-      console.warn("Clear Road route rejected", {
-        reason: reasonCode,
-        summary: summary,
-        durationMin: Math.round(durMin * 10) / 10,
-        distanceKm: Math.round(dKm * 10) / 10
-      });
+      route.invalidReason = reason;
+      if (dbg) console.warn("[ROUTE REJECT]", reason, { summary: route.summary, durSec: durSec, distanceM: dM, legs: legCount });
+    } else if (dbg) {
+      console.log("[ROUTE KEEP]", route);
     }
   });
 }
@@ -207,15 +200,13 @@ function validateNormalizedRoutes(routes) {
   }
 
   const invalid = routes.find(function(route) {
-    return !route ||
-      !route.normalizedRoute ||
-      !Number.isFinite(route.durationSec) ||
-      !Number.isFinite(route.durationTrafficSec) ||
-      !Number.isFinite(route.distanceKm) ||
-      !Array.isArray(route.steps) ||
-      !Number.isFinite(route.stopsCount) ||
-      !Number.isFinite(route.trafficScore) ||
-      !Number.isFinite(route.complexityScore);
+    if (!route || !route.normalizedRoute) return true;
+    const ds = Number(route.durationSec);
+    const dts = Number(route.durationTrafficSec);
+    const dk = Number(route.distanceKm);
+    if (!Number.isFinite(ds) || !Number.isFinite(dts) || !Number.isFinite(dk)) return true;
+    if (ds <= 0 || dk <= 0) return true;
+    return false;
   });
 
   if (invalid) {

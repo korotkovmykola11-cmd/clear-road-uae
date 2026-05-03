@@ -12,6 +12,8 @@ function clearRoutes() {
   activeDriveRouteIndex = null;
   activeDriveRouteSnapshot = null;
   try { window.__CLEAR_ROAD_AI_DECISION_STICKY__ = null; } catch (_) {}
+  try { window.__clearRoadUserPickIndex = null; } catch (_) {}
+  try { window.selectedRouteId = null; } catch (_) {}
   try {
     lastDriveDirectionsRequestAt = 0;
     _driveDisplayedEtaMin = null;
@@ -127,28 +129,69 @@ function drawRoutes(result) {
   renderers.forEach(function(renderer) { renderer.setMap(null); });
   renderers = [];
 
+  const sorted =
+    typeof crSortRoutesByIndex === "function"
+      ? crSortRoutesByIndex(analyzedRoutes)
+      : Array.isArray(analyzedRoutes)
+        ? analyzedRoutes.filter(function(r) { return r && Number.isFinite(r.index); })
+        : [];
   const best = currentDecision && currentDecision.bestRoute ? currentDecision.bestRoute : _bestRoute;
-  const alternatives = tz8GetDecisionAlternatives(currentDecision, best, analyzedRoutes);
-  const ordered = alternatives.concat(best ? [best] : []);
 
-  ordered.forEach(function(r) {
+  let userPicked = false;
+  try {
+    const v = window.__clearRoadUserPickIndex;
+    userPicked = v !== null && v !== undefined && String(v) !== "" && Number.isFinite(Number(v));
+  } catch (_) {}
+
+  const focusRoute =
+    userPicked && selectedRoute && sorted.some(function(r) { return r && selectedRoute && Number(r.index) === Number(selectedRoute.index); })
+      ? selectedRoute
+      : null;
+
+  const mapOpts = { userPicked: userPicked };
+
+  sorted.forEach(function(r) {
     if (!r || !Number.isFinite(r.index)) return;
-    const isBest = best && r.index === best.index;
+    const poly =
+      typeof crRoutePolylineOptionsForMap === "function"
+        ? crRoutePolylineOptionsForMap(r, sorted, focusRoute, best, mapOpts)
+        : {
+            strokeColor: "#3b82f6",
+            strokeWeight: 4,
+            strokeOpacity: 0.8,
+            zIndex: 10
+          };
+    const showMarkers = userPicked
+      ? focusRoute && Number(r.index) === Number(focusRoute.index)
+      : best && Number(r.index) === Number(best.index);
     const renderer = new google.maps.DirectionsRenderer({
       map: map,
       directions: result,
       routeIndex: r.index,
-      suppressMarkers: !isBest,
+      suppressMarkers: !showMarkers,
       preserveViewport: true,
       polylineOptions: {
-        strokeColor: isBest ? "#22d3a0" : "#60a5fa",
-        strokeOpacity: isBest ? 1 : 0.56,
-        strokeWeight: isBest ? 6 : 4,
-        zIndex: isBest ? 10 : 1
+        strokeColor: poly.strokeColor,
+        strokeOpacity: poly.strokeOpacity,
+        strokeWeight: poly.strokeWeight,
+        zIndex: poly.zIndex
       }
     });
     renderers.push(renderer);
   });
 
-  if (best && best.route && best.route.bounds) map.fitBounds(best.route.bounds);
+  const boundsTarget = userPicked && focusRoute && focusRoute.route && focusRoute.route.bounds
+    ? focusRoute
+    : best && best.route && best.route.bounds
+      ? best
+      : null;
+  if (boundsTarget && boundsTarget.route && boundsTarget.route.bounds) {
+    try {
+      map.fitBounds(boundsTarget.route.bounds, userPicked ? 48 : 32);
+    } catch (_fb) {
+      try {
+        map.fitBounds(boundsTarget.route.bounds);
+      } catch (_fb2) {}
+    }
+  }
 }

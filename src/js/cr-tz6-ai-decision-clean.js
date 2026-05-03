@@ -8,7 +8,7 @@
     en: {
       overline: 'AI ROUTE DECISION', go: 'GO NOW', wait: 'WAIT', via: 'via', min: 'min', same: 'almost the same as alternatives',
       reasonStable: 'stable flow', reasonStops: 'fewer stops', reasonFast: 'fastest option', reasonBalanced: 'best balance', toll: 'tolls may apply', noToll: 'no clear toll risk',
-      noWait: 'no clear benefit from waiting 15 min', waitMayHelp: 'waiting may help', confidence: 'AI confidence',
+      noWait: 'You can go now — almost no difference.', waitMayHelp: 'waiting may help', confidence: 'AI confidence',
       assistant: 'AI route assistant', ready: 'ready', voice: 'voice answer', why: 'why', timing: 'when to go',
       tradeLbl: 'Trade-off', whenLbl: 'When',
       decision: 'Decision', close: 'Close', breakdown: 'Route breakdown', actions: 'Key driving actions', highway: 'Highway section', note: 'Most important visible actions. Full turn-by-turn stays in Drive Mode.',
@@ -17,7 +17,7 @@
     ru: {
       overline: 'AI РЕШЕНИЕ ПО МАРШРУТУ', go: 'ЕДЬ СЕЙЧАС', wait: 'ПОДОЖДАТЬ', via: 'через', min: 'мин', same: 'почти одинаково с альтернативами',
       reasonStable: 'стабильный поток', reasonStops: 'меньше остановок', reasonFast: 'самый быстрый вариант', reasonBalanced: 'лучший баланс', toll: 'возможен платный участок', noToll: 'явного риска платного участка нет',
-      noWait: 'ждать 15 минут явного смысла нет', waitMayHelp: 'ожидание может помочь', confidence: 'уверенность AI',
+      noWait: 'Можно ехать сейчас — разницы почти нет', waitMayHelp: 'ожидание может помочь', confidence: 'уверенность AI',
       assistant: 'AI помощник маршрута', ready: 'готов', voice: 'голосовой ответ', why: 'почему', timing: 'когда ехать',
       tradeLbl: 'Компромисс', whenLbl: 'Когда',
       decision: 'Решение', close: 'Закрыть', breakdown: 'Разбор маршрута', actions: 'Ключевые действия', highway: 'Участок шоссе', note: 'Показаны главные действия. Полная навигация остаётся в режиме езды.',
@@ -26,7 +26,7 @@
     ua: {
       overline: 'AI РІШЕННЯ ПО МАРШРУТУ', go: 'ЇДЬ ЗАРАЗ', wait: 'ЗАЧЕКАТИ', via: 'через', min: 'хв', same: 'майже однаково з альтернативами',
       reasonStable: 'стабільний потік', reasonStops: 'менше зупинок', reasonFast: 'найшвидший варіант', reasonBalanced: 'найкращий баланс', toll: 'можлива платна ділянка', noToll: 'явного ризику платної ділянки немає',
-      noWait: 'чекати 15 хвилин явного сенсу немає', waitMayHelp: 'очікування може допомогти', confidence: 'впевненість AI',
+      noWait: 'Можна їхати зараз — різниця майже нуль', waitMayHelp: 'очікування може допомогти', confidence: 'впевненість AI',
       assistant: 'AI помічник маршруту', ready: 'готово', voice: 'голосова відповідь', why: 'чому', timing: 'коли їхати',
       tradeLbl: 'Компроміс', whenLbl: 'Коли',
       decision: 'Рішення', close: 'Закрити', breakdown: 'Розбір маршруту', actions: 'Ключові дії', highway: 'Ділянка шосе', note: 'Показані головні дії. Повна навігація залишається в режимі їзди.',
@@ -35,7 +35,7 @@
     ar: {
       overline: 'قرار الطريق بالذكاء الاصطناعي', go: 'انطلق الآن', wait: 'انتظر', via: 'عبر', min: 'دقيقة', same: 'تقريبًا مثل البدائل',
       reasonStable: 'تدفق مستقر', reasonStops: 'توقفات أقل', reasonFast: 'الخيار الأسرع', reasonBalanced: 'أفضل توازن', toll: 'قد توجد رسوم', noToll: 'لا يظهر خطر رسوم واضح',
-      noWait: 'لا توجد فائدة واضحة من الانتظار 15 دقيقة', waitMayHelp: 'الانتظار قد يساعد', confidence: 'ثقة الذكاء الاصطناعي',
+      noWait: 'يمكنك الانطلاق الآن — الفرق ضئيل', waitMayHelp: 'الانتظار قد يساعد', confidence: 'ثقة الذكاء الاصطناعي',
       assistant: 'مساعد الطريق', ready: 'جاهز', voice: 'إجابة صوتية', why: 'لماذا', timing: 'متى تنطلق',
       tradeLbl: 'المقايضة', whenLbl: 'متى',
       decision: 'القرار', close: 'إغلاق', breakdown: 'تفصيل الطريق', actions: 'إجراءات القيادة المهمة', highway: 'جزء طريق سريع', note: 'تم عرض أهم الإجراءات. الإرشاد الكامل يبقى في وضع القيادة.',

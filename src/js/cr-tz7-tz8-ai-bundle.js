@@ -251,8 +251,26 @@
     if (!items || items.length < 2) return;
     const routeBtn = items[0];
     const driveBtn = items[1];
-    routeBtn.onclick = function(ev){ if (ev) ev.preventDefault(); openRouteScreen(); return false; };
-    driveBtn.onclick = function(ev){ if (ev) ev.preventDefault(); startDriveFromBottom(); return false; };
+    function setRouteDriveActive(isDrive) {
+      if (routeBtn && !routeBtn.classList.contains('disabled')) {
+        routeBtn.classList.toggle('active', !isDrive);
+      }
+      if (driveBtn && !driveBtn.classList.contains('disabled')) {
+        driveBtn.classList.toggle('active', !!isDrive);
+      }
+    }
+    routeBtn.onclick = function(ev){
+      if (ev) ev.preventDefault();
+      setRouteDriveActive(false);
+      openRouteScreen();
+      return false;
+    };
+    driveBtn.onclick = function(ev){
+      if (ev) ev.preventDefault();
+      setRouteDriveActive(true);
+      startDriveFromBottom();
+      return false;
+    };
     routeBtn.dataset.tz7Wired = 'route';
     driveBtn.dataset.tz7Wired = 'drive';
   }
@@ -516,19 +534,19 @@
   const L = {
     en: {
       go:'GO NOW', close:'ROUTES ARE CLOSE', only:'ONLY VALID ROUTE', why:'WHY', trade:'TRADE-OFF', when:'WHEN', conf:'AI CONFIDENCE',
-      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'waiting is not useful now', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH'
+      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'You can go now — almost no difference.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH'
     },
     ru: {
       go:'ЕДЬ СЕЙЧАС', close:'МАРШРУТЫ ПОЧТИ РАВНЫ', only:'ОДИН ДОСТУПНЫЙ МАРШРУТ', why:'ПОЧЕМУ', trade:'КОМПРОМИСС', when:'КОГДА', conf:'УВЕРЕННОСТЬ AI',
-      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'ждать смысла нет', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ'
+      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Можно ехать сейчас — разницы почти нет', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ'
     },
     ua: {
       go:'ЇДЬ ЗАРАЗ', close:'МАРШРУТИ МАЙЖЕ РІВНІ', only:'ОДИН ДОСТУПНИЙ МАРШРУТ', why:'ЧОМУ', trade:'КОМПРОМІС', when:'КОЛИ', conf:'ВПЕВНЕНІСТЬ AI',
-      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'чекати сенсу немає', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА'
+      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Можна їхати зараз — різниця майже нуль', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА'
     },
     ar: {
       go:'انطلق الآن', close:'المسارات متقاربة', only:'مسار واحد صالح', why:'السبب', trade:'المقابل', when:'الوقت', conf:'ثقة AI',
-      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'لا فائدة من الانتظار الآن', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية'
+      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'يمكنك الانطلاق الآن — الفرق ضئيل', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية'
     }
   };
   function dict(){ const lang = getLang(); return L[lang] || L.en; }
@@ -559,7 +577,21 @@
   function buildRealDecision(routes){
     const rawInput = Array.isArray(routes) ? routes.filter(Boolean) : [];
     applyClearRoadRouteSanityMarks(rawInput);
-    const routesForRanking = rawInput.filter(function(route){ return route && !route.invalidRoute; });
+    let routesForRanking = rawInput.filter(function(route){ return route && !route.invalidRoute; });
+    if (!routesForRanking.length && rawInput.length) {
+      try {
+        if (window.__CLEAR_ROAD_ROUTE_DEBUG__ === true) {
+          console.warn('[ROUTE REJECT]', 'buildRealDecision all sanity-filtered — keeping Google routes', rawInput.length);
+        }
+      } catch (_) {}
+      rawInput.forEach(function(r) {
+        if (r) {
+          r.invalidRoute = false;
+          delete r.invalidReason;
+        }
+      });
+      routesForRanking = rawInput.filter(Boolean);
+    }
     if (!routesForRanking.length) {
       try { window.__CLEAR_ROAD_AI_DECISION_STICKY__ = null; } catch (_) {}
       return {

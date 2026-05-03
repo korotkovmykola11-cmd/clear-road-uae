@@ -166,7 +166,11 @@ function validateScoredRoutes(routes) {
     return { ok: false, message: "No scored routes" };
   }
   const invalid = routes.find(function(route) {
-    return !route || !Number.isFinite(route.score) || !route.scoreBreakdown || !Number.isFinite(route.durationMin) || !Number.isFinite(route.distanceKm);
+    if (!route) return true;
+    const dm = Number(route.durationMin);
+    const dk = Number(route.distanceKm);
+    if (!Number.isFinite(dm) || !Number.isFinite(dk)) return true;
+    return false;
   });
   if (invalid) {
     return { ok: false, message: "Invalid scored route: " + ((invalid && invalid.id) || "unknown route") };

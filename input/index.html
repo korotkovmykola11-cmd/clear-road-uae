@@ -18,66 +18,107 @@ __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
   </style>
 
 </head>
-<body>
+<body class="dashboard-shell">
 
-  <!-- HERO SECTION: full-width map + floating top bar -->
-  <div class="hero-section">
-    <div id="map"></div>
-    <div class="top-bar">
-      <button class="top-btn" title="Menu">
+  <div class="app-dashboard">
+    <div class="dashboard-meta">
+      <button type="button" class="top-btn dashboard-menu-btn" title="Menu" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
       </button>
-      <div class="route-panel">
-        <div class="route-row">
-          <span class="route-dot green"></span>
-          <div class="route-field">
-            <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
-            <button type="button" class="route-clear-btn" id="clear-route-start" onclick="clearRouteInputField('start')" data-i18n-title="route_clear_from" title="Clear start" aria-label="Clear start">&times;</button>
-          </div>
-          <button type="button" class="gps-btn-top" id="gps-btn" title="Use my location" aria-label="Use GPS location">
-            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-          </button>
+      <div class="dashboard-meta-right">
+        <div class="lang-bar visible-lang-bar" id="visible-lang-bar" aria-label="Language selector">
+          <button type="button" class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
+          <button type="button" class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+          <button type="button" class="lang-btn" data-lang="ua" onclick="setLang('ua')">UA</button>
+          <button type="button" class="lang-btn" data-lang="ar" onclick="setLang('ar')">AR</button>
         </div>
-        <div class="route-row">
-          <span class="route-dot"></span>
-          <div class="route-field">
-            <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
-            <button type="button" class="route-clear-btn" id="clear-route-end" onclick="clearRouteInputField('end')" data-i18n-title="route_clear_to" title="Clear destination" aria-label="Clear destination">&times;</button>
-          </div>
-        </div>
-        <div class="route-mode-row" role="group" aria-label="Routing style">
-          <div class="route-mode-toggle">
-            <button type="button" class="route-mode-btn active" data-route-mode="fast" onclick="setRouteMode('fast')" data-i18n="route_mode_fast">FAST</button>
-            <button type="button" class="route-mode-btn" data-route-mode="calm" onclick="setRouteMode('calm')" data-i18n="route_mode_calm">CALM</button>
-          </div>
-          <span class="route-mode-hint" data-i18n="route_mode_hint">Less stress • fewer turns</span>
-        </div>
+        <button type="button" class="ai-voice-btn ai-voice-btn--icon" onclick="speakCurrentDecision()" title="AI Voice" aria-label="AI Voice" data-i18n="ai_voice_button">🔊</button>
       </div>
     </div>
-    <div class="live-badge"><span class="live-dot"></span> LIVE TRAFFIC</div>
-  </div>
 
-  <!-- FIX-1: visible language + AI voice controls -->
-  <div class="top-utility-bar" id="top-utility-bar">
-    <div class="lang-bar visible-lang-bar" id="visible-lang-bar" aria-label="Language selector">
-      <button type="button" class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
-      <button type="button" class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-      <button type="button" class="lang-btn" data-lang="ua" onclick="setLang('ua')">UA</button>
-      <button type="button" class="lang-btn" data-lang="ar" onclick="setLang('ar')">AR</button>
+    <header class="dashboard-top">
+      <div class="dashboard-top-left">
+        <div class="route-panel dashboard-route-panel">
+          <div class="route-row">
+            <span class="route-dot green"></span>
+            <div class="route-field">
+              <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+              <button type="button" class="route-clear-btn" id="clear-route-start" onclick="clearRouteInputField('start')" data-i18n-title="route_clear_from" title="Clear start" aria-label="Clear start">&times;</button>
+            </div>
+            <button type="button" class="gps-btn-top" id="gps-btn" title="Use my location" aria-label="Use GPS location">
+              <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            </button>
+          </div>
+          <div class="route-row">
+            <span class="route-dot"></span>
+            <div class="route-field">
+              <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
+              <button type="button" class="route-clear-btn" id="clear-route-end" onclick="clearRouteInputField('end')" data-i18n-title="route_clear_to" title="Clear destination" aria-label="Clear destination">&times;</button>
+            </div>
+          </div>
+          <div class="route-mode-row dashboard-route-mode-sr" role="group" aria-label="Routing style">
+            <div class="route-mode-toggle">
+              <button type="button" class="route-mode-btn active" data-route-mode="fast" onclick="setRouteMode('fast')" data-i18n="route_mode_fast">FAST</button>
+              <button type="button" class="route-mode-btn" data-route-mode="calm" onclick="setRouteMode('calm')" data-i18n="route_mode_calm">CALM</button>
+            </div>
+            <span class="route-mode-hint" data-i18n="route_mode_hint">Less stress • fewer turns</span>
+          </div>
+        </div>
+        <div class="dashboard-filters-scroll" id="dashboard-filters" aria-label="Route filters">
+          <button type="button" class="dash-filter-chip" data-pref="balanced" onclick="setUserPreference('balanced')">OPTIMAL</button>
+          <button type="button" class="dash-filter-chip" data-pref="fastest" onclick="setUserPreference('fastest')">FASTEST</button>
+          <button type="button" class="dash-filter-chip" data-pref="no_tolls" onclick="setUserPreference('no_tolls')">NO TOLLS</button>
+          <button type="button" class="dash-filter-chip" data-filter="less_traffic" onclick="toggleFilter('less_traffic')">LESS TRAFFIC</button>
+          <button type="button" class="dash-filter-chip" data-filter="stable_route" onclick="toggleFilter('stable_route')">STABLE</button>
+          <button type="button" class="dash-filter-chip" data-filter="fewer_stops" onclick="toggleFilter('fewer_stops')">FEWER STOPS</button>
+          <button type="button" class="dash-filter-chip" data-filter="avoid_complex" onclick="toggleFilter('avoid_complex')">EASY JUNCTIONS</button>
+          <button type="button" class="dash-filter-chip" data-filter="avoid_highways" onclick="toggleFilter('avoid_highways')">AVOID HIGHWAYS</button>
+        </div>
+      </div>
+      <div id="ai-decision-panel" class="dashboard-ai-panel" data-ai-panel="1">
+        <div class="dashboard-ai-placeholder" id="ai-decision-placeholder">Select start and destination to see AI route insight.</div>
+      </div>
+    </header>
+
+    <div class="dashboard-body">
+      <aside class="dashboard-col dashboard-col--routes">
+        <div class="quick-section" id="quick-access">
+          <div class="quick-title" data-i18n="quick_access">Quick Access</div>
+          <div class="quick-list">
+            <div class="quick-item" onclick="setDestination('Home')" ondblclick="updateSavedPlace('Home')">
+              <div class="quick-icon">&#127968;</div>
+              <div class="quick-label">Home</div>
+              <div class="quick-arrow">&#8250;</div>
+            </div>
+            <div class="quick-item" onclick="setDestination('Work')" ondblclick="updateSavedPlace('Work')">
+              <div class="quick-icon">&#128188;</div>
+              <div class="quick-label">Work</div>
+              <div class="quick-arrow">&#8250;</div>
+            </div>
+          </div>
+        </div>
+        <div id="results" class="dashboard-results"></div>
+      </aside>
+      <div class="dashboard-col dashboard-col--map">
+        <div id="map"></div>
+      </div>
     </div>
-    <button type="button" class="ai-voice-btn" onclick="speakCurrentDecision()" data-i18n="ai_voice_button">AI Voice</button>
+
+    <footer class="dashboard-cta-bar">
+      <button type="button" class="dashboard-route-cta" id="dashboard-route-cta" onclick="handleStartNavTap()" data-i18n="nav_route">ROUTE</button>
+    </footer>
   </div>
 
-  <!-- CONTROLS STRIP (pref / filter / lang) -->
-  <div class="controls-strip">
+  <!-- legacy strips hidden: prefs/filters moved to dashboard-filters-scroll -->
+  <div class="controls-strip controls-strip--legacy" aria-hidden="true">
     <div class="pref-bar" id="pref-bar">
       <button type="button" class="pref-btn" data-pref="balanced" onclick="setUserPreference('balanced')" data-i18n="pref_balanced">Balanced</button>
       <button type="button" class="pref-btn" data-pref="fastest"  onclick="setUserPreference('fastest')"  data-i18n="pref_fastest">Fastest</button>
       <button type="button" class="pref-btn" data-pref="no_tolls" onclick="setUserPreference('no_tolls')" data-i18n="pref_no_tolls">No tolls</button>
     </div>
     <div class="filter-bar" id="filter-bar">
-      <button type="button" class="filter-btn" data-filter="avoid_highways" onclick="toggleFilter('avoid_highways')" data-i18n="filter_highways">🛣 Avoid highways</button>
-      <button type="button" class="filter-btn" data-filter="fewer_turns"    onclick="toggleFilter('fewer_turns')"    data-i18n="filter_turns">↩ Fewer turns</button>
+      <button type="button" class="filter-btn" data-filter="avoid_highways" onclick="toggleFilter('avoid_highways')" data-i18n="filter_highways">Avoid highways</button>
+      <button type="button" class="filter-btn" data-filter="fewer_turns" onclick="toggleFilter('fewer_turns')" data-i18n="filter_turns">Fewer turns</button>
     </div>
     <div class="lang-bar" id="lang-bar">
       <button type="button" class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
@@ -87,50 +128,22 @@ __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
     </div>
   </div>
 
-  <!-- CONTENT SCROLL -->
-  <div class="content-scroll">
-    <!-- RESULTS filled by renderResults() -->
-    <div id="results"></div>
-
-    <!-- QUICK ACCESS (shown when no routes) -->
-    <div class="quick-section" id="quick-access">
-      <div class="quick-title" data-i18n="quick_access">Quick Access</div>
-      <div class="quick-list">
-        <div class="quick-item" onclick="setDestination('Home')" ondblclick="updateSavedPlace('Home')">
-          <div class="quick-icon">&#127968;</div>
-          <div class="quick-label">Home</div>
-          <div class="quick-arrow">&#8250;</div>
-        </div>
-        <div class="quick-item" onclick="setDestination('Work')" ondblclick="updateSavedPlace('Work')">
-          <div class="quick-icon">&#128188;</div>
-          <div class="quick-label">Work</div>
-          <div class="quick-arrow">&#8250;</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- BOTTOM NAV (premium dark) -->
-  <nav class="bottom-nav">
-    <div class="nav-item active" onclick="handleStartNavTap()">
+  <nav class="bottom-nav bottom-nav--dashboard-hidden" aria-label="Main navigation">
+    <div class="nav-item active" data-nav-tab="route">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
       <span class="nav-label" data-i18n="nav_route">Route</span>
     </div>
-    <div class="nav-item" onclick="handleStartNavTap()">
+    <div class="nav-item" data-nav-tab="drive">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
       <span class="nav-label" data-i18n="nav_drive">Drive</span>
     </div>
-    <div class="nav-item disabled" aria-disabled="true">
+    <div class="nav-item disabled" aria-disabled="true" data-nav-tab="alerts">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 17v-6c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v6H4v2h16v-2h-2zm-2 0H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6zm-4 5c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2z"/></svg>
       <span class="nav-label" data-i18n="nav_alerts">Alerts</span>
     </div>
-    <div class="nav-item disabled" aria-disabled="true">
+    <div class="nav-item disabled" aria-disabled="true" data-nav-tab="saved">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
       <span class="nav-label" data-i18n="nav_saved">Saved</span>
-    </div>
-    <div class="nav-item disabled" aria-disabled="true">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-      <span class="nav-label" data-i18n="nav_profile">Profile</span>
     </div>
   </nav>
 <!-- ROUTE DETAILS MODAL -->
@@ -1367,16 +1380,30 @@ function tz1FormatEtaVsBest(route, bestRoute, isBest) {
 
 // ── Route Filters ──
 const FILTERS_KEY = "clearRoadUAE.filters.v1";
+const FILTER_KEYS_DEFAULT = {
+  avoid_highways: false,
+  fewer_turns: false,
+  fewer_stops: false,
+  less_traffic: false,
+  stable_route: false,
+  avoid_complex: false
+};
 let userFilters = (() => {
-  try { return Object.assign({ avoid_highways: false, fewer_turns: false }, JSON.parse(localStorage.getItem(FILTERS_KEY))); }
-  catch { return { avoid_highways: false, fewer_turns: false }; }
+  try {
+    return Object.assign({}, FILTER_KEYS_DEFAULT, JSON.parse(localStorage.getItem(FILTERS_KEY) || "{}"));
+  } catch {
+    return Object.assign({}, FILTER_KEYS_DEFAULT);
+  }
 })();
 
 function toggleFilter(key) {
-  if (!(key in userFilters)) return;
+  if (!(key in userFilters)) userFilters[key] = false;
   userFilters[key] = !userFilters[key];
   try { localStorage.setItem(FILTERS_KEY, JSON.stringify(userFilters)); } catch {}
   document.querySelectorAll(".filter-btn").forEach(b =>
+    b.classList.toggle("active", !!userFilters[b.dataset.filter])
+  );
+  document.querySelectorAll(".dashboard-filters-scroll [data-filter]").forEach(b =>
     b.classList.toggle("active", !!userFilters[b.dataset.filter])
   );
   calculateRoutes();
@@ -1531,6 +1558,9 @@ function setUserPreference(value) {
   document.querySelectorAll(".pref-btn").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.pref === value)
   );
+  document.querySelectorAll(".dashboard-filters-scroll [data-pref]").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.pref === value)
+  );
   calculateRoutes();
 }
 
@@ -1542,6 +1572,12 @@ document.querySelectorAll(".pref-btn").forEach(b =>
   b.classList.toggle("active", b.dataset.pref === getUserPreference())
 );
 document.querySelectorAll(".filter-btn").forEach(b =>
+  b.classList.toggle("active", !!userFilters[b.dataset.filter])
+);
+document.querySelectorAll(".dashboard-filters-scroll [data-pref]").forEach(b =>
+  b.classList.toggle("active", b.dataset.pref === getUserPreference())
+);
+document.querySelectorAll(".dashboard-filters-scroll [data-filter]").forEach(b =>
   b.classList.toggle("active", !!userFilters[b.dataset.filter])
 );
 

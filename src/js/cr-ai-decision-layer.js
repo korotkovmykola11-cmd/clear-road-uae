@@ -73,7 +73,22 @@ function buildCanonicalDecisionState(routesInput, options) {
   const opts = options || {};
   let normalized = normalizeRoutes(Array.isArray(routesInput) ? routesInput : []);
   applyClearRoadRouteSanityMarks(normalized);
-  normalized = normalized.filter(function(route){ return route && !route.invalidRoute; });
+  let kept = normalized.filter(function(route){ return route && !route.invalidRoute; });
+  if (!kept.length && normalized.length) {
+    try {
+      if (window.__CLEAR_ROAD_ROUTE_DEBUG__ === true) {
+        console.warn('[ROUTE REJECT]', 'buildCanonical all sanity-filtered — keeping Google routes', normalized.length);
+      }
+    } catch (_) {}
+    normalized.forEach(function(r) {
+      if (r) {
+        r.invalidRoute = false;
+        delete r.invalidReason;
+      }
+    });
+    kept = normalized.filter(function(route){ return route && !route.invalidRoute; });
+  }
+  normalized = kept;
   if (!normalized.length) throw new Error("Route data looks incorrect. Please choose a more specific destination.");
   const alreadyScored = !!opts.assumeScored && normalized.every(function(route) {
     return Number.isFinite(route && route.score) && !!(route && route.scoreBreakdown);

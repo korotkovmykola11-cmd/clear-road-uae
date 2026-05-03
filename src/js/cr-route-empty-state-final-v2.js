@@ -27,12 +27,25 @@
     try { currentDecision = null; } catch(_) {}
     try { if (window.currentDecision) window.currentDecision = null; } catch(_) {}
     try { if (Array.isArray(window.analyzedRoutes)) window.analyzedRoutes = []; } catch(_) {}
+    try { window.selectedRouteId = null; } catch(_) {}
   }
   function enterIdle(reason){
+    try {
+      if (typeof clearRoutes === "function") clearRoutes();
+    } catch (_) {}
     resetRouteState();
+    try {
+      currentDirectionsResult = null;
+    } catch (_) {}
+    try {
+      window.__clearRoadUserPickIndex = null;
+    } catch (_) {}
     clearResults();
-    document.documentElement.setAttribute('data-route-state','IDLE');
+    document.documentElement.setAttribute('data-route-state', 'IDLE');
     document.documentElement.setAttribute('data-route-idle-reason', reason || 'missing-input');
+    try {
+      if (typeof renderResults === "function") renderResults();
+    } catch (_) {}
   }
   function hideUnsafeFallbackErrors(){
     const r = $('results');
