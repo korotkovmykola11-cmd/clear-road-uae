@@ -65,7 +65,7 @@
 ## 4. Сопровождение
 
 - Сборка варианта A: `clear-road-uae` → `npm run build` → `dist/index.html` + копия в `Downloads\index.html`.
-- Источник логики: **`input/index.html`** (плейсхолдеры CSS, i18n, **TZ8 RTL**, **TZ9 voice**, **UX self-check**, **cr-empty-state**, **ключ Maps**) + `src/styles/*.css` + `src/i18n/*.js` + `src/js/*.js`. Ключ при сборке: env или `src/secrets/maps-api-key.txt` (не в git). Для CI/прод: **`npm run build:prod`** (без ключа сборка падает).
+- Источник логики: **`input/index.html`** (CSS, i18n, **TZ8 RTL**, **TZ9 voice**, **UX self-check**, **UX diag bootstrap** (плейсхолдер в основном script), **cr-empty-state**, **ключ Maps**) + `src/styles/*.css` + `src/i18n/*.js` + `src/js/*.js`. Ключ при сборке: env или `src/secrets/maps-api-key.txt` (не в git). Для CI/прод: **`npm run build:prod`** (без ключа сборка падает).
 
 ---
 
@@ -75,7 +75,7 @@
 |------|------|----------|
 | **1** | Прозрачность + мелкая гигиена | **Сделано:** в `src/js/cr-route-empty-state-final-v2.js` константа `CR_EMPTY_STATE_INSTALL_RETRY_DELAYS_MS` + комментарий, зачем пять отложенных `installAll` (асинхронная цепочка core/Directions/initMap). Этот документ — часть фазы 1. |
 | **2** | Один источник правды по обёрткам | **Сделано (2026-05-02):** `__CLEAR_ROAD_ROUTE_CANON__` (версия в коде), порядок `initMapLayers` снаружи→внутрь совпадает с комментарием; `__CLEAR_ROAD_WRAPPER_SNAPSHOT__()` расширен: `canonVersion`, `setLangChainModules` (TZ7/TZ8/TZ9), маркеры на `calculateRoutes`/`initMap`/`setLang`. Снятие самих обёрток — фаза 3+. |
-| **3** | Срез IIFE/дубли | **Сделано:** блок `cr-fix-route-empty-state-final-v2` вынесен в `src/js/cr-route-empty-state-final-v2.js`, в `input` — плейсхолдер `__CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__`, сборка встраивает как раньше. Дальше по желанию: другие `<script id="…">` слои. |
+| **3** | Срез IIFE/дубли | **Сделано:** empty-state, TZ9 voice, UX self-check, TZ8 RTL — в `src/js` + плейсхолдеры. **Доп.:** `cr-ux-diag-bootstrap.js` → `__CLEAR_ROAD_BUILD_JS_UX_DIAG_BOOTSTRAP__` (внутри основного `<script>`, сразу после канона, до `gm_authFailure`/GLOBAL STATE). Дальше по желанию: мелкие IIFE из монолита без трогания ядра маршрута. |
 | **4** | Ключ и деплой | **Сделано:** в `input` плейсхолдер `__CLEAR_ROAD_BUILD_MAPS_API_KEY__`. Сборка: `CLEAR_ROAD_MAPS_API_KEY` или `GOOGLE_MAPS_API_KEY` → иначе первая строка `src/secrets/maps-api-key.txt` (файл в `.gitignore`) → иначе dev fallback + предупреждение. В Cloud Console — ограничения по referrer для ключа. |
 | **5** | Ещё вынос + прод-сборка | **Сделано:** слой `tz8-rtl-script` → `src/js/tz8-rtl-layer.js`, плейсхолдер `__CLEAR_ROAD_BUILD_JS_TZ8_RTL__`. Флаг **`--require-maps-key`**, скрипт **`npm run build:prod`** — без env/файла ключа сборка не проходит. **`npm run extract:tz8-rtl`** — вытягивание из монолита при откате шаблона. |
 
