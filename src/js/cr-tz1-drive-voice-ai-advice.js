@@ -181,5 +181,5 @@ function speakCurrentDecision() {
   const now = Date.now();
   if (now - lastDecisionVoiceAt < 1200) return;
   lastDecisionVoiceAt = now;
-  speakText(buildDecisionVoiceText((currentDecision && currentDecision.bestRoute) || selectedRoute || _bestRoute, "manual"));
+  speakText(buildDecisionVoiceText(selectedRoute || (currentDecision && currentDecision.bestRoute) || _bestRoute, "manual"));
 }

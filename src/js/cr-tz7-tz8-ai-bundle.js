@@ -422,7 +422,15 @@
       avoidTraffic: !!(f.avoid_traffic || f.no_traffic || f.avoidTraffic)
     };
   }
-  function hasTolls(route){ return !!(route && (route.tolls || route.hasTolls || safeNum(route.tollCost, 0) > 0)); }
+  function hasTolls(route){
+    return !!(route && (route.tolls || route.hasTolls || safeNum(route.tollCost, 0) > 0 || safeNum(route.salikCost, 0) > 0));
+  }
+  function salikAed(route){
+    return safeNum(route && route.salikCost, safeNum(route && route.tollCost, 0));
+  }
+  function salikGates(route){
+    return Math.max(0, Math.round(safeNum(route && route.salikCount, safeNum(route && route.tollCount, 0))));
+  }
   function hasHighway(route){
     if (!route) return false;
     if (route.highway || route.hasHighway) return true;
@@ -534,19 +542,23 @@
   const L = {
     en: {
       go:'GO NOW', close:'ROUTES ARE CLOSE', only:'ONLY VALID ROUTE', why:'WHY', trade:'TRADE-OFF', when:'WHEN', conf:'AI CONFIDENCE',
-      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'You can go now — almost no difference.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH'
+      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'Leave when ready — compare minutes and Salik below.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH',
+      salikCostNarr:'Salik about {aed} AED ({gates} gates)', salikFreeVs:'Skips Salik versus a tolled alternative', pickBySalik:'Times are close — decide using Salik cost and comfort.', stabBetter:'More stable ETA than the main alternative'
     },
     ru: {
       go:'ЕДЬ СЕЙЧАС', close:'МАРШРУТЫ ПОЧТИ РАВНЫ', only:'ОДИН ДОСТУПНЫЙ МАРШРУТ', why:'ПОЧЕМУ', trade:'КОМПРОМИСС', when:'КОГДА', conf:'УВЕРЕННОСТЬ AI',
-      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Можно ехать сейчас — разницы почти нет', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ'
+      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Выезжай, когда готов — ниже сравнение минут и Салика.', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ',
+      salikCostNarr:'Салик около {aed} AED ({gates} ворот)', salikFreeVs:'Без Салика против платной альтернативы', pickBySalik:'Время близко — решай по Салику и комфорту.', stabBetter:'Стабильнее ETA, чем основная альтернатива'
     },
     ua: {
       go:'ЇДЬ ЗАРАЗ', close:'МАРШРУТИ МАЙЖЕ РІВНІ', only:'ОДИН ДОСТУПНИЙ МАРШРУТ', why:'ЧОМУ', trade:'КОМПРОМІС', when:'КОЛИ', conf:'ВПЕВНЕНІСТЬ AI',
-      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Можна їхати зараз — різниця майже нуль', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА'
+      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Виїжджай, коли готовий — нижче порівняння хвилин і Саліку.', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА',
+      salikCostNarr:'Салік ~{aed} AED ({gates} шлюзів)', salikFreeVs:'Без Саліку проти платної альтернативи', pickBySalik:'Час близький — обирай за Саліком і комфортом.', stabBetter:'Стабільніший ETA за основну альтернативу'
     },
     ar: {
       go:'انطلق الآن', close:'المسارات متقاربة', only:'مسار واحد صالح', why:'السبب', trade:'المقابل', when:'الوقت', conf:'ثقة AI',
-      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'يمكنك الانطلاق الآن — الفرق ضئيل', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية'
+      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'انطلق عند الجاهزية — قارن الدقائق والسالك أدناه.', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية',
+      salikCostNarr:'سالك نحو {aed} درهم ({gates} بوابات)', salikFreeVs:'بدون سالك مقارنة ببديل برسوم', pickBySalik:'الأوقات متقاربة — قرّر حسب تكلفة سالك والراحة.', stabBetter:'وقت وصول أكثر استقراراً من البديل الرئيسي'
     }
   };
   function dict(){ const lang = getLang(); return L[lang] || L.en; }
@@ -698,19 +710,33 @@
     if (second && trafficRank(best) < trafficRank(second)) why.push(d.betterTraffic);
     if (second && stops(best) + 1 < stops(second)) why.push(d.fewerStops);
     if (second && distGap >= 1.5) why.push(d.shorter);
+    if (second && salikAed(second) > 0.5 && salikAed(best) < 0.5) why.push(d.salikFreeVs);
+    if (second) {
+      const sb = safeNum(best && best.stabilityScore, 50);
+      const ss = safeNum(second && second.stabilityScore, 50);
+      if (sb >= ss + 8) why.push(d.stabBetter);
+    }
     const trade = [];
-    if (best && hasTolls(best)) trade.push(d.toll);
+    const sa = salikAed(best);
+    const sg = salikGates(best);
+    if (best && sa > 0.5) trade.push(tpl(d.salikCostNarr, { aed: Math.round(sa), gates: sg }));
+    else if (best && hasTolls(best)) trade.push(d.toll);
     if (best && hasHighway(best)) trade.push(d.highway);
     if (second && timeGap <= 1) trade.push(d.altClose);
     else if (!trade.length && second && timeGap > 0) trade.push(tpl(d.altSlower, {x: timeGap}));
     if (!trade.length) trade.push(d.onlyReason);
 
+    let whenText = d.noWait;
+    if (type === 'SIMILAR' && second && Math.abs(salikAed(best) - salikAed(second)) > 1.5) {
+      whenText = d.pickBySalik;
+    }
+
     const ai = {
       type,
       headline,
-      why: unique(why).slice(0,2),
-      tradeoff: unique(trade).slice(0,2),
-      when: d.noWait,
+      why: unique(why).slice(0,3),
+      tradeoff: unique(trade).slice(0,3),
+      when: whenText,
       bestMinutes: bestMin,
       secondMinutes: secondMin,
       deltaMinutes: second ? delta : null,
@@ -806,14 +832,21 @@
   window.getAIAdviceText = function(route){
     const decision = buildRealDecision(Array.isArray(analyzedRoutes) && analyzedRoutes.length ? analyzedRoutes : [route].filter(Boolean));
     const ai = decision.aiDecision;
-    return ai.headline + '. ' + (ai.why || []).join(' · ') + '. ' + (ai.tradeoff || []).join(' · ') + '.';
+    const tail = ai.when ? " " + ai.when : "";
+    return ai.headline + ". " + (ai.why || []).join(" · ") + ". " + (ai.tradeoff || []).join(" · ") + "." + tail;
   };
   try { getAIAdviceText = window.getAIAdviceText; } catch (_) {}
 
   window.buildDecisionVoiceText = function(route){
+    try {
+      if (typeof window.crBuildRouteAdvisorVoiceBrief === "function") {
+        const v = window.crBuildRouteAdvisorVoiceBrief(route);
+        if (v) return v;
+      }
+    } catch (_) {}
     const decision = buildRealDecision(Array.isArray(analyzedRoutes) && analyzedRoutes.length ? analyzedRoutes : [route].filter(Boolean));
     const ai = decision.aiDecision;
-    return [ai.headline].concat(ai.why || []).concat(ai.tradeoff || []).concat([ai.when]).join('. ');
+    return [ai.headline].concat((ai.why || []).slice(0, 1)).concat([ai.when]).filter(Boolean).join(". ");
   };
   try { buildDecisionVoiceText = window.buildDecisionVoiceText; } catch (_) {}
 

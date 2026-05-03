@@ -2,6 +2,29 @@
 // Загружается после cr-route-cards-ui-cleanup; onclick openRouteDetails / toggleAlternatives — в cr-route-compare-modal-ui.js [v04].
 // Зависит от main: глобалей маршрута, t(), _tz1*, _tz2BuildWhy/TradeOff, …
 
+function crI18nSub(str, o) {
+  let s = String(str || "");
+  Object.keys(o || {}).forEach(function(k) {
+    s = s.split("{" + k + "}").join(String(o[k]));
+  });
+  return s;
+}
+
+function crSalikSummaryForAdvisor(route, tk) {
+  if (!route || typeof tk !== "function") return "";
+  if (crSalikUncertain(route)) return tk("salik_disclaimer_uncertain");
+  const aed = crRouteSalikAed(route);
+  const g = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : route.tollCount) || 0));
+  if (aed < 0.01) return tk("ai_adv_salik_free");
+  return crI18nSub(tk("ai_adv_salik_paid"), { aed: Math.round(aed * 100) / 100, n: g });
+}
+
+function crRouteDisplayNum(route) {
+  if (!route) return "";
+  const n = route.displayIndex != null ? Number(route.displayIndex) : Number(route.index) + 1;
+  return String(Number.isFinite(n) ? n : 1);
+}
+
 function crAltRoutesComputeRefs(allRoutes) {
   const list = Array.isArray(allRoutes)
     ? allRoutes.filter(function(r) { return r && Number.isFinite(r.index); })
@@ -414,64 +437,176 @@ function crHeroMinutesForRoute(route) {
   return 1;
 }
 
-/** Hero panel: timing + Salik (syncs with selected route). */
+/** Hero panel: route comparison + Salik + optional timing (syncs with selected route). */
 function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
   const tk = typeof t === "function" ? t : function(k) { return k; };
-  const sub = function(str, o) {
-    let s = String(str || "");
-    Object.keys(o || {}).forEach(function(k) {
-      s = s.split("{" + k + "}").join(String(o[k]));
-    });
-    return s;
-  };
-  const isBest = !!(panelRoute && matchedBest && Number(panelRoute.index) === Number(matchedBest.index));
+  const sub = crI18nSub;
+  const list = Array.isArray(analyzedRoutes)
+    ? analyzedRoutes.filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+    : [];
+  const best = matchedBest;
+  const salikX = crBuildSalikHeroExtras(panelRoute, matchedBest, list, tk, sub);
   const waitMinutes =
     window.clearRoadTZ3Predictive && Number.isFinite(Number(clearRoadTZ3Predictive.waitMinutes))
       ? Number(clearRoadTZ3Predictive.waitMinutes)
       : 15;
 
-  const salikX = crBuildSalikHeroExtras(panelRoute, matchedBest, analyzedRoutes || [], tk, sub);
-  const title = isBest ? tk("ai_hero_title_best") : tk("ai_hero_title_chosen");
+  if (salikX.salikWaitOverride) {
+    return {
+      title: sub(tk("ai_adv_title_recommended"), { n: crRouteDisplayNum(panelRoute || best) }),
+      decision: salikX.salikWaitOverride.decision,
+      reason: salikX.salikWaitOverride.reason,
+      compareAlts: "",
+      salikLine: salikX.salikLine,
+      salikPick: salikX.salikPick,
+      salikDisclaimer: salikX.disclaimer
+    };
+  }
+
+  const viewingBest = !!(panelRoute && best && Number(panelRoute.index) === Number(best.index));
+  const title = viewingBest
+    ? sub(tk("ai_adv_title_recommended"), { n: crRouteDisplayNum(best) })
+    : sub(tk("ai_adv_title_viewing"), { n: crRouteDisplayNum(panelRoute) });
+
   let decision = "";
   let reason = "";
+  let compareAlts = "";
 
-  if (salikX.salikWaitOverride) {
-    decision = salikX.salikWaitOverride.decision;
-    reason = salikX.salikWaitOverride.reason;
+  if (!best || !panelRoute) {
+    return {
+      title: title,
+      decision: "",
+      reason: "",
+      compareAlts: "",
+      salikLine: salikX.salikLine,
+      salikPick: salikX.salikPick,
+      salikDisclaimer: salikX.disclaimer
+    };
+  }
+
+  if (list.length < 2) {
+    decision = sub(tk("ai_adv_one_route_decision"), {
+      n: crRouteDisplayNum(panelRoute),
+      min: crHeroMinutesForRoute(panelRoute),
+      km: crRouteKmForAi(panelRoute),
+      salik: crSalikSummaryForAdvisor(panelRoute, tk)
+    });
+    reason = tk("ai_adv_one_route_why");
   } else {
-    let nowMin = crHeroMinutesForRoute(panelRoute);
-    let laterMin = nowMin;
+    const sortedTime = list.slice().sort(function(a, b) {
+      return crHeroMinutesForRoute(a) - crHeroMinutesForRoute(b);
+    });
+    const fastest = sortedTime[0];
+    const refs = crAltRoutesComputeRefs(list);
+    const calmest = refs.calmest;
+    const freeBest = crFindFastestFreeRoute(list);
 
-    if (
-      isBest &&
-      typeof _predictiveData !== "undefined" &&
-      _predictiveData &&
-      Number.isFinite(Number(_predictiveData.nowMin)) &&
-      Number.isFinite(Number(_predictiveData.laterMin))
-    ) {
-      nowMin = Math.max(1, Math.round(Number(_predictiveData.nowMin)));
-      laterMin = Math.max(1, Math.round(Number(_predictiveData.laterMin)));
-    } else {
-      try {
-        if (window.clearRoadTZ3Predictive && typeof clearRoadTZ3Predictive.estimateLaterMinutes === "function") {
-          laterMin = clearRoadTZ3Predictive.estimateLaterMinutes(nowMin);
-        }
-      } catch (_) {}
-      laterMin = Math.max(1, Math.round(Number(laterMin) || nowMin));
+    decision = sub(tk("ai_adv_compare_decision"), {
+      total: list.length,
+      n: crRouteDisplayNum(best),
+      min: crHeroMinutesForRoute(best),
+      km: crRouteKmForAi(best),
+      salik: crSalikSummaryForAdvisor(best, tk)
+    });
+
+    const parts = [];
+    if (fastest && Number(fastest.index) !== Number(best.index)) {
+      const diff = crHeroMinutesForRoute(fastest) - crHeroMinutesForRoute(best);
+      if (diff !== 0) {
+        parts.push(
+          sub(tk("ai_adv_fastest_note"), {
+            n: crRouteDisplayNum(fastest),
+            min: crHeroMinutesForRoute(fastest),
+            diff: Math.abs(Math.round(diff))
+          })
+        );
+      }
     }
+    if (calmest && best && Number(calmest.index) !== Number(best.index)) {
+      const sb = Number(best.stabilityScore);
+      const sc = Number(calmest.stabilityScore);
+      if (Number.isFinite(sb) && Number.isFinite(sc) && sc >= sb + 8) {
+        parts.push(sub(tk("ai_adv_calm_alt_note"), { n: crRouteDisplayNum(calmest) }));
+      }
+    }
+    if (freeBest && Number(freeBest.index) !== Number(best.index)) {
+      const td = crHeroMinutesForRoute(freeBest) - crHeroMinutesForRoute(best);
+      const save = crRouteSalikAed(best) - crRouteSalikAed(freeBest);
+      if (save > 0.5) {
+        parts.push(
+          sub(tk("ai_adv_free_alt_note"), {
+            n: crRouteDisplayNum(freeBest),
+            m: Math.max(1, Math.round(td)),
+            aed: Math.round(save)
+          })
+        );
+      }
+    }
+    const delayB = Number(best.delayMinutes) || 0;
+    let trLabel = tk("traf_moderate");
+    const tr = typeof _tz1TrafficRank === "function" ? _tz1TrafficRank(best.traffic) : 2;
+    if (tr <= 1) trLabel = tk("traf_stable");
+    if (tr >= 3) trLabel = tk("traf_heavy");
+    parts.push(sub(tk("ai_adv_traffic_delay"), { traf: trLabel, delay: delayB }));
 
-    const saving = nowMin - laterMin;
-    const branch = crMirrorTz3TimingBranch(saving);
+    reason = parts.join(" ");
+    if (!String(reason).trim()) reason = tk("ai_adv_why_balance");
 
-    if (branch === "wait") {
-      decision = sub(tk("ai_hero_decision_wait"), { n: waitMinutes });
-      reason = isBest ? tk("ai_hero_reason_wait_best") : tk("ai_hero_reason_wait_alt");
-    } else if (branch === "leave_now") {
-      decision = tk("ai_hero_decision_leave");
-      reason = isBest ? tk("ai_hero_reason_leave_best") : tk("ai_hero_reason_leave_alt");
+    if (!viewingBest) {
+      compareAlts = sub(tk("ai_adv_viewing_alt"), {
+        n: crRouteDisplayNum(panelRoute),
+        min: crHeroMinutesForRoute(panelRoute),
+        salik: crSalikSummaryForAdvisor(panelRoute, tk),
+        bestN: crRouteDisplayNum(best)
+      });
     } else {
-      decision = tk("ai_hero_decision_same");
-      reason = isBest ? tk("ai_hero_reason_same_best") : tk("ai_hero_reason_same_alt");
+      const second = sortedTime.find(function(r) {
+        return r && Number(r.index) !== Number(best.index);
+      });
+      if (second) {
+        const md = crHeroMinutesForRoute(second) - crHeroMinutesForRoute(best);
+        compareAlts = sub(tk("ai_adv_vs_second"), {
+          n: crRouteDisplayNum(second),
+          m: Math.abs(Math.round(md)),
+          salik: crSalikSummaryForAdvisor(second, tk)
+        });
+      }
+    }
+  }
+
+  const isBestPanel = !!(panelRoute && best && Number(panelRoute.index) === Number(best.index));
+  let nowMin = crHeroMinutesForRoute(panelRoute);
+  let laterMin = nowMin;
+  if (
+    isBestPanel &&
+    typeof _predictiveData !== "undefined" &&
+    _predictiveData &&
+    Number.isFinite(Number(_predictiveData.nowMin)) &&
+    Number.isFinite(Number(_predictiveData.laterMin))
+  ) {
+    nowMin = Math.max(1, Math.round(Number(_predictiveData.nowMin)));
+    laterMin = Math.max(1, Math.round(Number(_predictiveData.laterMin)));
+  } else {
+    try {
+      if (window.clearRoadTZ3Predictive && typeof clearRoadTZ3Predictive.estimateLaterMinutes === "function") {
+        laterMin = clearRoadTZ3Predictive.estimateLaterMinutes(nowMin);
+      }
+    } catch (_) {}
+    laterMin = Math.max(1, Math.round(Number(laterMin) || nowMin));
+  }
+  const saving = nowMin - laterMin;
+  if (Math.abs(saving) >= 2) {
+    const branch = crMirrorTz3TimingBranch(saving);
+    if (branch === "wait") {
+      reason +=
+        " " +
+        sub(tk("ai_hero_decision_wait"), { n: waitMinutes }) +
+        " " +
+        (isBestPanel ? tk("ai_hero_reason_wait_best") : tk("ai_hero_reason_wait_alt"));
+    } else if (branch === "leave_now") {
+      reason += " " + tk("ai_hero_decision_leave") + " " + (isBestPanel ? tk("ai_hero_reason_leave_best") : tk("ai_hero_reason_leave_alt"));
     }
   }
 
@@ -479,6 +614,7 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
     title: title,
     decision: decision,
     reason: reason,
+    compareAlts: compareAlts,
     salikLine: salikX.salikLine,
     salikPick: salikX.salikPick,
     salikDisclaimer: salikX.disclaimer
@@ -487,6 +623,89 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
 try {
   window.crBuildAiHeroCopy = crBuildAiHeroCopy;
 } catch (_) {}
+
+/** Short voice (~3–5 short sentences): recommendation, time vs alt, Salik, save hint. */
+function crBuildRouteAdvisorVoiceBrief(route) {
+  if (!route || typeof t !== "function") return "";
+  const tk = t;
+  const sub = crI18nSub;
+  const routes = Array.isArray(analyzedRoutes)
+    ? analyzedRoutes.filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+    : [];
+  if (!routes.length) return "";
+
+  const best = typeof currentDecision !== "undefined" && currentDecision && currentDecision.bestRoute ? currentDecision.bestRoute : null;
+  const num = crRouteDisplayNum(route);
+  const isBest = best && Number(route.index) === Number(best.index);
+  const minutes = function(r) {
+    return crHeroMinutesForRoute(r);
+  };
+  const alts = routes
+    .filter(function(r) {
+      return Number(r.index) !== Number(route.index);
+    })
+    .slice()
+    .sort(function(a, b) {
+      return minutes(a) - minutes(b);
+    });
+  const mainAlt = alts[0];
+  const chunks = [];
+
+  if (isBest) {
+    chunks.push(sub(tk("ai_voice_recommend_num"), { n: num }));
+    if (mainAlt) {
+      const d = minutes(mainAlt) - minutes(route);
+      if (d >= 2) chunks.push(sub(tk("ai_voice_faster_than_alt"), { m: Math.round(d) }));
+      else if (d <= -2) chunks.push(sub(tk("ai_voice_alt_faster_warning"), { m: Math.round(-d) }));
+      else chunks.push(tk("ai_voice_time_close"));
+    }
+  } else {
+    chunks.push(sub(tk("ai_voice_you_picked_num"), { n: num }));
+    if (best) {
+      const d = minutes(route) - minutes(best);
+      if (d >= 2) chunks.push(sub(tk("ai_voice_slower_than_best"), { m: Math.round(d) }));
+    }
+  }
+
+  if (crSalikUncertain(route)) chunks.push(tk("salik_disclaimer_uncertain"));
+  else {
+    const aed = crRouteSalikAed(route);
+    if (aed >= 0.01) chunks.push(sub(tk("ai_voice_salik_cost"), { aed: Math.round(aed * 100) / 100 }));
+    else chunks.push(tk("ai_voice_salik_free"));
+  }
+
+  const freeAlt = routes.find(function(r) {
+    return Number(r.index) !== Number(route.index) && crRouteSalikAed(r) < 0.01;
+  });
+  if (freeAlt && crRouteSalikAed(route) >= 0.01) {
+    chunks.push(sub(tk("ai_voice_save_take_alt"), { n: crRouteDisplayNum(freeAlt) }));
+  }
+
+  return chunks.filter(Boolean).join(" ");
+}
+try {
+  window.crBuildRouteAdvisorVoiceBrief = crBuildRouteAdvisorVoiceBrief;
+} catch (_) {}
+
+function crBuildRouteCardAdvisorInnerHtml(route, displayNum, ctx, tk) {
+  const points = buildRouteSellingPoints(route, displayNum);
+  let whenKey = "route_card_when_alt";
+  if (ctx.best && route && Number(route.index) === Number(ctx.best.index)) whenKey = "route_card_when_best";
+  else if (ctx.fastest && route && Number(route.index) === Number(ctx.fastest.index)) whenKey = "route_card_when_fastest";
+  else if (ctx.calmest && route && Number(route.index) === Number(ctx.calmest.index)) whenKey = "route_card_when_calm";
+  else if (crRouteSalikAed(route) < 0.01 && ctx.best && crRouteSalikAed(ctx.best) >= 0.01) whenKey = "route_card_when_tollfree";
+  const when = tk(whenKey);
+  let h = '<div class="dashboard-route-advisor">';
+  h += '<div class="dashboard-route-advisor-label">' + _tz1EscapeHTML(tk("route_card_advisor_heading")) + "</div>";
+  points.forEach(function(line) {
+    if (line) h += '<p class="dashboard-route-advisor-line">' + _tz1EscapeHTML(line) + "</p>";
+  });
+  h += '<p class="dashboard-route-advisor-when">' + _tz1EscapeHTML(when) + "</p>";
+  h += "</div>";
+  return h;
+}
 
 /** AI verdict + compact card copy (presentation only; uses existing route metrics). */
 function crBuildRouteAiCopy(route, best, fastest, calmest, allRoutes) {
@@ -653,9 +872,9 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
       slot +
       '" data-route-line-color="' +
       _tz1EscapeHTML(markerColor) +
-      '" onclick="selectDisplayedRoute(' +
+      '" onclick="selectDisplayedRouteFromUi(' +
       idx +
-      ')" onkeydown="if(event.key===&quot;Enter&quot;||event.key===&quot; &quot;){event.preventDefault();selectDisplayedRoute(' +
+      ')" onkeydown="if(event.key===&quot;Enter&quot;||event.key===&quot; &quot;){event.preventDefault();selectDisplayedRouteFromUi(' +
       idx +
       ');}">';
     inner += '<span class="dashboard-route-line-marker" style="background-color:' + markerColor + '" aria-hidden="true"></span>';
@@ -684,9 +903,10 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
       " " +
       _tz1EscapeHTML(arrivalStr) +
       "</div>";
+    inner += crBuildRouteCardAdvisorInnerHtml(route, num, ctx, tk);
     inner += crSalikCardHtml(route, tk);
     inner +=
-      '<button type="button" class="dashboard-route-select-btn" onclick="event.stopPropagation();selectDisplayedRoute(' +
+      '<button type="button" class="dashboard-route-select-btn" onclick="event.stopPropagation();selectDisplayedRouteFromUi(' +
       idx +
       ')">' +
       _tz1EscapeHTML(tk("ai_default_route_cta")) +
@@ -702,7 +922,7 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
   );
 }
 
-function selectDisplayedRoute(routeIndex) {
+function selectDisplayedRoute(routeIndex, opts) {
   try {
     const idx = Number(routeIndex);
     if (!Array.isArray(analyzedRoutes) || !Number.isFinite(idx)) return;
@@ -727,32 +947,48 @@ function selectDisplayedRoute(routeIndex) {
       }
     }
     if (typeof renderResults === "function") renderResults();
+    if (opts && opts.fromUser) {
+      try {
+        if (typeof speakCurrentDecision === "function") {
+          var nowTs = Date.now();
+          if (nowTs - (window.__crLastSelectVoiceAt || 0) > 3200) {
+            window.__crLastSelectVoiceAt = nowTs;
+            setTimeout(function() {
+              try {
+                speakCurrentDecision();
+              } catch (_) {}
+            }, 420);
+          }
+        }
+      } catch (_) {}
+    }
   } catch (e) {
     console.warn("selectDisplayedRoute", e);
   }
 }
+function selectDisplayedRouteFromUi(routeIndex) {
+  selectDisplayedRoute(routeIndex, { fromUser: true });
+}
 try {
   window.selectDisplayedRoute = selectDisplayedRoute;
+} catch (_) {}
+try {
+  window.selectDisplayedRouteFromUi = selectDisplayedRouteFromUi;
 } catch (_) {}
 
 function selectRecommendedRoute() {
   try {
     if (!Array.isArray(analyzedRoutes) || !currentDecision || !currentDecision.bestRoute) return;
-    const best = currentDecision.bestRoute;
-    const bi = Number(best.index);
+    const decisionBest = currentDecision.bestRoute;
+    const decisionBestIndex = Number(decisionBest.index);
+    if (!Number.isFinite(decisionBestIndex)) return;
+    const found = analyzedRoutes.find(function(route) {
+      return route && Number(route.index) === decisionBestIndex;
+    });
+    if (!found) return;
+    const bi = Number(found.index);
     if (!Number.isFinite(bi)) return;
-    let pickRaw = null;
-    try {
-      pickRaw = window.__clearRoadUserPickIndex;
-    } catch (_) {
-      pickRaw = null;
-    }
-    const pickNum = pickRaw !== null && pickRaw !== undefined && String(pickRaw) !== "" ? Number(pickRaw) : NaN;
-    const onBest =
-      selectedRoute && best && Number(selectedRoute.index) === Number(best.index);
-    const pickIsBestOrUnset = !Number.isFinite(pickNum) || pickNum === bi;
-    if (onBest && pickIsBestOrUnset) return;
-    selectDisplayedRoute(bi);
+    selectDisplayedRouteFromUi(bi);
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         try {
@@ -931,6 +1167,11 @@ function renderResults() {
       '<p class="dashboard-ai-compact-rec" id="ai-hero-reason">' +
       _tz1EscapeHTML(aiHero.reason) +
       "</p>" +
+      (aiHero.compareAlts
+        ? '<p class="dashboard-ai-compact-line dashboard-ai-compare-alts" id="ai-hero-compare">' +
+          _tz1EscapeHTML(aiHero.compareAlts) +
+          "</p>"
+        : "") +
       salikExtras +
       '<button type="button" class="dashboard-ai-primary-btn" id="ai-default-cta" onclick="selectRecommendedRoute()">' +
       _tz1EscapeHTML(tk("ai_default_route_cta")) +

@@ -169,22 +169,39 @@
 
   function getAdvicePayload(input){
     const lang = (input && input.lang) || currentLangSafe();
-    const scenario = (input && input.scenario) || inferScenario((input && input.route) || getCurrentRoute());
-    const params = Object.assign(defaultParamsFromRoute((input && input.route) || getCurrentRoute()), input && input.params);
+    const route = (input && input.route) || getCurrentRoute();
+    const scenario = (input && input.scenario) || inferScenario(route);
+    const params = Object.assign(defaultParamsFromRoute(route), input && input.params);
     const text = getScenarioText(lang, scenario, params);
+    let voiceText = '';
+    try {
+      if (typeof window.crBuildRouteAdvisorVoiceBrief === 'function' && route) {
+        voiceText = window.crBuildRouteAdvisorVoiceBrief(route);
+      }
+    } catch (_){}
+    if (!voiceText) voiceText = buildVoiceText(lang, scenario, params);
+    let displayText = '';
+    try {
+      if (typeof window.getAIAdviceText === 'function' && route) {
+        displayText = window.getAIAdviceText(route);
+      }
+    } catch (_){}
+    if (!displayText) {
+      displayText = (TEXT[lang] && TEXT[lang].ai_prefix ? TEXT[lang].ai_prefix : TEXT.en.ai_prefix) + ': ' + text;
+    }
     return {
       lang,
       scenario,
       text,
-      displayText: (TEXT[lang] && TEXT[lang].ai_prefix ? TEXT[lang].ai_prefix : TEXT.en.ai_prefix) + ': ' + text,
-      voiceText: buildVoiceText(lang, scenario, params),
+      displayText: displayText,
+      voiceText: voiceText,
       params: normalizeParams(lang, params)
     };
   }
 
   function getCurrentRoute(){
     try {
-      return (window.currentDecision && window.currentDecision.bestRoute) || window.selectedRoute || window._bestRoute || null;
+      return window.selectedRoute || (window.currentDecision && window.currentDecision.bestRoute) || window._bestRoute || null;
     } catch { return null; }
   }
 
@@ -328,7 +345,8 @@
   function installVoiceHooks(){
     window.speakCurrentDecision = function(){
       const lang = currentLangSafe();
-      const payload = getAdvicePayload({ lang });
+      const route = getCurrentRoute();
+      const payload = getAdvicePayload({ lang, route: route });
       refreshVisibleAdvice();
       return speakPremium(lang, payload.voiceText || payload.text);
     };
@@ -337,7 +355,14 @@
 
     window.buildDecisionVoiceText = function(routeObj){
       const lang = currentLangSafe();
-      return getAdvicePayload({ lang, route: routeObj }).voiceText;
+      const r = routeObj || getCurrentRoute();
+      try {
+        if (typeof window.crBuildRouteAdvisorVoiceBrief === 'function' && r) {
+          const brief = window.crBuildRouteAdvisorVoiceBrief(r);
+          if (brief) return brief;
+        }
+      } catch (_){}
+      return getAdvicePayload({ lang, route: r }).voiceText;
     };
 
     window.buildRerouteVoiceText = function(decision, altRoute){

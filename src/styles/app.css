@@ -2661,6 +2661,39 @@ body.tz8-rtl-ar .dashboard-route-ai-compact-rec {
   color: rgba(251, 191, 36, 0.65);
   font-style: italic;
 }
+.dashboard-ai-compare-alts {
+  margin-top: 0.3rem !important;
+  color: rgba(167, 243, 208, 0.9) !important;
+  line-height: 1.4 !important;
+}
+.dashboard-route-advisor {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+.dashboard-route-advisor-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.85);
+  margin-bottom: 0.25rem;
+}
+.dashboard-route-advisor-line {
+  margin: 0 0 0.2rem;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.72);
+}
+.dashboard-route-advisor-when {
+  margin: 0.3rem 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(253, 224, 71, 0.78);
+  font-weight: 600;
+}
 .dashboard-routes-empty-placeholder {
   padding: 1.25rem 1rem;
   text-align: center;

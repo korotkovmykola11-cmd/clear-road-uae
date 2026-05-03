@@ -1,5 +1,5 @@
+<!-- VERSION: stable checkpoint - routes + salik + selection working -->
 <!DOCTYPE html>
-<!-- clear-road-uae build 2026-05-03T17:27:34.058Z sha256:07aafd7c77fbeaa6 source:C:/Users/korot/Downloads/clear-road-uae/input/index.html -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -2678,6 +2678,39 @@ body.tz8-rtl-ar .dashboard-route-ai-compact-rec {
   color: rgba(251, 191, 36, 0.65);
   font-style: italic;
 }
+.dashboard-ai-compare-alts {
+  margin-top: 0.3rem !important;
+  color: rgba(167, 243, 208, 0.9) !important;
+  line-height: 1.4 !important;
+}
+.dashboard-route-advisor {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+.dashboard-route-advisor-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.85);
+  margin-bottom: 0.25rem;
+}
+.dashboard-route-advisor-line {
+  margin: 0 0 0.2rem;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.72);
+}
+.dashboard-route-advisor-when {
+  margin: 0.3rem 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(253, 224, 71, 0.78);
+  font-weight: 600;
+}
 .dashboard-routes-empty-placeholder {
   padding: 1.25rem 1rem;
   text-align: center;
@@ -3242,7 +3275,40 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       salik_pick_consider_free:"Consider the toll-free route unless you need every minute.",
       salik_rule_recommend_free:"Small time gain may not justify Salik — toll-free is reasonable.",
       salik_rule_recommend_paid:"Large time saving can justify Salik here.",
-      salik_rule_either:"Time and Salik are close — your choice.",
+      salik_rule_either:"Time and Salik are close — weigh minutes against tolls.",
+
+      ai_adv_title_recommended:"AI recommendation: route {n}",
+      ai_adv_title_viewing:"Your selection: route {n}",
+      ai_adv_one_route_decision:"One route available: about {min} min, {km} km, {salik}.",
+      ai_adv_one_route_why:"Use it unless you change start or destination.",
+      ai_adv_compare_decision:"Compared {total} routes. Best balance: option {n} — ~{min} min, {km} km, {salik}.",
+      ai_adv_why_balance:"Balanced ETA, traffic, stability, and Salik versus alternatives.",
+      ai_adv_fastest_note:"Fastest is option {n} (~{min} min), {diff} min quicker but check Salik on that path.",
+      ai_adv_calm_alt_note:"Option {n} is calmer if you accept a few extra minutes.",
+      ai_adv_free_alt_note:"Salik-free option {n} saves ~{aed} AED on tolls, about +{m} min versus the AI pick.",
+      ai_adv_traffic_delay:"Traffic: {traf}. Congestion delay ~{delay} min on the recommended path.",
+      ai_adv_viewing_alt:"You chose option {n} (~{min} min, {salik}) instead of AI option {bestN}. Compare time and Salik below.",
+      ai_adv_vs_second:"Main alternative: option {n} (~{m} min vs recommended, {salik}).",
+      ai_adv_salik_free:"no Salik",
+      ai_adv_salik_paid:"~{aed} AED Salik ({n} gates)",
+      ai_adv_salik_none:"Salik unknown",
+
+      ai_voice_recommend_num:"I recommend route {n}.",
+      ai_voice_you_picked_num:"Route {n} is selected.",
+      ai_voice_faster_than_alt:"About {m} minutes faster than the closest alternative.",
+      ai_voice_alt_faster_warning:"An alternative is about {m} minutes faster — pick it if speed matters most.",
+      ai_voice_time_close:"Time is close to the alternative — decide using Salik and comfort.",
+      ai_voice_slower_than_best:"About {m} minutes slower than the AI-recommended route.",
+      ai_voice_salik_cost:"Salik about {aed} UAE dirhams.",
+      ai_voice_salik_free:"No Salik on this route.",
+      ai_voice_save_take_alt:"To save on tolls, consider route {n}.",
+
+      route_card_advisor_heading:"AI route note",
+      route_card_when_best:"Default pick: best balance of time, traffic, and Salik for this trip.",
+      route_card_when_fastest:"Choose when arriving sooner matters more than tolls or extra lane changes.",
+      route_card_when_calm:"Choose for a calmer drive if a few extra minutes are acceptable.",
+      route_card_when_tollfree:"Choose to minimise Salik — accepts a longer ETA if needed.",
+      route_card_when_alt:"Choose if the recommendation slows down or this trade-off suits you better.",
 
       ai_verdict_best_balance:"BEST BALANCE",
       ai_verdict_fastest_now:"FASTEST NOW",
@@ -3450,7 +3516,40 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       salik_pick_consider_free:"Смотри на бесплатный, если не критичны минуты.",
       salik_rule_recommend_free:"Маленький выигрыш времени может не стоить Салика.",
       salik_rule_recommend_paid:"Большая экономия времени может оправдать Салик.",
-      salik_rule_either:"Время и Салик близко — твой выбор.",
+      salik_rule_either:"Время и Салик близко — сравни минуты и платные ворота.",
+
+      ai_adv_title_recommended:"Рекомендация AI: маршрут {n}",
+      ai_adv_title_viewing:"Твой выбор: маршрут {n}",
+      ai_adv_one_route_decision:"Доступен один маршрут: ~{min} мин, {km} км, {salik}.",
+      ai_adv_one_route_why:"Используй его, пока не сменишь точки А или Б.",
+      ai_adv_compare_decision:"Сравнил {total} маршрутов. Лучший баланс — вариант {n}: ~{min} мин, {km} км, {salik}.",
+      ai_adv_why_balance:"Баланс времени в пути, трафика, стабильности и Салика к альтернативам.",
+      ai_adv_fastest_note:"Быстрее всего вариант {n} (~{min} мин), на {diff} мин быстрее, но проверь Салик на нём.",
+      ai_adv_calm_alt_note:"Вариант {n} спокойнее, если готов к нескольким лишним минутам.",
+      ai_adv_free_alt_note:"Без Салика вариант {n} экономит ~{aed} AED, примерно +{m} мин к выбору AI.",
+      ai_adv_traffic_delay:"Трафик: {traf}. Задержка от заторов ~{delay} мин на рекомендованном пути.",
+      ai_adv_viewing_alt:"Выбран вариант {n} (~{min} мин, {salik}) вместо варианта AI {bestN}. Смотри время и Салик ниже.",
+      ai_adv_vs_second:"Главная альтернатива: вариант {n} (~{m} мин к рекомендованному, {salik}).",
+      ai_adv_salik_free:"без Салика",
+      ai_adv_salik_paid:"~{aed} AED Салик ({n} ворот)",
+      ai_adv_salik_none:"Салик неизвестен",
+
+      ai_voice_recommend_num:"Рекомендую маршрут {n}.",
+      ai_voice_you_picked_num:"Выбран маршрут {n}.",
+      ai_voice_faster_than_alt:"Примерно на {m} минут быстрее ближайшей альтернативы.",
+      ai_voice_alt_faster_warning:"Альтернатива быстрее примерно на {m} минут — бери её, если важна скорость.",
+      ai_voice_time_close:"По времени близко к альтернативе — решай по Салику и комфорту.",
+      ai_voice_slower_than_best:"Примерно на {m} минут медленнее маршрута, который рекомендует AI.",
+      ai_voice_salik_cost:"Салик порядка {aed} дирхамов.",
+      ai_voice_salik_free:"На этом маршруте без Салика.",
+      ai_voice_save_take_alt:"Чтобы сэкономить, смотри вариант {n}.",
+
+      route_card_advisor_heading:"Заметка AI",
+      route_card_when_best:"Основной вариант — лучший баланс времени, трафика и Салика.",
+      route_card_when_fastest:"Когда важнее всего приехать раньше, а не платёж или полосы.",
+      route_card_when_calm:"Когда нужен спокойнее разгон, и лишние минуты не страшны.",
+      route_card_when_tollfree:"Когда хочешь минимум Салика — можно потерять минуты.",
+      route_card_when_alt:"Если рекомендация подтормаживает или этот компромисс тебе удобнее.",
 
       ai_verdict_best_balance:"ЛУЧШИЙ БАЛАНС",
       ai_verdict_fastest_now:"СЕЙЧАС БЫСТРЕЕ ВСЕХ",
@@ -3657,7 +3756,40 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       salik_pick_consider_free:"Розглянь безплатний варіант, якщо хвилини не критичні.",
       salik_rule_recommend_free:"Малий виграш часу може не вартувати Саліку.",
       salik_rule_recommend_paid:"Великий виграш часу може виправдати Салік.",
-      salik_rule_either:"Час і Салік близько — твій вибір.",
+      salik_rule_either:"Час і Салік близько — зістав хвилини й платні ворота.",
+
+      ai_adv_title_recommended:"Порада AI: маршрут {n}",
+      ai_adv_title_viewing:"Твій вибір: маршрут {n}",
+      ai_adv_one_route_decision:"Є один маршрут: ~{min} хв, {km} км, {salik}.",
+      ai_adv_one_route_why:"Користуйся ним, доки не зміниш старт або фініш.",
+      ai_adv_compare_decision:"Порівняв {total} маршрутів. Найкращий баланс — варіант {n}: ~{min} хв, {km} км, {salik}.",
+      ai_adv_why_balance:"Баланс часу, трафіку, стабільності й Саліку проти альтернатив.",
+      ai_adv_fastest_note:"Найшвидший — варіант {n} (~{min} хв), на {diff} хв швидший, але перевір Салік.",
+      ai_adv_calm_alt_note:"Варіант {n} спокійніший, якщо можна + кілька хвилин.",
+      ai_adv_free_alt_note:"Без Саліку варіант {n} економить ~{aed} AED, приблизно +{m} хв до вибору AI.",
+      ai_adv_traffic_delay:"Трафік: {traf}. Затримка від заторів ~{delay} хв на рекомендованому шляху.",
+      ai_adv_viewing_alt:"Обрано варіант {n} (~{min} хв, {salik}) замість варіанту AI {bestN}. Порівняй час і Салік нижче.",
+      ai_adv_vs_second:"Головна альтернатива: варіант {n} (~{m} хв до рекомендованого, {salik}).",
+      ai_adv_salik_free:"без Саліку",
+      ai_adv_salik_paid:"~{aed} AED Салік ({n} шлюзів)",
+      ai_adv_salik_none:"Салік невідомий",
+
+      ai_voice_recommend_num:"Рекомендую маршрут {n}.",
+      ai_voice_you_picked_num:"Обрано маршрут {n}.",
+      ai_voice_faster_than_alt:"Приблизно на {m} хв швидше найближчої альтернативи.",
+      ai_voice_alt_faster_warning:"Альтернатива швидша приблизно на {m} хв — обери її, якщо важлива швидкість.",
+      ai_voice_time_close:"Час близький до альтернативи — обирай за Саліком і комфортом.",
+      ai_voice_slower_than_best:"Приблизно на {m} хв повільніше за рекомендований AI маршрут.",
+      ai_voice_salik_cost:"Салік близько {aed} дирхамів.",
+      ai_voice_salik_free:"На цьому маршруті без Саліку.",
+      ai_voice_save_take_alt:"Щоб зекономити, розглянь варіант {n}.",
+
+      route_card_advisor_heading:"Нотатка AI",
+      route_card_when_best:"Типовий вибір — найкращий баланс часу, трафіку й Саліку.",
+      route_card_when_fastest:"Коли важливіше приїхати раніше за платіж чи смуги.",
+      route_card_when_calm:"Коли треба спокійніша їзда, і зайві хвилини прийнятні.",
+      route_card_when_tollfree:"Коли хочеш мінімум Саліку — ETA може бути довшим.",
+      route_card_when_alt:"Якщо рекомендація гальмує або цей компроміс зручніший.",
 
       ai_verdict_best_balance:"НАЙКРАЩИЙ БАЛАНС",
       ai_verdict_fastest_now:"ЗАРАЗ НАЙШВИДШИЙ",
@@ -3864,7 +3996,40 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       salik_pick_consider_free:"فكّر في المسار بدون رسوم ما لم تكن الدقائق حاسمة.",
       salik_rule_recommend_free:"مكسب وقت صغير قد لا يستحق سالك.",
       salik_rule_recommend_paid:"توفير وقت كبير قد يبرّر سالك.",
-      salik_rule_either:"الوقت والتكلفة متوازنان — قرارك.",
+      salik_rule_either:"الوقت والسالك متقاربان — قارن الدقائق والرسوم.",
+
+      ai_adv_title_recommended:"توصية الذكاء: المسار {n}",
+      ai_adv_title_viewing:"اختيارك: المسار {n}",
+      ai_adv_one_route_decision:"مسار واحد متاح: ~{min} د، {km} كم، {salik}.",
+      ai_adv_one_route_why:"استخدمه ما لم تغيّر نقطة الانطلاق أو الوصول.",
+      ai_adv_compare_decision:"قورنت {total} مسارات. أفضل توازن: الخيار {n} — ~{min} د، {km} كم، {salik}.",
+      ai_adv_why_balance:"تعادل بين الوقت والازدحام والاستقرار والسالك مقارنة بالبدائل.",
+      ai_adv_fastest_note:"الأسرع هو الخيار {n} (~{min} د)، بسرعة إضافية {diff} د، لكن راجع سالك.",
+      ai_adv_calm_alt_note:"الخيار {n} أهدأ إذا قبلت دقائق إضافية.",
+      ai_adv_free_alt_note:"بدون سالك الخيار {n} يوفر ~{aed} درهم، نحو +{m} د مقارنة باختيار الذكاء.",
+      ai_adv_traffic_delay:"الازدحام: {traf}. تأخير الازدحام ~{delay} د على المسار الموصى به.",
+      ai_adv_viewing_alt:"اخترت الخيار {n} (~{min} د، {salik}) بدل خيار الذكاء {bestN}. قارن الدقائق والسالك أدناه.",
+      ai_adv_vs_second:"البديل الرئيسي: الخيار {n} (~{m} د مقابل الموصى به، {salik}).",
+      ai_adv_salik_free:"بدون سالك",
+      ai_adv_salik_paid:"~{aed} درهم سالك ({n} بوابات)",
+      ai_adv_salik_none:"السالك غير مؤكد",
+
+      ai_voice_recommend_num:"أنصح بالمسار {n}.",
+      ai_voice_you_picked_num:"تم اختيار المسار {n}.",
+      ai_voice_faster_than_alt:"أسرع بنحو {m} دقيقة من أقرب بديل.",
+      ai_voice_alt_faster_warning:"بديل أسرع بنحو {m} دقيقة — اختره إن كانت السرعة أهم.",
+      ai_voice_time_close:"الوقت قريب من البديل — قرّر حسب سالك وراحتك.",
+      ai_voice_slower_than_best:"أبطأ بنحو {m} دقيقة من مسار التوصية.",
+      ai_voice_salik_cost:"سالك نحو {aed} درهم.",
+      ai_voice_salik_free:"لا سالك على هذا المسار.",
+      ai_voice_save_take_alt:"لتوفير الرسوم، انظر الخيار {n}.",
+
+      route_card_advisor_heading:"ملاحظة الذكاء",
+      route_card_when_best:"الخيار الافتراضي — أفضل توازن بين الوقت والازدحام والسالك.",
+      route_card_when_fastest:"عندما الوصول مبكرًا أهم من الرسوم أو المسارات.",
+      route_card_when_calm:"عندما تريد قيادة أهدأ مع دقائق إضافية مقبولة.",
+      route_card_when_tollfree:"عندما تريد تقليل سالك مع قبول ETA أطول.",
+      route_card_when_alt:"إن بطأت التوصية أو ناسبك هذا التوازن أكثر.",
 
       ai_verdict_best_balance:"أفضل توازن",
       ai_verdict_fastest_now:"الأسرع الآن",
@@ -8112,7 +8277,7 @@ function speakCurrentDecision() {
   const now = Date.now();
   if (now - lastDecisionVoiceAt < 1200) return;
   lastDecisionVoiceAt = now;
-  speakText(buildDecisionVoiceText((currentDecision && currentDecision.bestRoute) || selectedRoute || _bestRoute, "manual"));
+  speakText(buildDecisionVoiceText(selectedRoute || (currentDecision && currentDecision.bestRoute) || _bestRoute, "manual"));
 }
 
 </script>
@@ -9056,6 +9221,29 @@ function tz8RenderAlternativeCard(route, best, analyzedRoutes, idx) {
 // Загружается после cr-route-cards-ui-cleanup; onclick openRouteDetails / toggleAlternatives — в cr-route-compare-modal-ui.js [v04].
 // Зависит от main: глобалей маршрута, t(), _tz1*, _tz2BuildWhy/TradeOff, …
 
+function crI18nSub(str, o) {
+  let s = String(str || "");
+  Object.keys(o || {}).forEach(function(k) {
+    s = s.split("{" + k + "}").join(String(o[k]));
+  });
+  return s;
+}
+
+function crSalikSummaryForAdvisor(route, tk) {
+  if (!route || typeof tk !== "function") return "";
+  if (crSalikUncertain(route)) return tk("salik_disclaimer_uncertain");
+  const aed = crRouteSalikAed(route);
+  const g = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : route.tollCount) || 0));
+  if (aed < 0.01) return tk("ai_adv_salik_free");
+  return crI18nSub(tk("ai_adv_salik_paid"), { aed: Math.round(aed * 100) / 100, n: g });
+}
+
+function crRouteDisplayNum(route) {
+  if (!route) return "";
+  const n = route.displayIndex != null ? Number(route.displayIndex) : Number(route.index) + 1;
+  return String(Number.isFinite(n) ? n : 1);
+}
+
 function crAltRoutesComputeRefs(allRoutes) {
   const list = Array.isArray(allRoutes)
     ? allRoutes.filter(function(r) { return r && Number.isFinite(r.index); })
@@ -9468,64 +9656,176 @@ function crHeroMinutesForRoute(route) {
   return 1;
 }
 
-/** Hero panel: timing + Salik (syncs with selected route). */
+/** Hero panel: route comparison + Salik + optional timing (syncs with selected route). */
 function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
   const tk = typeof t === "function" ? t : function(k) { return k; };
-  const sub = function(str, o) {
-    let s = String(str || "");
-    Object.keys(o || {}).forEach(function(k) {
-      s = s.split("{" + k + "}").join(String(o[k]));
-    });
-    return s;
-  };
-  const isBest = !!(panelRoute && matchedBest && Number(panelRoute.index) === Number(matchedBest.index));
+  const sub = crI18nSub;
+  const list = Array.isArray(analyzedRoutes)
+    ? analyzedRoutes.filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+    : [];
+  const best = matchedBest;
+  const salikX = crBuildSalikHeroExtras(panelRoute, matchedBest, list, tk, sub);
   const waitMinutes =
     window.clearRoadTZ3Predictive && Number.isFinite(Number(clearRoadTZ3Predictive.waitMinutes))
       ? Number(clearRoadTZ3Predictive.waitMinutes)
       : 15;
 
-  const salikX = crBuildSalikHeroExtras(panelRoute, matchedBest, analyzedRoutes || [], tk, sub);
-  const title = isBest ? tk("ai_hero_title_best") : tk("ai_hero_title_chosen");
+  if (salikX.salikWaitOverride) {
+    return {
+      title: sub(tk("ai_adv_title_recommended"), { n: crRouteDisplayNum(panelRoute || best) }),
+      decision: salikX.salikWaitOverride.decision,
+      reason: salikX.salikWaitOverride.reason,
+      compareAlts: "",
+      salikLine: salikX.salikLine,
+      salikPick: salikX.salikPick,
+      salikDisclaimer: salikX.disclaimer
+    };
+  }
+
+  const viewingBest = !!(panelRoute && best && Number(panelRoute.index) === Number(best.index));
+  const title = viewingBest
+    ? sub(tk("ai_adv_title_recommended"), { n: crRouteDisplayNum(best) })
+    : sub(tk("ai_adv_title_viewing"), { n: crRouteDisplayNum(panelRoute) });
+
   let decision = "";
   let reason = "";
+  let compareAlts = "";
 
-  if (salikX.salikWaitOverride) {
-    decision = salikX.salikWaitOverride.decision;
-    reason = salikX.salikWaitOverride.reason;
+  if (!best || !panelRoute) {
+    return {
+      title: title,
+      decision: "",
+      reason: "",
+      compareAlts: "",
+      salikLine: salikX.salikLine,
+      salikPick: salikX.salikPick,
+      salikDisclaimer: salikX.disclaimer
+    };
+  }
+
+  if (list.length < 2) {
+    decision = sub(tk("ai_adv_one_route_decision"), {
+      n: crRouteDisplayNum(panelRoute),
+      min: crHeroMinutesForRoute(panelRoute),
+      km: crRouteKmForAi(panelRoute),
+      salik: crSalikSummaryForAdvisor(panelRoute, tk)
+    });
+    reason = tk("ai_adv_one_route_why");
   } else {
-    let nowMin = crHeroMinutesForRoute(panelRoute);
-    let laterMin = nowMin;
+    const sortedTime = list.slice().sort(function(a, b) {
+      return crHeroMinutesForRoute(a) - crHeroMinutesForRoute(b);
+    });
+    const fastest = sortedTime[0];
+    const refs = crAltRoutesComputeRefs(list);
+    const calmest = refs.calmest;
+    const freeBest = crFindFastestFreeRoute(list);
 
-    if (
-      isBest &&
-      typeof _predictiveData !== "undefined" &&
-      _predictiveData &&
-      Number.isFinite(Number(_predictiveData.nowMin)) &&
-      Number.isFinite(Number(_predictiveData.laterMin))
-    ) {
-      nowMin = Math.max(1, Math.round(Number(_predictiveData.nowMin)));
-      laterMin = Math.max(1, Math.round(Number(_predictiveData.laterMin)));
-    } else {
-      try {
-        if (window.clearRoadTZ3Predictive && typeof clearRoadTZ3Predictive.estimateLaterMinutes === "function") {
-          laterMin = clearRoadTZ3Predictive.estimateLaterMinutes(nowMin);
-        }
-      } catch (_) {}
-      laterMin = Math.max(1, Math.round(Number(laterMin) || nowMin));
+    decision = sub(tk("ai_adv_compare_decision"), {
+      total: list.length,
+      n: crRouteDisplayNum(best),
+      min: crHeroMinutesForRoute(best),
+      km: crRouteKmForAi(best),
+      salik: crSalikSummaryForAdvisor(best, tk)
+    });
+
+    const parts = [];
+    if (fastest && Number(fastest.index) !== Number(best.index)) {
+      const diff = crHeroMinutesForRoute(fastest) - crHeroMinutesForRoute(best);
+      if (diff !== 0) {
+        parts.push(
+          sub(tk("ai_adv_fastest_note"), {
+            n: crRouteDisplayNum(fastest),
+            min: crHeroMinutesForRoute(fastest),
+            diff: Math.abs(Math.round(diff))
+          })
+        );
+      }
     }
+    if (calmest && best && Number(calmest.index) !== Number(best.index)) {
+      const sb = Number(best.stabilityScore);
+      const sc = Number(calmest.stabilityScore);
+      if (Number.isFinite(sb) && Number.isFinite(sc) && sc >= sb + 8) {
+        parts.push(sub(tk("ai_adv_calm_alt_note"), { n: crRouteDisplayNum(calmest) }));
+      }
+    }
+    if (freeBest && Number(freeBest.index) !== Number(best.index)) {
+      const td = crHeroMinutesForRoute(freeBest) - crHeroMinutesForRoute(best);
+      const save = crRouteSalikAed(best) - crRouteSalikAed(freeBest);
+      if (save > 0.5) {
+        parts.push(
+          sub(tk("ai_adv_free_alt_note"), {
+            n: crRouteDisplayNum(freeBest),
+            m: Math.max(1, Math.round(td)),
+            aed: Math.round(save)
+          })
+        );
+      }
+    }
+    const delayB = Number(best.delayMinutes) || 0;
+    let trLabel = tk("traf_moderate");
+    const tr = typeof _tz1TrafficRank === "function" ? _tz1TrafficRank(best.traffic) : 2;
+    if (tr <= 1) trLabel = tk("traf_stable");
+    if (tr >= 3) trLabel = tk("traf_heavy");
+    parts.push(sub(tk("ai_adv_traffic_delay"), { traf: trLabel, delay: delayB }));
 
-    const saving = nowMin - laterMin;
-    const branch = crMirrorTz3TimingBranch(saving);
+    reason = parts.join(" ");
+    if (!String(reason).trim()) reason = tk("ai_adv_why_balance");
 
-    if (branch === "wait") {
-      decision = sub(tk("ai_hero_decision_wait"), { n: waitMinutes });
-      reason = isBest ? tk("ai_hero_reason_wait_best") : tk("ai_hero_reason_wait_alt");
-    } else if (branch === "leave_now") {
-      decision = tk("ai_hero_decision_leave");
-      reason = isBest ? tk("ai_hero_reason_leave_best") : tk("ai_hero_reason_leave_alt");
+    if (!viewingBest) {
+      compareAlts = sub(tk("ai_adv_viewing_alt"), {
+        n: crRouteDisplayNum(panelRoute),
+        min: crHeroMinutesForRoute(panelRoute),
+        salik: crSalikSummaryForAdvisor(panelRoute, tk),
+        bestN: crRouteDisplayNum(best)
+      });
     } else {
-      decision = tk("ai_hero_decision_same");
-      reason = isBest ? tk("ai_hero_reason_same_best") : tk("ai_hero_reason_same_alt");
+      const second = sortedTime.find(function(r) {
+        return r && Number(r.index) !== Number(best.index);
+      });
+      if (second) {
+        const md = crHeroMinutesForRoute(second) - crHeroMinutesForRoute(best);
+        compareAlts = sub(tk("ai_adv_vs_second"), {
+          n: crRouteDisplayNum(second),
+          m: Math.abs(Math.round(md)),
+          salik: crSalikSummaryForAdvisor(second, tk)
+        });
+      }
+    }
+  }
+
+  const isBestPanel = !!(panelRoute && best && Number(panelRoute.index) === Number(best.index));
+  let nowMin = crHeroMinutesForRoute(panelRoute);
+  let laterMin = nowMin;
+  if (
+    isBestPanel &&
+    typeof _predictiveData !== "undefined" &&
+    _predictiveData &&
+    Number.isFinite(Number(_predictiveData.nowMin)) &&
+    Number.isFinite(Number(_predictiveData.laterMin))
+  ) {
+    nowMin = Math.max(1, Math.round(Number(_predictiveData.nowMin)));
+    laterMin = Math.max(1, Math.round(Number(_predictiveData.laterMin)));
+  } else {
+    try {
+      if (window.clearRoadTZ3Predictive && typeof clearRoadTZ3Predictive.estimateLaterMinutes === "function") {
+        laterMin = clearRoadTZ3Predictive.estimateLaterMinutes(nowMin);
+      }
+    } catch (_) {}
+    laterMin = Math.max(1, Math.round(Number(laterMin) || nowMin));
+  }
+  const saving = nowMin - laterMin;
+  if (Math.abs(saving) >= 2) {
+    const branch = crMirrorTz3TimingBranch(saving);
+    if (branch === "wait") {
+      reason +=
+        " " +
+        sub(tk("ai_hero_decision_wait"), { n: waitMinutes }) +
+        " " +
+        (isBestPanel ? tk("ai_hero_reason_wait_best") : tk("ai_hero_reason_wait_alt"));
+    } else if (branch === "leave_now") {
+      reason += " " + tk("ai_hero_decision_leave") + " " + (isBestPanel ? tk("ai_hero_reason_leave_best") : tk("ai_hero_reason_leave_alt"));
     }
   }
 
@@ -9533,6 +9833,7 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
     title: title,
     decision: decision,
     reason: reason,
+    compareAlts: compareAlts,
     salikLine: salikX.salikLine,
     salikPick: salikX.salikPick,
     salikDisclaimer: salikX.disclaimer
@@ -9541,6 +9842,89 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
 try {
   window.crBuildAiHeroCopy = crBuildAiHeroCopy;
 } catch (_) {}
+
+/** Short voice (~3–5 short sentences): recommendation, time vs alt, Salik, save hint. */
+function crBuildRouteAdvisorVoiceBrief(route) {
+  if (!route || typeof t !== "function") return "";
+  const tk = t;
+  const sub = crI18nSub;
+  const routes = Array.isArray(analyzedRoutes)
+    ? analyzedRoutes.filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+    : [];
+  if (!routes.length) return "";
+
+  const best = typeof currentDecision !== "undefined" && currentDecision && currentDecision.bestRoute ? currentDecision.bestRoute : null;
+  const num = crRouteDisplayNum(route);
+  const isBest = best && Number(route.index) === Number(best.index);
+  const minutes = function(r) {
+    return crHeroMinutesForRoute(r);
+  };
+  const alts = routes
+    .filter(function(r) {
+      return Number(r.index) !== Number(route.index);
+    })
+    .slice()
+    .sort(function(a, b) {
+      return minutes(a) - minutes(b);
+    });
+  const mainAlt = alts[0];
+  const chunks = [];
+
+  if (isBest) {
+    chunks.push(sub(tk("ai_voice_recommend_num"), { n: num }));
+    if (mainAlt) {
+      const d = minutes(mainAlt) - minutes(route);
+      if (d >= 2) chunks.push(sub(tk("ai_voice_faster_than_alt"), { m: Math.round(d) }));
+      else if (d <= -2) chunks.push(sub(tk("ai_voice_alt_faster_warning"), { m: Math.round(-d) }));
+      else chunks.push(tk("ai_voice_time_close"));
+    }
+  } else {
+    chunks.push(sub(tk("ai_voice_you_picked_num"), { n: num }));
+    if (best) {
+      const d = minutes(route) - minutes(best);
+      if (d >= 2) chunks.push(sub(tk("ai_voice_slower_than_best"), { m: Math.round(d) }));
+    }
+  }
+
+  if (crSalikUncertain(route)) chunks.push(tk("salik_disclaimer_uncertain"));
+  else {
+    const aed = crRouteSalikAed(route);
+    if (aed >= 0.01) chunks.push(sub(tk("ai_voice_salik_cost"), { aed: Math.round(aed * 100) / 100 }));
+    else chunks.push(tk("ai_voice_salik_free"));
+  }
+
+  const freeAlt = routes.find(function(r) {
+    return Number(r.index) !== Number(route.index) && crRouteSalikAed(r) < 0.01;
+  });
+  if (freeAlt && crRouteSalikAed(route) >= 0.01) {
+    chunks.push(sub(tk("ai_voice_save_take_alt"), { n: crRouteDisplayNum(freeAlt) }));
+  }
+
+  return chunks.filter(Boolean).join(" ");
+}
+try {
+  window.crBuildRouteAdvisorVoiceBrief = crBuildRouteAdvisorVoiceBrief;
+} catch (_) {}
+
+function crBuildRouteCardAdvisorInnerHtml(route, displayNum, ctx, tk) {
+  const points = buildRouteSellingPoints(route, displayNum);
+  let whenKey = "route_card_when_alt";
+  if (ctx.best && route && Number(route.index) === Number(ctx.best.index)) whenKey = "route_card_when_best";
+  else if (ctx.fastest && route && Number(route.index) === Number(ctx.fastest.index)) whenKey = "route_card_when_fastest";
+  else if (ctx.calmest && route && Number(route.index) === Number(ctx.calmest.index)) whenKey = "route_card_when_calm";
+  else if (crRouteSalikAed(route) < 0.01 && ctx.best && crRouteSalikAed(ctx.best) >= 0.01) whenKey = "route_card_when_tollfree";
+  const when = tk(whenKey);
+  let h = '<div class="dashboard-route-advisor">';
+  h += '<div class="dashboard-route-advisor-label">' + _tz1EscapeHTML(tk("route_card_advisor_heading")) + "</div>";
+  points.forEach(function(line) {
+    if (line) h += '<p class="dashboard-route-advisor-line">' + _tz1EscapeHTML(line) + "</p>";
+  });
+  h += '<p class="dashboard-route-advisor-when">' + _tz1EscapeHTML(when) + "</p>";
+  h += "</div>";
+  return h;
+}
 
 /** AI verdict + compact card copy (presentation only; uses existing route metrics). */
 function crBuildRouteAiCopy(route, best, fastest, calmest, allRoutes) {
@@ -9707,9 +10091,9 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
       slot +
       '" data-route-line-color="' +
       _tz1EscapeHTML(markerColor) +
-      '" onclick="selectDisplayedRoute(' +
+      '" onclick="selectDisplayedRouteFromUi(' +
       idx +
-      ')" onkeydown="if(event.key===&quot;Enter&quot;||event.key===&quot; &quot;){event.preventDefault();selectDisplayedRoute(' +
+      ')" onkeydown="if(event.key===&quot;Enter&quot;||event.key===&quot; &quot;){event.preventDefault();selectDisplayedRouteFromUi(' +
       idx +
       ');}">';
     inner += '<span class="dashboard-route-line-marker" style="background-color:' + markerColor + '" aria-hidden="true"></span>';
@@ -9738,9 +10122,10 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
       " " +
       _tz1EscapeHTML(arrivalStr) +
       "</div>";
+    inner += crBuildRouteCardAdvisorInnerHtml(route, num, ctx, tk);
     inner += crSalikCardHtml(route, tk);
     inner +=
-      '<button type="button" class="dashboard-route-select-btn" onclick="event.stopPropagation();selectDisplayedRoute(' +
+      '<button type="button" class="dashboard-route-select-btn" onclick="event.stopPropagation();selectDisplayedRouteFromUi(' +
       idx +
       ')">' +
       _tz1EscapeHTML(tk("ai_default_route_cta")) +
@@ -9756,7 +10141,7 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
   );
 }
 
-function selectDisplayedRoute(routeIndex) {
+function selectDisplayedRoute(routeIndex, opts) {
   try {
     const idx = Number(routeIndex);
     if (!Array.isArray(analyzedRoutes) || !Number.isFinite(idx)) return;
@@ -9781,32 +10166,48 @@ function selectDisplayedRoute(routeIndex) {
       }
     }
     if (typeof renderResults === "function") renderResults();
+    if (opts && opts.fromUser) {
+      try {
+        if (typeof speakCurrentDecision === "function") {
+          var nowTs = Date.now();
+          if (nowTs - (window.__crLastSelectVoiceAt || 0) > 3200) {
+            window.__crLastSelectVoiceAt = nowTs;
+            setTimeout(function() {
+              try {
+                speakCurrentDecision();
+              } catch (_) {}
+            }, 420);
+          }
+        }
+      } catch (_) {}
+    }
   } catch (e) {
     console.warn("selectDisplayedRoute", e);
   }
 }
+function selectDisplayedRouteFromUi(routeIndex) {
+  selectDisplayedRoute(routeIndex, { fromUser: true });
+}
 try {
   window.selectDisplayedRoute = selectDisplayedRoute;
+} catch (_) {}
+try {
+  window.selectDisplayedRouteFromUi = selectDisplayedRouteFromUi;
 } catch (_) {}
 
 function selectRecommendedRoute() {
   try {
     if (!Array.isArray(analyzedRoutes) || !currentDecision || !currentDecision.bestRoute) return;
-    const best = currentDecision.bestRoute;
-    const bi = Number(best.index);
+    const decisionBest = currentDecision.bestRoute;
+    const decisionBestIndex = Number(decisionBest.index);
+    if (!Number.isFinite(decisionBestIndex)) return;
+    const found = analyzedRoutes.find(function(route) {
+      return route && Number(route.index) === decisionBestIndex;
+    });
+    if (!found) return;
+    const bi = Number(found.index);
     if (!Number.isFinite(bi)) return;
-    let pickRaw = null;
-    try {
-      pickRaw = window.__clearRoadUserPickIndex;
-    } catch (_) {
-      pickRaw = null;
-    }
-    const pickNum = pickRaw !== null && pickRaw !== undefined && String(pickRaw) !== "" ? Number(pickRaw) : NaN;
-    const onBest =
-      selectedRoute && best && Number(selectedRoute.index) === Number(best.index);
-    const pickIsBestOrUnset = !Number.isFinite(pickNum) || pickNum === bi;
-    if (onBest && pickIsBestOrUnset) return;
-    selectDisplayedRoute(bi);
+    selectDisplayedRouteFromUi(bi);
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         try {
@@ -9985,6 +10386,11 @@ function renderResults() {
       '<p class="dashboard-ai-compact-rec" id="ai-hero-reason">' +
       _tz1EscapeHTML(aiHero.reason) +
       "</p>" +
+      (aiHero.compareAlts
+        ? '<p class="dashboard-ai-compact-line dashboard-ai-compare-alts" id="ai-hero-compare">' +
+          _tz1EscapeHTML(aiHero.compareAlts) +
+          "</p>"
+        : "") +
       salikExtras +
       '<button type="button" class="dashboard-ai-primary-btn" id="ai-default-cta" onclick="selectRecommendedRoute()">' +
       _tz1EscapeHTML(tk("ai_default_route_cta")) +
@@ -14514,22 +14920,39 @@ function startDrive(index) {
 
   function getAdvicePayload(input){
     const lang = (input && input.lang) || currentLangSafe();
-    const scenario = (input && input.scenario) || inferScenario((input && input.route) || getCurrentRoute());
-    const params = Object.assign(defaultParamsFromRoute((input && input.route) || getCurrentRoute()), input && input.params);
+    const route = (input && input.route) || getCurrentRoute();
+    const scenario = (input && input.scenario) || inferScenario(route);
+    const params = Object.assign(defaultParamsFromRoute(route), input && input.params);
     const text = getScenarioText(lang, scenario, params);
+    let voiceText = '';
+    try {
+      if (typeof window.crBuildRouteAdvisorVoiceBrief === 'function' && route) {
+        voiceText = window.crBuildRouteAdvisorVoiceBrief(route);
+      }
+    } catch (_){}
+    if (!voiceText) voiceText = buildVoiceText(lang, scenario, params);
+    let displayText = '';
+    try {
+      if (typeof window.getAIAdviceText === 'function' && route) {
+        displayText = window.getAIAdviceText(route);
+      }
+    } catch (_){}
+    if (!displayText) {
+      displayText = (TEXT[lang] && TEXT[lang].ai_prefix ? TEXT[lang].ai_prefix : TEXT.en.ai_prefix) + ': ' + text;
+    }
     return {
       lang,
       scenario,
       text,
-      displayText: (TEXT[lang] && TEXT[lang].ai_prefix ? TEXT[lang].ai_prefix : TEXT.en.ai_prefix) + ': ' + text,
-      voiceText: buildVoiceText(lang, scenario, params),
+      displayText: displayText,
+      voiceText: voiceText,
       params: normalizeParams(lang, params)
     };
   }
 
   function getCurrentRoute(){
     try {
-      return (window.currentDecision && window.currentDecision.bestRoute) || window.selectedRoute || window._bestRoute || null;
+      return window.selectedRoute || (window.currentDecision && window.currentDecision.bestRoute) || window._bestRoute || null;
     } catch { return null; }
   }
 
@@ -14673,7 +15096,8 @@ function startDrive(index) {
   function installVoiceHooks(){
     window.speakCurrentDecision = function(){
       const lang = currentLangSafe();
-      const payload = getAdvicePayload({ lang });
+      const route = getCurrentRoute();
+      const payload = getAdvicePayload({ lang, route: route });
       refreshVisibleAdvice();
       return speakPremium(lang, payload.voiceText || payload.text);
     };
@@ -14682,7 +15106,14 @@ function startDrive(index) {
 
     window.buildDecisionVoiceText = function(routeObj){
       const lang = currentLangSafe();
-      return getAdvicePayload({ lang, route: routeObj }).voiceText;
+      const r = routeObj || getCurrentRoute();
+      try {
+        if (typeof window.crBuildRouteAdvisorVoiceBrief === 'function' && r) {
+          const brief = window.crBuildRouteAdvisorVoiceBrief(r);
+          if (brief) return brief;
+        }
+      } catch (_){}
+      return getAdvicePayload({ lang, route: r }).voiceText;
     };
 
     window.buildRerouteVoiceText = function(decision, altRoute){
@@ -17040,7 +17471,15 @@ function startDrive(index) {
       avoidTraffic: !!(f.avoid_traffic || f.no_traffic || f.avoidTraffic)
     };
   }
-  function hasTolls(route){ return !!(route && (route.tolls || route.hasTolls || safeNum(route.tollCost, 0) > 0)); }
+  function hasTolls(route){
+    return !!(route && (route.tolls || route.hasTolls || safeNum(route.tollCost, 0) > 0 || safeNum(route.salikCost, 0) > 0));
+  }
+  function salikAed(route){
+    return safeNum(route && route.salikCost, safeNum(route && route.tollCost, 0));
+  }
+  function salikGates(route){
+    return Math.max(0, Math.round(safeNum(route && route.salikCount, safeNum(route && route.tollCount, 0))));
+  }
   function hasHighway(route){
     if (!route) return false;
     if (route.highway || route.hasHighway) return true;
@@ -17152,19 +17591,23 @@ function startDrive(index) {
   const L = {
     en: {
       go:'GO NOW', close:'ROUTES ARE CLOSE', only:'ONLY VALID ROUTE', why:'WHY', trade:'TRADE-OFF', when:'WHEN', conf:'AI CONFIDENCE',
-      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'You can go now — almost no difference.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH'
+      fastest:'fastest option', altSlower:'alternative is slower by {x} min', altClose:'alternative is almost equal', betterTraffic:'better traffic balance', fewerStops:'fewer turns/stops', toll:'possible toll road', highway:'uses highway section', noWait:'Leave when ready — compare minutes and Salik below.', closeReason:'difference is less than 3 min', onlyReason:'Google returned one usable route', avoidTolls:'avoids toll roads', avoidHighways:'avoids highway sections', calmer:'calmer traffic right now', shorter:'shorter distance', slowerBecause:'This route is slower, but selected because', low:'LOW', medium:'MEDIUM', high:'HIGH',
+      salikCostNarr:'Salik about {aed} AED ({gates} gates)', salikFreeVs:'Skips Salik versus a tolled alternative', pickBySalik:'Times are close — decide using Salik cost and comfort.', stabBetter:'More stable ETA than the main alternative'
     },
     ru: {
       go:'ЕДЬ СЕЙЧАС', close:'МАРШРУТЫ ПОЧТИ РАВНЫ', only:'ОДИН ДОСТУПНЫЙ МАРШРУТ', why:'ПОЧЕМУ', trade:'КОМПРОМИСС', when:'КОГДА', conf:'УВЕРЕННОСТЬ AI',
-      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Можно ехать сейчас — разницы почти нет', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ'
+      fastest:'самый быстрый вариант', altSlower:'альтернатива медленнее на {x} мин', altClose:'альтернатива почти равная', betterTraffic:'лучший баланс по трафику', fewerStops:'меньше поворотов/остановок', toll:'возможен платный участок', highway:'есть участок по шоссе', noWait:'Выезжай, когда готов — ниже сравнение минут и Салика.', closeReason:'разница меньше 3 мин', onlyReason:'Google вернул один рабочий маршрут', avoidTolls:'без платных дорог', avoidHighways:'без участков по шоссе', calmer:'спокойнее по трафику сейчас', shorter:'короче по расстоянию', slowerBecause:'Маршрут медленнее, но выбран потому что', low:'НИЗКАЯ', medium:'СРЕДНЯЯ', high:'ВЫСОКАЯ',
+      salikCostNarr:'Салик около {aed} AED ({gates} ворот)', salikFreeVs:'Без Салика против платной альтернативы', pickBySalik:'Время близко — решай по Салику и комфорту.', stabBetter:'Стабильнее ETA, чем основная альтернатива'
     },
     ua: {
       go:'ЇДЬ ЗАРАЗ', close:'МАРШРУТИ МАЙЖЕ РІВНІ', only:'ОДИН ДОСТУПНИЙ МАРШРУТ', why:'ЧОМУ', trade:'КОМПРОМІС', when:'КОЛИ', conf:'ВПЕВНЕНІСТЬ AI',
-      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Можна їхати зараз — різниця майже нуль', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА'
+      fastest:'найшвидший варіант', altSlower:'альтернатива повільніша на {x} хв', altClose:'альтернатива майже рівна', betterTraffic:'кращий баланс трафіку', fewerStops:'менше поворотів/зупинок', toll:'можлива платна ділянка', highway:'є ділянка шосе', noWait:'Виїжджай, коли готовий — нижче порівняння хвилин і Саліку.', closeReason:'різниця менше 3 хв', onlyReason:'Google повернув один робочий маршрут', avoidTolls:'без платних доріг', avoidHighways:'без ділянок шосе', calmer:'спокійніший трафік зараз', shorter:'коротша відстань', slowerBecause:'Маршрут повільніший, але вибраний тому що', low:'НИЗЬКА', medium:'СЕРЕДНЯ', high:'ВИСОКА',
+      salikCostNarr:'Салік ~{aed} AED ({gates} шлюзів)', salikFreeVs:'Без Саліку проти платної альтернативи', pickBySalik:'Час близький — обирай за Саліком і комфортом.', stabBetter:'Стабільніший ETA за основну альтернативу'
     },
     ar: {
       go:'انطلق الآن', close:'المسارات متقاربة', only:'مسار واحد صالح', why:'السبب', trade:'المقابل', when:'الوقت', conf:'ثقة AI',
-      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'يمكنك الانطلاق الآن — الفرق ضئيل', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية'
+      fastest:'الخيار الأسرع', altSlower:'البديل أبطأ بـ {x} دقيقة', altClose:'البديل شبه مماثل', betterTraffic:'توازن مروري أفضل', fewerStops:'منعطفات/توقفات أقل', toll:'قد يوجد طريق برسوم', highway:'يتضمن طريقاً سريعاً', noWait:'انطلق عند الجاهزية — قارن الدقائق والسالك أدناه.', closeReason:'الفرق أقل من 3 دقائق', onlyReason:'أرجع Google مساراً صالحاً واحداً', avoidTolls:'يتجنب طرق الرسوم', avoidHighways:'يتجنب المقاطع السريعة', calmer:'حركة مرور أكثر هدوءاً الآن', shorter:'مسافة أقصر', slowerBecause:'هذا المسار أبطأ لكنه مُختار لأن', low:'منخفضة', medium:'متوسطة', high:'عالية',
+      salikCostNarr:'سالك نحو {aed} درهم ({gates} بوابات)', salikFreeVs:'بدون سالك مقارنة ببديل برسوم', pickBySalik:'الأوقات متقاربة — قرّر حسب تكلفة سالك والراحة.', stabBetter:'وقت وصول أكثر استقراراً من البديل الرئيسي'
     }
   };
   function dict(){ const lang = getLang(); return L[lang] || L.en; }
@@ -17316,19 +17759,33 @@ function startDrive(index) {
     if (second && trafficRank(best) < trafficRank(second)) why.push(d.betterTraffic);
     if (second && stops(best) + 1 < stops(second)) why.push(d.fewerStops);
     if (second && distGap >= 1.5) why.push(d.shorter);
+    if (second && salikAed(second) > 0.5 && salikAed(best) < 0.5) why.push(d.salikFreeVs);
+    if (second) {
+      const sb = safeNum(best && best.stabilityScore, 50);
+      const ss = safeNum(second && second.stabilityScore, 50);
+      if (sb >= ss + 8) why.push(d.stabBetter);
+    }
     const trade = [];
-    if (best && hasTolls(best)) trade.push(d.toll);
+    const sa = salikAed(best);
+    const sg = salikGates(best);
+    if (best && sa > 0.5) trade.push(tpl(d.salikCostNarr, { aed: Math.round(sa), gates: sg }));
+    else if (best && hasTolls(best)) trade.push(d.toll);
     if (best && hasHighway(best)) trade.push(d.highway);
     if (second && timeGap <= 1) trade.push(d.altClose);
     else if (!trade.length && second && timeGap > 0) trade.push(tpl(d.altSlower, {x: timeGap}));
     if (!trade.length) trade.push(d.onlyReason);
 
+    let whenText = d.noWait;
+    if (type === 'SIMILAR' && second && Math.abs(salikAed(best) - salikAed(second)) > 1.5) {
+      whenText = d.pickBySalik;
+    }
+
     const ai = {
       type,
       headline,
-      why: unique(why).slice(0,2),
-      tradeoff: unique(trade).slice(0,2),
-      when: d.noWait,
+      why: unique(why).slice(0,3),
+      tradeoff: unique(trade).slice(0,3),
+      when: whenText,
       bestMinutes: bestMin,
       secondMinutes: secondMin,
       deltaMinutes: second ? delta : null,
@@ -17424,14 +17881,21 @@ function startDrive(index) {
   window.getAIAdviceText = function(route){
     const decision = buildRealDecision(Array.isArray(analyzedRoutes) && analyzedRoutes.length ? analyzedRoutes : [route].filter(Boolean));
     const ai = decision.aiDecision;
-    return ai.headline + '. ' + (ai.why || []).join(' · ') + '. ' + (ai.tradeoff || []).join(' · ') + '.';
+    const tail = ai.when ? " " + ai.when : "";
+    return ai.headline + ". " + (ai.why || []).join(" · ") + ". " + (ai.tradeoff || []).join(" · ") + "." + tail;
   };
   try { getAIAdviceText = window.getAIAdviceText; } catch (_) {}
 
   window.buildDecisionVoiceText = function(route){
+    try {
+      if (typeof window.crBuildRouteAdvisorVoiceBrief === "function") {
+        const v = window.crBuildRouteAdvisorVoiceBrief(route);
+        if (v) return v;
+      }
+    } catch (_) {}
     const decision = buildRealDecision(Array.isArray(analyzedRoutes) && analyzedRoutes.length ? analyzedRoutes : [route].filter(Boolean));
     const ai = decision.aiDecision;
-    return [ai.headline].concat(ai.why || []).concat(ai.tradeoff || []).concat([ai.when]).join('. ');
+    return [ai.headline].concat((ai.why || []).slice(0, 1)).concat([ai.when]).filter(Boolean).join(". ");
   };
   try { buildDecisionVoiceText = window.buildDecisionVoiceText; } catch (_) {}
 

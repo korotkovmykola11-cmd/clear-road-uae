@@ -1,4 +1,7 @@
 node_modules/
-.DS_Store
+dist/
+.env
 *.log
+
+.DS_Store
 src/secrets/maps-api-key.txt
