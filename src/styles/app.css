@@ -2855,21 +2855,356 @@ body.tz8-rtl-ar .dashboard-route-ai-compact-rec {
 .dashboard-route-cta:active {
   transform: scale(0.98);
 }
-@media (max-width: 720px) {
-  /* Strict 40/60: never stack main columns; only tighten spacing for narrow viewports */
-  .dashboard-top {
-    grid-template-columns: 42% 58%;
-    gap: 0.4rem 0.5rem;
-    padding: 0.45rem 0.55rem 0.35rem;
+
+/* ===== DASHBOARD MOBILE (≤768px): vertical flow — no map | cards split ===== */
+@media (max-width: 768px) {
+  body.dashboard-shell {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
   }
-  .dashboard-meta {
-    padding: 0.35rem 0.55rem;
+
+  body.dashboard-shell .app-dashboard {
+    padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
   }
-  .dash-filter-chip {
-    font-size: 7px;
-    padding: 0.35rem 0.5rem;
+
+  body.dashboard-shell .dashboard-meta {
+    padding: 0.4rem 0.65rem;
+    flex-wrap: wrap;
+    gap: 0.35rem;
   }
-  .dashboard-col--routes {
+
+  body.dashboard-shell .dashboard-meta-right {
+    flex-shrink: 0;
+  }
+
+  /* Header → inputs → filters → AI (DOM order); single column */
+  body.dashboard-shell .dashboard-top {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    grid-template-columns: unset;
+    gap: 0.5rem;
+    padding: 0.5rem 0.65rem 0.45rem;
+  }
+
+  body.dashboard-shell .dashboard-top-left {
+    width: 100%;
+    max-width: none;
+    gap: 0.4rem;
+  }
+
+  body.dashboard-shell .dashboard-route-panel.route-panel {
+    width: 100%;
+    max-width: none;
+    padding: 0.35rem 0.45rem;
+    box-sizing: border-box;
+  }
+
+  body.dashboard-shell .route-panel .route-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.45rem;
+    min-height: 52px;
+    box-sizing: border-box;
+  }
+
+  body.dashboard-shell .route-field {
+    flex: 1;
     min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+
+  body.dashboard-shell .route-field .route-input,
+  body.dashboard-shell .dashboard-route-panel .route-input {
+    display: block;
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+    min-height: 48px;
+    padding: 0.35rem 0.15rem;
+    box-sizing: border-box;
+    font-size: 16px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-overflow: clip;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.dashboard-shell .route-clear-btn {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    touch-action: manipulation;
+  }
+
+  body.dashboard-shell .gps-btn-top {
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    touch-action: manipulation;
+  }
+
+  body.dashboard-shell .route-dot {
+    align-self: center;
+  }
+
+  /* Filters: horizontal scroll, readable chips */
+  body.dashboard-shell .dashboard-filters-scroll {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding: 0.2rem 0 6px;
+    margin: 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    white-space: nowrap;
+  }
+
+  body.dashboard-shell .dashboard-filters-scroll::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  body.dashboard-shell .dash-filter-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 0.45rem 0.7rem;
+    touch-action: manipulation;
+  }
+
+  /* AI panel above map */
+  body.dashboard-shell #ai-decision-panel.dashboard-ai-panel {
+    width: 100%;
+    max-width: none;
+    margin-top: 12px;
+    padding: 14px;
+    box-sizing: border-box;
+    align-self: stretch;
+    max-height: none;
+  }
+
+  body.dashboard-shell .dashboard-ai-inner.decision-hero .dashboard-ai-compact-title {
+    font-size: 15px;
+  }
+
+  body.dashboard-shell .dashboard-ai-compact-line,
+  body.dashboard-shell .dashboard-ai-compact-rec,
+  body.dashboard-shell .dashboard-ai-placeholder {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  body.dashboard-shell .dashboard-ai-primary-btn {
+    width: 100%;
+    min-height: 48px;
+    height: 48px;
+    padding: 0 1rem;
+    box-sizing: border-box;
+    font-size: 15px;
+    margin-top: 0.5rem;
+    touch-action: manipulation;
+  }
+
+  body.dashboard-shell .dashboard-ai-inner p,
+  body.dashboard-shell .dashboard-ai-inner.decision-hero p {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Body: map block, then route cards (column + order) */
+  body.dashboard-shell .dashboard-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  body.dashboard-shell .dashboard-col--map {
+    order: 1;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-top: 12px;
+    padding: 0 0.65rem;
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    background: #060608;
+    min-height: 320px;
+    height: 320px;
+  }
+
+  body.dashboard-shell .dashboard-col--map #map {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 320px;
+    border-radius: 16px;
+  }
+
+  body.dashboard-shell .dashboard-col--routes {
+    order: 2;
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    overflow: visible;
+    border-right: none;
+    padding-bottom: 0;
+  }
+
+  /* Quick start: compact horizontal strip */
+  body.dashboard-shell .dashboard-col--routes .quick-section {
+    margin: 0.5rem 0.65rem 0.35rem;
+  }
+
+  body.dashboard-shell .quick-section .quick-title {
+    font-size: 10px;
+    margin-bottom: 6px;
+  }
+
+  body.dashboard-shell .quick-section .quick-list {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  body.dashboard-shell .quick-section .quick-list::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  body.dashboard-shell .quick-section .quick-item {
+    flex: 0 0 auto;
+    min-width: 118px;
+    max-width: 168px;
+    padding: 10px 12px;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    border-bottom: 1px solid var(--border);
+    box-sizing: border-box;
+  }
+
+  body.dashboard-shell .quick-section .quick-item:last-child {
+    border-bottom: 1px solid var(--border);
+  }
+
+  body.dashboard-shell .quick-section .quick-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  body.dashboard-shell .quick-section .quick-label {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.dashboard-shell .quick-section .quick-arrow {
+    display: none;
+  }
+
+  /* Route cards below map */
+  body.dashboard-shell .dashboard-results#results {
+    padding: 0.5rem 0.65rem 0;
+    overflow: visible;
+  }
+
+  body.dashboard-shell .dashboard-route-card.alt-route-row {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+  }
+
+  body.dashboard-shell .dashboard-route-card-body,
+  body.dashboard-shell .dashboard-route-expl,
+  body.dashboard-shell .dashboard-route-advisor,
+  body.dashboard-shell .dashboard-route-advisor-line,
+  body.dashboard-shell .dashboard-route-salik,
+  body.dashboard-shell .dashboard-route-ai-compact-line {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body.dashboard-shell .dashboard-route-name {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  body.dashboard-shell .dashboard-route-select-btn {
+    width: 100%;
+    min-height: 48px;
+    padding: 0.65rem 1rem;
+    font-size: 14px;
+    margin-top: 0.6rem;
+    touch-action: manipulation;
+    box-sizing: border-box;
+  }
+
+  body.dashboard-shell .dashboard-routes-list.alt-routes-list {
+    padding: 4px 0 120px !important;
+  }
+
+  body.dashboard-shell .dashboard-routes-panel.alt-routes-panel {
+    margin-bottom: 0 !important;
+  }
+
+  /* Google Places suggestions above map/cards */
+  body.dashboard-shell .pac-container {
+    z-index: 10050 !important;
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    box-sizing: border-box !important;
+    font-size: 15px !important;
+    border-radius: 12px !important;
+  }
+
+  body.dashboard-shell .pac-item {
+    font-size: 15px !important;
+    line-height: 1.35 !important;
+    padding: 10px 12px !important;
+    white-space: normal !important;
+    word-break: break-word;
+  }
+
+  body.dashboard-shell .pac-item-query {
+    font-size: 15px !important;
+  }
+
+  /* CTA bar spacing vs fixed bottom nav */
+  body.dashboard-shell .dashboard-cta-bar {
+    padding: 0.55rem 0.75rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+    margin-bottom: 0.25rem;
+  }
+
+  body.dashboard-shell .bottom-nav.bottom-nav--dashboard-hidden {
+    width: min(420px, calc(100vw - 16px));
   }
 }
+
