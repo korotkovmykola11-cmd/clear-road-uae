@@ -3,7 +3,8 @@
  * CSS: src/styles/app.css → __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
  * i18n: src/i18n/app-i18n.js → __CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__
  * cr-empty-state: src/js/cr-route-empty-state-final-v2.js → __CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__
- * tz7-main-i18n: src/js/cr-tz7-main-i18n-cleanup.js → __CLEAR_ROAD_BUILD_JS_TZ7_MAIN_I18N__ (сразу после основного inline script, до tz8-rtl)
+ * tz6-quick-start: src/js/cr-tz6-quick-start-layer.js → __CLEAR_ROAD_BUILD_JS_TZ6_QUICK_START__ (после основного inline script, до tz7-main-i18n)
+ * tz7-main-i18n: src/js/cr-tz7-main-i18n-cleanup.js → __CLEAR_ROAD_BUILD_JS_TZ7_MAIN_I18N__ (после tz6-quick-start, до tz8-rtl)
  * tz8-rtl: src/js/tz8-rtl-layer.js → __CLEAR_ROAD_BUILD_JS_TZ8_RTL__
  * ux-self-check: src/js/cr-ux-self-check.js → __CLEAR_ROAD_BUILD_JS_UX_SELF_CHECK__
  * tz9-voice: src/js/tz9-voice-layer.js → __CLEAR_ROAD_BUILD_JS_TZ9_VOICE__
@@ -38,6 +39,7 @@ const parentIndexHtml = resolve(projectRoot, "..", "index.html");
 const cssFile = join(projectRoot, "src", "styles", "app.css");
 const i18nFile = join(projectRoot, "src", "i18n", "app-i18n.js");
 const emptyStateJsFile = join(projectRoot, "src", "js", "cr-route-empty-state-final-v2.js");
+const tz6QuickStartJsFile = join(projectRoot, "src", "js", "cr-tz6-quick-start-layer.js");
 const tz7MainI18nJsFile = join(projectRoot, "src", "js", "cr-tz7-main-i18n-cleanup.js");
 const tz8RtlJsFile = join(projectRoot, "src", "js", "tz8-rtl-layer.js");
 const uxSelfCheckJsFile = join(projectRoot, "src", "js", "cr-ux-self-check.js");
@@ -61,6 +63,7 @@ const MAPS_KEY_DEV_FALLBACK = "AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4";
 const PLACEHOLDER_CSS = "__CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__";
 const PLACEHOLDER_I18N = "__CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__";
 const PLACEHOLDER_EMPTY_STATE_JS = "__CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__";
+const PLACEHOLDER_TZ6_QUICK_START_JS = "__CLEAR_ROAD_BUILD_JS_TZ6_QUICK_START__";
 const PLACEHOLDER_TZ7_MAIN_I18N_JS = "__CLEAR_ROAD_BUILD_JS_TZ7_MAIN_I18N__";
 const PLACEHOLDER_TZ8_RTL_JS = "__CLEAR_ROAD_BUILD_JS_TZ8_RTL__";
 const PLACEHOLDER_UX_SELF_CHECK_JS = "__CLEAR_ROAD_BUILD_JS_UX_SELF_CHECK__";
@@ -143,6 +146,20 @@ function injectEmptyStateJs(html) {
     process.exit(1);
   }
   return html.split(PLACEHOLDER_EMPTY_STATE_JS).join(js);
+}
+
+function injectTz6QuickStartJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ6_QUICK_START_JS)) return html;
+  if (!existsSync(tz6QuickStartJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ6 Quick Start, но нет файла:", tz6QuickStartJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz6QuickStartJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ6 Quick Start:", tz6QuickStartJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ6_QUICK_START_JS).join(js);
 }
 
 function injectTz7MainI18nJs(html) {
@@ -428,6 +445,10 @@ function validateArtifact(html) {
     console.error("В артефакте остался плейсхолдер empty-state JS — сборка не завершена.");
     process.exit(1);
   }
+  if (html.includes(PLACEHOLDER_TZ6_QUICK_START_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ6 Quick Start JS — сборка не завершена.");
+    process.exit(1);
+  }
   if (html.includes(PLACEHOLDER_TZ7_MAIN_I18N_JS)) {
     console.error("В артефакте остался плейсхолдер TZ7 main i18n JS — сборка не завершена.");
     process.exit(1);
@@ -509,6 +530,7 @@ function validateArtifact(html) {
     ["closing html", /<\/html>\s*$/i.test(html.trim())],
     ["css bulk", html.includes("clear-road.css block") || html.includes(":root {")],
     ["cr-empty-state JS", html.includes("crFixRouteEmptyStateFinalV2")],
+    ["TZ6 Quick Start", html.includes("clearRoadTZ6QuickStart")],
     ["TZ7 main i18n (filters/Quick Start)", html.includes("clearRoadTZ7I18n")],
     ["tz8 RTL", html.includes("clearRoadTZ8RTL")],
     ["UX self-check", html.includes("__clearRoadRunUxSelfCheck")],
@@ -550,6 +572,12 @@ function validateSourceInput(html) {
   if (html.includes(PLACEHOLDER_EMPTY_STATE_JS)) {
     if (!existsSync(emptyStateJsFile) || !readFileSync(emptyStateJsFile, "utf8").trim()) {
       console.error("input содержит плейсхолдер empty-state JS — нужен непустой", emptyStateJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ6_QUICK_START_JS)) {
+    if (!existsSync(tz6QuickStartJsFile) || !readFileSync(tz6QuickStartJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ6 Quick Start — нужен непустой", tz6QuickStartJsFile);
       process.exit(1);
     }
   }
@@ -673,15 +701,17 @@ function main() {
                 injectTz11CleanupJs(
                   injectTz10AiAssistantJs(
                     injectEmptyStateJs(
-                      injectTz7MainI18nJs(
-                        injectTz8RtlJs(
-                          injectTz7Tz8BundleJs(
-                            injectTz6bFinalJs(
-                              injectTz6AiCleanJs(
-                                injectTz4MobileJs(
-                                  injectTz3I18nCleanJs(
-                                    injectTz1Tz2FinalJs(
-                                      injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                      injectTz6QuickStartJs(
+                        injectTz7MainI18nJs(
+                          injectTz8RtlJs(
+                            injectTz7Tz8BundleJs(
+                              injectTz6bFinalJs(
+                                injectTz6AiCleanJs(
+                                  injectTz4MobileJs(
+                                    injectTz3I18nCleanJs(
+                                      injectTz1Tz2FinalJs(
+                                        injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                                      )
                                     )
                                   )
                                 )
@@ -735,6 +765,7 @@ function main() {
   console.log("   CSS:", cssFile);
   console.log("   i18n:", i18nFile);
   console.log("   empty-state JS:", emptyStateJsFile);
+  console.log("   TZ6 Quick Start JS:", tz6QuickStartJsFile);
   console.log("   TZ7 main i18n JS:", tz7MainI18nJsFile);
   console.log("   TZ8 RTL JS:", tz8RtlJsFile);
   console.log("   UX self-check JS:", uxSelfCheckJsFile);
