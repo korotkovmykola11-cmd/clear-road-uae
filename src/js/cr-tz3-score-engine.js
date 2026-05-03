@@ -19,6 +19,26 @@ function tz3Round(value, decimals = 1) {
   return Math.round(tz3SafeNumber(value, 0) * factor) / factor;
 }
 
+/** Per-step hints for calm routing: lane wording and heavy junction maneuvers (Directions steps). */
+function tz3StepDerivedSignals(route) {
+  const steps = Array.isArray(route && route.steps) ? route.steps : [];
+  let laneHints = 0;
+  let heavyJunctionSteps = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i] || {};
+    const text = String(step.instruction || step.instructions || "").toLowerCase();
+    const man = String(step.maneuver || "").toLowerCase();
+    const j = man + " " + text;
+    if (/keep (left|right|center)|use (the )?\d[\d]?(st|nd|rd|th)? (from the )?(left|right) (lane|lanes)|change (to |)lane|take the .{0,24}lane|veer (left|right)|bear (left|right)/i.test(j)) {
+      laneHints++;
+    }
+    if (/fork|merge onto|take the exit|exit the highway|take (the )?ramp|roundabout|rotary|traffic circle|interchange/i.test(j)) {
+      heavyJunctionSteps++;
+    }
+  }
+  return { laneHints, heavyJunctionSteps };
+}
+
 function scoreRoute(route, allRoutes) {
   const r = route && route.normalizedRoute ? route : normalizeRoute(route || {}, route && Number.isFinite(route.index) ? route.index : 0);
 
@@ -34,6 +54,10 @@ function scoreRoute(route, allRoutes) {
 
   const delaySec = Math.max(0, durationTrafficSec - durationSec);
   const delayMin = tz3Round(delaySec / 60, 1);
+
+  const stepSig = tz3StepDerivedSignals(r);
+  const laneHints = stepSig.laneHints;
+  const heavyJunctionSteps = stepSig.heavyJunctionSteps;
 
   // MVP formula for ТЗ-3: all values are in comparable penalty points.
   const timeComponent = durationTrafficSec / 60;
@@ -53,7 +77,25 @@ function scoreRoute(route, allRoutes) {
   const trafficLabel = trafficScore >= 0.45 ? "heavy" : trafficScore >= 0.2 ? "moderate" : "stable";
   const incidentsCount = delayMin >= 8 ? 1 : 0;
   const stabilityScore = Math.max(0, Math.round(100 - trafficPenalty * 2.2 - complexityPenalty * 2.5 - delayPenalty * 1.3));
-  const stressScore = Math.max(0, Math.min(100, Math.round(trafficPenalty * 2.4 + complexityPenalty * 3 + stopsPenalty * 1.5)));
+  // Stress (0–100): turns / junction complexity / lane changes dominate; traffic weighted lower than turns.
+  const stressScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        stopsCount * 2.05 +
+          complexityScore * 20 +
+          laneHints * 1.35 +
+          heavyJunctionSteps * 1.05 +
+          trafficScore * 7.5
+      )
+    )
+  );
+  // Uncapped scalar for CALM mode ordering (lower = easier drive).
+  const calmStressScore = tz3Round(
+    stopsCount * 2.75 + complexityScore * 24 + laneHints * 1.85 + heavyJunctionSteps * 1.15 + trafficScore * 5.5,
+    2
+  );
 
   const breakdown = {
     total: score,
@@ -79,7 +121,10 @@ function scoreRoute(route, allRoutes) {
     tollCost,
     tollPenalty,
     stressScore,
-    stabilityScore
+    stabilityScore,
+    laneHints,
+    heavyJunctionSteps,
+    calmStressScore
   };
 
   return {
@@ -103,6 +148,7 @@ function scoreRoute(route, allRoutes) {
     tollPenalty: breakdown.tollPenalty,
     delayPenalty: breakdown.delayPenalty,
     stressScore,
+    calmStressScore,
     drivePersonality: typeof getDrivePersonality === "function" ? getDrivePersonality({ ...r, stressScore }) : "Steady drive",
     stabilityScore
   };

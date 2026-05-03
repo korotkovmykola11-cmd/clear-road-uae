@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- clear-road-uae build 2026-05-03T12:01:57.721Z sha256:b44dd013ed156c31 source:C:/Users/korot/Downloads/clear-road-uae/input/index.html -->
+<!-- clear-road-uae build 2026-05-03T13:13:09.664Z sha256:0a69d28b5fddee06 source:C:/Users/korot/Downloads/clear-road-uae/input/index.html -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -59,18 +59,20 @@ html { color-scheme: dark; }
         position: relative;
         z-index: 5;
         isolation: isolate;
-        height: 100vh;
-        min-height: 100px;
+        height: max(28vh, 238px);
+        min-height: 238px;
+        max-height: 320px;
         background: hsl(220 16% 9%);
+        overflow: hidden;
         flex-shrink: 0;
       }
-      /* .hero-section::after {
+      .hero-section::after {
         content: "";
         position: absolute; left: 0; right: 0; bottom: 0;
         height: 55%;
         background: linear-gradient(180deg, transparent, var(--bg) 80%);
         pointer-events: none;
-      } */
+      }
 
       #map {
         position: absolute;
@@ -94,7 +96,7 @@ html { color-scheme: dark; }
         left: 12px;
         right: 12px;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.625rem;
         z-index: 50;
         pointer-events: auto;
@@ -123,7 +125,8 @@ html { color-scheme: dark; }
         border: 1px solid hsla(220,10%,20%,.5);
         border-radius: 14px;
         padding: 0.5rem;
-        overflow: hidden;
+        overflow: visible;
+        min-width: 0;
       }
 
       .route-row {
@@ -132,6 +135,44 @@ html { color-scheme: dark; }
       }
 
       .route-row:first-child { border-bottom: 1px solid var(--border); }
+
+      .route-field {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+      }
+      .route-field .route-input {
+        flex: 1;
+        min-width: 0;
+      }
+      .route-clear-btn {
+        flex-shrink: 0;
+        width: 1.6rem;
+        height: 1.6rem;
+        padding: 0;
+        border: none;
+        border-radius: 8px;
+        background: hsla(220,10%,22%,0.88);
+        color: hsla(30,10%,88%,0.8);
+        font-size: 1.05rem;
+        line-height: 1;
+        cursor: pointer;
+        font-family: inherit;
+        display: grid;
+        place-items: center;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .route-clear-btn:hover {
+        background: hsla(220,10%,30%,0.95);
+        color: var(--text);
+      }
+      .route-clear-btn:focus-visible {
+        outline: 2px solid hsla(72, 96%, 56%, 0.45);
+        outline-offset: 1px;
+      }
+      body.rtl .route-field { flex-direction: row-reverse; }
 
       .route-dot {
         position: relative;
@@ -188,6 +229,48 @@ html { color-scheme: dark; }
       .gps-btn-top:hover { background: hsl(220 10% 18%); }
       .gps-btn-top svg { width: 1rem; height: 1rem; fill: currentColor; }
       .gps-btn-top.gps-loading { opacity: 0.5; pointer-events: none; }
+
+      .route-mode-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 4px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+      }
+      .route-mode-toggle {
+        display: inline-flex;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.10);
+        overflow: hidden;
+        background: rgba(0,0,0,0.25);
+      }
+      .route-mode-btn {
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        color: var(--text3);
+        background: transparent;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .route-mode-btn + .route-mode-btn { border-left: 1px solid rgba(255,255,255,0.08); }
+      .route-mode-btn.active {
+        color: var(--green);
+        background: var(--green-glow);
+      }
+      .route-mode-btn:focus-visible { outline: 2px solid hsla(72, 96%, 56%, 0.45); outline-offset: 1px; }
+      .route-mode-hint {
+        font-size: 11px;
+        color: var(--text2);
+        line-height: 1.3;
+        flex: 1;
+        min-width: 120px;
+      }
 
       /* LIVE BADGE */
       .live-badge {
@@ -1202,6 +1285,12 @@ body {
     gap: 0.5rem;
     padding: 0.55rem 0.6rem;
   }
+  .route-clear-btn {
+    width: 1.45rem;
+    height: 1.45rem;
+    font-size: 1rem;
+    border-radius: 7px;
+  }
   .route-input {
     font-size: 13px;
     min-width: 0;
@@ -1805,14 +1894,27 @@ html[dir="rtl"] #tz13-language-notice { text-align: right; }
       <div class="route-panel">
         <div class="route-row">
           <span class="route-dot green"></span>
-          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+          <div class="route-field">
+            <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+            <button type="button" class="route-clear-btn" id="clear-route-start" onclick="clearRouteInputField('start')" data-i18n-title="route_clear_from" title="Clear start" aria-label="Clear start">&times;</button>
+          </div>
           <button type="button" class="gps-btn-top" id="gps-btn" title="Use my location" aria-label="Use GPS location">
             <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
           </button>
         </div>
         <div class="route-row">
           <span class="route-dot"></span>
-          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
+          <div class="route-field">
+            <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
+            <button type="button" class="route-clear-btn" id="clear-route-end" onclick="clearRouteInputField('end')" data-i18n-title="route_clear_to" title="Clear destination" aria-label="Clear destination">&times;</button>
+          </div>
+        </div>
+        <div class="route-mode-row" role="group" aria-label="Routing style">
+          <div class="route-mode-toggle">
+            <button type="button" class="route-mode-btn active" data-route-mode="fast" onclick="setRouteMode('fast')" data-i18n="route_mode_fast">FAST</button>
+            <button type="button" class="route-mode-btn" data-route-mode="calm" onclick="setRouteMode('calm')" data-i18n="route_mode_calm">CALM</button>
+          </div>
+          <span class="route-mode-hint" data-i18n="route_mode_hint">Less stress • fewer turns</span>
         </div>
       </div>
     </div>
@@ -2042,7 +2144,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"Confidence", dh_better_timing:"BETTER TIMING",
       dh_pred_title:"BETTER OPTION AHEAD", cta_start_upper:"START DRIVING", cta_details_upper:"DETAILS",
       ai_voice_button:"AI Voice",
-      why_voice_button:"Why this route"
+      why_voice_button:"Why this route",
+      route_mode_fast:"Fast",
+      route_mode_calm:"Calm",
+      route_mode_hint:"Less stress • fewer turns",
+      route_clear_from:"Clear start",
+      route_clear_to:"Clear destination"
     },
     ru: {
       from:"Откуда:", to:"Куда:",
@@ -2104,7 +2211,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"Уверенность", dh_better_timing:"ЛУЧШЕЕ ВРЕМЯ", dh_pred_title:"ЕСТЬ ЛУЧШЕ ВАРИАНТ",
       cta_start_upper:"НАЧАТЬ ЕЗДУ", cta_details_upper:"ПОДРОБНЕЕ",
       ai_voice_button:"AI голос",
-      why_voice_button:"Почему маршрут"
+      why_voice_button:"Почему маршрут",
+      route_mode_fast:"Быстрее",
+      route_mode_calm:"Спокойнее",
+      route_mode_hint:"Меньше стресса • меньше поворотов",
+      route_clear_from:"Очистить откуда",
+      route_clear_to:"Очистить куда"
     },
     ua: {
       from:"Звідки:", to:"Куди:",
@@ -2166,7 +2278,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"Впевненість", dh_better_timing:"КРАЩИЙ ЧАС", dh_pred_title:"Є КРАЩИЙ ВАРІАНТ",
       cta_start_upper:"ПОЧАТИ ЇЗДУ", cta_details_upper:"ДЕТАЛІ",
       ai_voice_button:"AI голос",
-      why_voice_button:"Чому маршрут"
+      why_voice_button:"Чому маршрут",
+      route_mode_fast:"Швидше",
+      route_mode_calm:"Спокійніше",
+      route_mode_hint:"Менше стресу • менше поворотів",
+      route_clear_from:"Очистити звідки",
+      route_clear_to:"Очистити куди"
     },
     ar: {
       from:"من:", to:"إلى:",
@@ -2228,7 +2345,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"الثقة", dh_better_timing:"توقيت أفضل", dh_pred_title:"خيار أفضل لاحقًا",
       cta_start_upper:"ابدأ القيادة", cta_details_upper:"التفاصيل",
       ai_voice_button:"صوت AI",
-      why_voice_button:"لماذا هذا الطريق"
+      why_voice_button:"لماذا هذا الطريق",
+      route_mode_fast:"الأسرع",
+      route_mode_calm:"هادئ",
+      route_mode_hint:"ضغط أقل • منعطفات أقل",
+      route_clear_from:"مسح نقطة الانطلاق",
+      route_clear_to:"مسح الوجهة"
     }
   };
 })();
@@ -2629,6 +2751,14 @@ let lastDriveVoicePhase = "";
       el.placeholder = t(el.getAttribute("data-i18n-ph"));
       if (!cur) el.placeholder = t(el.getAttribute("data-i18n-ph"));
     });
+    document.querySelectorAll("[data-i18n-title]").forEach(el => {
+      const key = el.getAttribute("data-i18n-title");
+      if (!key) return;
+      const label = t(key);
+      el.setAttribute("title", label);
+      el.setAttribute("aria-label", label);
+    });
+    try { if (typeof window.syncRouteModeUI === "function") window.syncRouteModeUI(); } catch (_) {}
   }
 
   let lastSpokenText = "";
@@ -3538,6 +3668,76 @@ function updateSavedPlace(place) {
   const endField = document.getElementById("end");
   if (endField) endField.value = trimmed;
   if (typeof calculateRoutes === "function") calculateRoutes();
+}
+
+// ============================================================
+//  ROUTE INPUT — clear (X) without forcing route calc
+// ============================================================
+
+function clearRouteInputField(which) {
+  try {
+    const id = which === "start" ? "start" : "end";
+    const input = document.getElementById(id);
+    if (input) {
+      input.value = "";
+      try {
+        input.__tz2SelectedPoint = null;
+      } catch (_) {}
+      try {
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      } catch (_) {}
+    }
+    if (which === "start") {
+      try {
+        currentUserCoords = null;
+      } catch (_) {}
+    } else {
+      try {
+        window.__clearRoadEndCoords = null;
+      } catch (_) {}
+    }
+    try {
+      const tz = window.tz2RouteDataIntegrity;
+      if (tz && tz.selected) {
+        if (which === "start") tz.selected.start = null;
+        else tz.selected.end = null;
+      }
+    } catch (_) {}
+    const s = (document.getElementById("start") && document.getElementById("start").value || "").trim();
+    const e = (document.getElementById("end") && document.getElementById("end").value || "").trim();
+    if (!s || !e) {
+      try {
+        const res = document.getElementById("results");
+        if (res) res.innerHTML = "";
+      } catch (_) {}
+      try {
+        if (typeof clearRoutes === "function") clearRoutes();
+      } catch (_) {}
+      try {
+        analyzedRoutes = [];
+        window.analyzedRoutes = analyzedRoutes;
+      } catch (_) {}
+      try {
+        selectedRoute = null;
+        _bestRoute = null;
+        _fastestRoute = null;
+      } catch (_) {}
+      try {
+        currentDecision = null;
+        window.currentDecision = null;
+      } catch (_) {}
+      try {
+        currentDirectionsResult = null;
+      } catch (_) {}
+      try {
+        document.documentElement.removeAttribute("data-route-state");
+        document.documentElement.removeAttribute("data-route-idle-reason");
+      } catch (_) {}
+    }
+    try {
+      input && input.focus();
+    } catch (_) {}
+  } catch (_) {}
 }
 
 // ============================================================
@@ -5598,6 +5798,26 @@ function tz3Round(value, decimals = 1) {
   return Math.round(tz3SafeNumber(value, 0) * factor) / factor;
 }
 
+/** Per-step hints for calm routing: lane wording and heavy junction maneuvers (Directions steps). */
+function tz3StepDerivedSignals(route) {
+  const steps = Array.isArray(route && route.steps) ? route.steps : [];
+  let laneHints = 0;
+  let heavyJunctionSteps = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i] || {};
+    const text = String(step.instruction || step.instructions || "").toLowerCase();
+    const man = String(step.maneuver || "").toLowerCase();
+    const j = man + " " + text;
+    if (/keep (left|right|center)|use (the )?\d[\d]?(st|nd|rd|th)? (from the )?(left|right) (lane|lanes)|change (to |)lane|take the .{0,24}lane|veer (left|right)|bear (left|right)/i.test(j)) {
+      laneHints++;
+    }
+    if (/fork|merge onto|take the exit|exit the highway|take (the )?ramp|roundabout|rotary|traffic circle|interchange/i.test(j)) {
+      heavyJunctionSteps++;
+    }
+  }
+  return { laneHints, heavyJunctionSteps };
+}
+
 function scoreRoute(route, allRoutes) {
   const r = route && route.normalizedRoute ? route : normalizeRoute(route || {}, route && Number.isFinite(route.index) ? route.index : 0);
 
@@ -5613,6 +5833,10 @@ function scoreRoute(route, allRoutes) {
 
   const delaySec = Math.max(0, durationTrafficSec - durationSec);
   const delayMin = tz3Round(delaySec / 60, 1);
+
+  const stepSig = tz3StepDerivedSignals(r);
+  const laneHints = stepSig.laneHints;
+  const heavyJunctionSteps = stepSig.heavyJunctionSteps;
 
   // MVP formula for ТЗ-3: all values are in comparable penalty points.
   const timeComponent = durationTrafficSec / 60;
@@ -5632,7 +5856,25 @@ function scoreRoute(route, allRoutes) {
   const trafficLabel = trafficScore >= 0.45 ? "heavy" : trafficScore >= 0.2 ? "moderate" : "stable";
   const incidentsCount = delayMin >= 8 ? 1 : 0;
   const stabilityScore = Math.max(0, Math.round(100 - trafficPenalty * 2.2 - complexityPenalty * 2.5 - delayPenalty * 1.3));
-  const stressScore = Math.max(0, Math.min(100, Math.round(trafficPenalty * 2.4 + complexityPenalty * 3 + stopsPenalty * 1.5)));
+  // Stress (0–100): turns / junction complexity / lane changes dominate; traffic weighted lower than turns.
+  const stressScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        stopsCount * 2.05 +
+          complexityScore * 20 +
+          laneHints * 1.35 +
+          heavyJunctionSteps * 1.05 +
+          trafficScore * 7.5
+      )
+    )
+  );
+  // Uncapped scalar for CALM mode ordering (lower = easier drive).
+  const calmStressScore = tz3Round(
+    stopsCount * 2.75 + complexityScore * 24 + laneHints * 1.85 + heavyJunctionSteps * 1.15 + trafficScore * 5.5,
+    2
+  );
 
   const breakdown = {
     total: score,
@@ -5658,7 +5900,10 @@ function scoreRoute(route, allRoutes) {
     tollCost,
     tollPenalty,
     stressScore,
-    stabilityScore
+    stabilityScore,
+    laneHints,
+    heavyJunctionSteps,
+    calmStressScore
   };
 
   return {
@@ -5682,6 +5927,7 @@ function scoreRoute(route, allRoutes) {
     tollPenalty: breakdown.tollPenalty,
     delayPenalty: breakdown.delayPenalty,
     stressScore,
+    calmStressScore,
     drivePersonality: typeof getDrivePersonality === "function" ? getDrivePersonality({ ...r, stressScore }) : "Steady drive",
     stabilityScore
   };
@@ -7889,6 +8135,8 @@ function initAutocomplete() {
         window.__clearRoadUxDiagLog("Autocomplete active", "reused instances");
       }
     } catch (_) {}
+    patchAutocompleteBindings();
+    wireInputAssist();
     return;
   }
   const startInput = document.getElementById("start");
@@ -8029,30 +8277,49 @@ function ensureAutocompleteReady() {
   wireInputAssist();
 }
 
+function _safeLatLngFromPlace(place) {
+  try {
+    const loc = place && place.geometry && place.geometry.location;
+    if (!loc) return null;
+    const lat = typeof loc.lat === "function" ? loc.lat() : Number(loc.lat);
+    const lng = typeof loc.lng === "function" ? loc.lng() : Number(loc.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch (_) {
+    return null;
+  }
+}
+
 function bindAutocompletePlaceChanged(autocomplete, kind) {
   if (!autocomplete || autocomplete.__patchedPlaceChanged) return;
   autocomplete.addListener("place_changed", () => {
-    const place = autocomplete.getPlace();
-    if (!place?.geometry) return;
-
-    const input = document.getElementById(kind === "start" ? "start" : "end");
-    if (!input) return;
-
     try {
-      const lp = document.getElementById("cr-ac-panel-" + input.id);
-      if (lp) lp.style.display = "none";
-    } catch (_) {}
+      const place = autocomplete.getPlace();
+      const ll = _safeLatLngFromPlace(place);
+      if (!ll) return;
 
-    input.value = place.formatted_address || place.name || input.value || "";
+      const input = document.getElementById(kind === "start" ? "start" : "end");
+      if (!input) return;
 
-    if (kind === "start") {
-      currentUserCoords = {
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng()
-      };
+      try {
+        const lp = document.getElementById("cr-ac-panel-" + input.id);
+        if (lp) lp.style.display = "none";
+      } catch (_) {}
+
+      input.value = (place && (place.formatted_address || place.name)) || input.value || "";
+
+      if (kind === "start") {
+        currentUserCoords = { lat: ll.lat, lng: ll.lng };
+      } else {
+        try {
+          window.__clearRoadEndCoords = { lat: ll.lat, lng: ll.lng };
+        } catch (_) {}
+      }
+
+      tryCalculateRoutesFromInputs();
+    } catch (_) {
+      /* ignore — bad or partial Places result must not break the app */
     }
-
-    tryCalculateRoutesFromInputs();
   });
   autocomplete.__patchedPlaceChanged = true;
 }
@@ -14011,6 +14278,40 @@ function startDrive(index) {
     try { if (typeof getUserPreference === 'function') return String(getUserPreference() || 'balanced'); } catch (_) {}
     return String(window.userPreference || 'balanced');
   }
+
+  const ROUTE_MODE_KEY = 'clearRoadUAE.routeMode';
+  const ROUTE_MODES = ['fast', 'calm'];
+  function getRouteMode(){
+    try {
+      const v = String(localStorage.getItem(ROUTE_MODE_KEY) || 'fast').toLowerCase();
+      return ROUTE_MODES.indexOf(v) !== -1 ? v : 'fast';
+    } catch (_) {
+      return 'fast';
+    }
+  }
+  function syncRouteModeUI(){
+    const mode = getRouteMode();
+    document.querySelectorAll('.route-mode-btn').forEach(function(btn){
+      if (!btn || !btn.dataset) return;
+      const active = btn.dataset.routeMode === mode;
+      btn.classList.toggle('active', !!active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  try { window.getRouteMode = getRouteMode; } catch (_) {}
+  try { window.syncRouteModeUI = syncRouteModeUI; } catch (_) {}
+  window.setRouteMode = function setRouteModeCR(mode){
+    const raw = String(mode || 'fast').toLowerCase();
+    const m = ROUTE_MODES.indexOf(raw) !== -1 ? raw : 'fast';
+    try { localStorage.setItem(ROUTE_MODE_KEY, m); } catch (_) {}
+    syncRouteModeUI();
+    try {
+      if (typeof window.clearRoadTZ7ScheduleAfterCalculateRoutes === 'function') {
+        window.clearRoadTZ7ScheduleAfterCalculateRoutes();
+      }
+    } catch (_) {}
+  };
+  try { setRouteMode = window.setRouteMode; } catch (_) {}
   function filters(){
     const f = (typeof userFilters === 'object' && userFilters) ? userFilters : (window.routeControlsState && window.routeControlsState.filters) || {};
     return {
@@ -14102,7 +14403,9 @@ function startDrive(index) {
     const dFast = routeDeltaVsFastest(best, fastest || best);
     let scoreGap = secondRoute ? Math.max(0, aiScore(secondRoute) - aiScore(best)) : 100;
     const stabilityGap = secondRoute ? Math.abs(safeNum(secondRoute.stabilityScore, 0) - safeNum(best.stabilityScore, 0)) : 0;
-    const prefConflict = pref() === 'fastest' && dFast.deltaMin > 3;
+    let routeModeCalm = false;
+    try { routeModeCalm = getRouteMode() === 'calm'; } catch (_) {}
+    const prefConflict = (pref() === 'fastest' && dFast.deltaMin > 3) || (routeModeCalm && dFast.deltaMin > 14);
     let level = 'MEDIUM';
     if ((!secondRoute || scoreGap >= 9 || dFast.deltaMin <= 1) && !prefConflict) level = 'HIGH';
     if (dFast.deltaMin > 22 || dFast.deltaPct > 0.38 || prefConflict) level = 'LOW';
@@ -14154,9 +14457,20 @@ function startDrive(index) {
     const p = pref();
     const f = filters();
     const fk = (f.avoidTolls ? '1' : '0') + (f.avoidHighways ? '1' : '0') + (f.fewerTurns ? '1' : '0') + (f.avoidTraffic ? '1' : '0');
-    return p + '|' + fk + '|' + list.map(function(r){
+    let rm = 'fast';
+    try { rm = getRouteMode(); } catch (_) {}
+    return p + '|' + rm + '|' + fk + '|' + list.map(function(r){
       return String(r.index) + ':' + Math.round(minutes(r)) + ':' + (Math.round(aiScore(r) * 10) / 10);
     }).join(';');
+  }
+
+  function calmStress(route){
+    if (!route) return 1e9;
+    if (Number.isFinite(route.calmStressScore)) return route.calmStressScore;
+    const sb = route.scoreBreakdown || {};
+    if (Number.isFinite(sb.calmStressScore)) return sb.calmStressScore;
+    if (Number.isFinite(route.stressScore)) return route.stressScore;
+    return 1e9;
   }
 
   function buildRealDecision(routes){
@@ -14189,15 +14503,31 @@ function startDrive(index) {
       route.notRecommended = true;
       return canSelectSlowRoute(route, fastest, ranked);
     });
-    let best = saneCandidates[0] || ranked[0] || null;
+    const routeMode = getRouteMode();
+    let orderedForChoice = saneCandidates.slice();
+    if (routeMode === 'calm' && orderedForChoice.length > 1) {
+      orderedForChoice.sort(function(a, b){
+        const ca = calmStress(a);
+        const cb = calmStress(b);
+        if (ca !== cb) return ca - cb;
+        return minutes(a) - minutes(b);
+      });
+    }
+    let best = orderedForChoice[0] || ranked[0] || null;
     const CHOICE_HYST = 2.8;
+    const CALM_STRESS_HYST = 3.5;
     try {
       const st = window.__CLEAR_ROAD_AI_DECISION_STICKY__;
       if (best && st && st.sig === choiceSig && st.bestIndex != null && Number.isFinite(Number(st.bestIndex))) {
         const prev = routesForRanking.find(function(r){ return r && Number(r.index) === Number(st.bestIndex); });
-        if (prev && saneCandidates.some(function(r){ return sameRoute(r, prev); })) {
-          const gap = aiScore(prev) - aiScore(best);
-          if (gap >= 0 && gap < CHOICE_HYST) best = prev;
+        if (prev && orderedForChoice.some(function(r){ return sameRoute(r, prev); })) {
+          if (routeMode === 'calm') {
+            const stressGap = calmStress(prev) - calmStress(best);
+            if (stressGap >= 0 && stressGap < CALM_STRESS_HYST) best = prev;
+          } else {
+            const gap = aiScore(prev) - aiScore(best);
+            if (gap >= 0 && gap < CHOICE_HYST) best = prev;
+          }
         }
       }
     } catch (_hy) {}
@@ -14389,6 +14719,9 @@ function startDrive(index) {
   };
 
   console.log('[TZ8] Real AI Logic Engine installed', TZ8_VERSION);
+  [0, 400, 1200].forEach(function(t){ setTimeout(syncRouteModeUI, t); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncRouteModeUI, { once: true });
+  else syncRouteModeUI();
 })();
 
 </script>

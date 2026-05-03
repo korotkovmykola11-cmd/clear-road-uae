@@ -70,7 +70,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"Confidence", dh_better_timing:"BETTER TIMING",
       dh_pred_title:"BETTER OPTION AHEAD", cta_start_upper:"START DRIVING", cta_details_upper:"DETAILS",
       ai_voice_button:"AI Voice",
-      why_voice_button:"Why this route"
+      why_voice_button:"Why this route",
+      route_mode_fast:"Fast",
+      route_mode_calm:"Calm",
+      route_mode_hint:"Less stress • fewer turns",
+      route_clear_from:"Clear start",
+      route_clear_to:"Clear destination"
     },
     ru: {
       from:"Откуда:", to:"Куда:",
@@ -132,7 +137,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"Уверенность", dh_better_timing:"ЛУЧШЕЕ ВРЕМЯ", dh_pred_title:"ЕСТЬ ЛУЧШЕ ВАРИАНТ",
       cta_start_upper:"НАЧАТЬ ЕЗДУ", cta_details_upper:"ПОДРОБНЕЕ",
       ai_voice_button:"AI голос",
-      why_voice_button:"Почему маршрут"
+      why_voice_button:"Почему маршрут",
+      route_mode_fast:"Быстрее",
+      route_mode_calm:"Спокойнее",
+      route_mode_hint:"Меньше стресса • меньше поворотов",
+      route_clear_from:"Очистить откуда",
+      route_clear_to:"Очистить куда"
     },
     ua: {
       from:"Звідки:", to:"Куди:",
@@ -194,7 +204,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"Впевненість", dh_better_timing:"КРАЩИЙ ЧАС", dh_pred_title:"Є КРАЩИЙ ВАРІАНТ",
       cta_start_upper:"ПОЧАТИ ЇЗДУ", cta_details_upper:"ДЕТАЛІ",
       ai_voice_button:"AI голос",
-      why_voice_button:"Чому маршрут"
+      why_voice_button:"Чому маршрут",
+      route_mode_fast:"Швидше",
+      route_mode_calm:"Спокійніше",
+      route_mode_hint:"Менше стресу • менше поворотів",
+      route_clear_from:"Очистити звідки",
+      route_clear_to:"Очистити куди"
     },
     ar: {
       from:"من:", to:"إلى:",
@@ -256,7 +271,12 @@ ctx_keep_right:"Keep right ahead", ctx_ramp:"Take the ramp ahead",
       dh_conf_label:"الثقة", dh_better_timing:"توقيت أفضل", dh_pred_title:"خيار أفضل لاحقًا",
       cta_start_upper:"ابدأ القيادة", cta_details_upper:"التفاصيل",
       ai_voice_button:"صوت AI",
-      why_voice_button:"لماذا هذا الطريق"
+      why_voice_button:"لماذا هذا الطريق",
+      route_mode_fast:"الأسرع",
+      route_mode_calm:"هادئ",
+      route_mode_hint:"ضغط أقل • منعطفات أقل",
+      route_clear_from:"مسح نقطة الانطلاق",
+      route_clear_to:"مسح الوجهة"
     }
   };
 })();

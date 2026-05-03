@@ -30,14 +30,27 @@ __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
       <div class="route-panel">
         <div class="route-row">
           <span class="route-dot green"></span>
-          <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+          <div class="route-field">
+            <input type="text" class="route-input" id="start" data-i18n-ph="placeholder_start" placeholder="From (e.g. Ajman)" value="" aria-label="From" title="From" autocomplete="off">
+            <button type="button" class="route-clear-btn" id="clear-route-start" onclick="clearRouteInputField('start')" data-i18n-title="route_clear_from" title="Clear start" aria-label="Clear start">&times;</button>
+          </div>
           <button type="button" class="gps-btn-top" id="gps-btn" title="Use my location" aria-label="Use GPS location">
             <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
           </button>
         </div>
         <div class="route-row">
           <span class="route-dot"></span>
-          <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
+          <div class="route-field">
+            <input type="text" class="route-input" id="end" data-i18n-ph="placeholder_end" placeholder="To (e.g. Dubai Mall)" value="" aria-label="To" title="To" autocomplete="off">
+            <button type="button" class="route-clear-btn" id="clear-route-end" onclick="clearRouteInputField('end')" data-i18n-title="route_clear_to" title="Clear destination" aria-label="Clear destination">&times;</button>
+          </div>
+        </div>
+        <div class="route-mode-row" role="group" aria-label="Routing style">
+          <div class="route-mode-toggle">
+            <button type="button" class="route-mode-btn active" data-route-mode="fast" onclick="setRouteMode('fast')" data-i18n="route_mode_fast">FAST</button>
+            <button type="button" class="route-mode-btn" data-route-mode="calm" onclick="setRouteMode('calm')" data-i18n="route_mode_calm">CALM</button>
+          </div>
+          <span class="route-mode-hint" data-i18n="route_mode_hint">Less stress • fewer turns</span>
         </div>
       </div>
     </div>
@@ -514,6 +527,14 @@ let lastDriveVoicePhase = "";
       el.placeholder = t(el.getAttribute("data-i18n-ph"));
       if (!cur) el.placeholder = t(el.getAttribute("data-i18n-ph"));
     });
+    document.querySelectorAll("[data-i18n-title]").forEach(el => {
+      const key = el.getAttribute("data-i18n-title");
+      if (!key) return;
+      const label = t(key);
+      el.setAttribute("title", label);
+      el.setAttribute("aria-label", label);
+    });
+    try { if (typeof window.syncRouteModeUI === "function") window.syncRouteModeUI(); } catch (_) {}
   }
 
   let lastSpokenText = "";
@@ -1423,6 +1444,76 @@ function updateSavedPlace(place) {
   const endField = document.getElementById("end");
   if (endField) endField.value = trimmed;
   if (typeof calculateRoutes === "function") calculateRoutes();
+}
+
+// ============================================================
+//  ROUTE INPUT — clear (X) without forcing route calc
+// ============================================================
+
+function clearRouteInputField(which) {
+  try {
+    const id = which === "start" ? "start" : "end";
+    const input = document.getElementById(id);
+    if (input) {
+      input.value = "";
+      try {
+        input.__tz2SelectedPoint = null;
+      } catch (_) {}
+      try {
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      } catch (_) {}
+    }
+    if (which === "start") {
+      try {
+        currentUserCoords = null;
+      } catch (_) {}
+    } else {
+      try {
+        window.__clearRoadEndCoords = null;
+      } catch (_) {}
+    }
+    try {
+      const tz = window.tz2RouteDataIntegrity;
+      if (tz && tz.selected) {
+        if (which === "start") tz.selected.start = null;
+        else tz.selected.end = null;
+      }
+    } catch (_) {}
+    const s = (document.getElementById("start") && document.getElementById("start").value || "").trim();
+    const e = (document.getElementById("end") && document.getElementById("end").value || "").trim();
+    if (!s || !e) {
+      try {
+        const res = document.getElementById("results");
+        if (res) res.innerHTML = "";
+      } catch (_) {}
+      try {
+        if (typeof clearRoutes === "function") clearRoutes();
+      } catch (_) {}
+      try {
+        analyzedRoutes = [];
+        window.analyzedRoutes = analyzedRoutes;
+      } catch (_) {}
+      try {
+        selectedRoute = null;
+        _bestRoute = null;
+        _fastestRoute = null;
+      } catch (_) {}
+      try {
+        currentDecision = null;
+        window.currentDecision = null;
+      } catch (_) {}
+      try {
+        currentDirectionsResult = null;
+      } catch (_) {}
+      try {
+        document.documentElement.removeAttribute("data-route-state");
+        document.documentElement.removeAttribute("data-route-idle-reason");
+      } catch (_) {}
+    }
+    try {
+      input && input.focus();
+    } catch (_) {}
+  } catch (_) {}
 }
 
 // ============================================================

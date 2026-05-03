@@ -361,6 +361,40 @@
     try { if (typeof getUserPreference === 'function') return String(getUserPreference() || 'balanced'); } catch (_) {}
     return String(window.userPreference || 'balanced');
   }
+
+  const ROUTE_MODE_KEY = 'clearRoadUAE.routeMode';
+  const ROUTE_MODES = ['fast', 'calm'];
+  function getRouteMode(){
+    try {
+      const v = String(localStorage.getItem(ROUTE_MODE_KEY) || 'fast').toLowerCase();
+      return ROUTE_MODES.indexOf(v) !== -1 ? v : 'fast';
+    } catch (_) {
+      return 'fast';
+    }
+  }
+  function syncRouteModeUI(){
+    const mode = getRouteMode();
+    document.querySelectorAll('.route-mode-btn').forEach(function(btn){
+      if (!btn || !btn.dataset) return;
+      const active = btn.dataset.routeMode === mode;
+      btn.classList.toggle('active', !!active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  try { window.getRouteMode = getRouteMode; } catch (_) {}
+  try { window.syncRouteModeUI = syncRouteModeUI; } catch (_) {}
+  window.setRouteMode = function setRouteModeCR(mode){
+    const raw = String(mode || 'fast').toLowerCase();
+    const m = ROUTE_MODES.indexOf(raw) !== -1 ? raw : 'fast';
+    try { localStorage.setItem(ROUTE_MODE_KEY, m); } catch (_) {}
+    syncRouteModeUI();
+    try {
+      if (typeof window.clearRoadTZ7ScheduleAfterCalculateRoutes === 'function') {
+        window.clearRoadTZ7ScheduleAfterCalculateRoutes();
+      }
+    } catch (_) {}
+  };
+  try { setRouteMode = window.setRouteMode; } catch (_) {}
   function filters(){
     const f = (typeof userFilters === 'object' && userFilters) ? userFilters : (window.routeControlsState && window.routeControlsState.filters) || {};
     return {
@@ -452,7 +486,9 @@
     const dFast = routeDeltaVsFastest(best, fastest || best);
     let scoreGap = secondRoute ? Math.max(0, aiScore(secondRoute) - aiScore(best)) : 100;
     const stabilityGap = secondRoute ? Math.abs(safeNum(secondRoute.stabilityScore, 0) - safeNum(best.stabilityScore, 0)) : 0;
-    const prefConflict = pref() === 'fastest' && dFast.deltaMin > 3;
+    let routeModeCalm = false;
+    try { routeModeCalm = getRouteMode() === 'calm'; } catch (_) {}
+    const prefConflict = (pref() === 'fastest' && dFast.deltaMin > 3) || (routeModeCalm && dFast.deltaMin > 14);
     let level = 'MEDIUM';
     if ((!secondRoute || scoreGap >= 9 || dFast.deltaMin <= 1) && !prefConflict) level = 'HIGH';
     if (dFast.deltaMin > 22 || dFast.deltaPct > 0.38 || prefConflict) level = 'LOW';
@@ -504,9 +540,20 @@
     const p = pref();
     const f = filters();
     const fk = (f.avoidTolls ? '1' : '0') + (f.avoidHighways ? '1' : '0') + (f.fewerTurns ? '1' : '0') + (f.avoidTraffic ? '1' : '0');
-    return p + '|' + fk + '|' + list.map(function(r){
+    let rm = 'fast';
+    try { rm = getRouteMode(); } catch (_) {}
+    return p + '|' + rm + '|' + fk + '|' + list.map(function(r){
       return String(r.index) + ':' + Math.round(minutes(r)) + ':' + (Math.round(aiScore(r) * 10) / 10);
     }).join(';');
+  }
+
+  function calmStress(route){
+    if (!route) return 1e9;
+    if (Number.isFinite(route.calmStressScore)) return route.calmStressScore;
+    const sb = route.scoreBreakdown || {};
+    if (Number.isFinite(sb.calmStressScore)) return sb.calmStressScore;
+    if (Number.isFinite(route.stressScore)) return route.stressScore;
+    return 1e9;
   }
 
   function buildRealDecision(routes){
@@ -539,15 +586,31 @@
       route.notRecommended = true;
       return canSelectSlowRoute(route, fastest, ranked);
     });
-    let best = saneCandidates[0] || ranked[0] || null;
+    const routeMode = getRouteMode();
+    let orderedForChoice = saneCandidates.slice();
+    if (routeMode === 'calm' && orderedForChoice.length > 1) {
+      orderedForChoice.sort(function(a, b){
+        const ca = calmStress(a);
+        const cb = calmStress(b);
+        if (ca !== cb) return ca - cb;
+        return minutes(a) - minutes(b);
+      });
+    }
+    let best = orderedForChoice[0] || ranked[0] || null;
     const CHOICE_HYST = 2.8;
+    const CALM_STRESS_HYST = 3.5;
     try {
       const st = window.__CLEAR_ROAD_AI_DECISION_STICKY__;
       if (best && st && st.sig === choiceSig && st.bestIndex != null && Number.isFinite(Number(st.bestIndex))) {
         const prev = routesForRanking.find(function(r){ return r && Number(r.index) === Number(st.bestIndex); });
-        if (prev && saneCandidates.some(function(r){ return sameRoute(r, prev); })) {
-          const gap = aiScore(prev) - aiScore(best);
-          if (gap >= 0 && gap < CHOICE_HYST) best = prev;
+        if (prev && orderedForChoice.some(function(r){ return sameRoute(r, prev); })) {
+          if (routeMode === 'calm') {
+            const stressGap = calmStress(prev) - calmStress(best);
+            if (stressGap >= 0 && stressGap < CALM_STRESS_HYST) best = prev;
+          } else {
+            const gap = aiScore(prev) - aiScore(best);
+            if (gap >= 0 && gap < CHOICE_HYST) best = prev;
+          }
         }
       }
     } catch (_hy) {}
@@ -739,4 +802,7 @@
   };
 
   console.log('[TZ8] Real AI Logic Engine installed', TZ8_VERSION);
+  [0, 400, 1200].forEach(function(t){ setTimeout(syncRouteModeUI, t); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncRouteModeUI, { once: true });
+  else syncRouteModeUI();
 })();

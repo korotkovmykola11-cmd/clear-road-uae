@@ -18,6 +18,8 @@ function initAutocomplete() {
         window.__clearRoadUxDiagLog("Autocomplete active", "reused instances");
       }
     } catch (_) {}
+    patchAutocompleteBindings();
+    wireInputAssist();
     return;
   }
   const startInput = document.getElementById("start");
@@ -158,30 +160,49 @@ function ensureAutocompleteReady() {
   wireInputAssist();
 }
 
+function _safeLatLngFromPlace(place) {
+  try {
+    const loc = place && place.geometry && place.geometry.location;
+    if (!loc) return null;
+    const lat = typeof loc.lat === "function" ? loc.lat() : Number(loc.lat);
+    const lng = typeof loc.lng === "function" ? loc.lng() : Number(loc.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch (_) {
+    return null;
+  }
+}
+
 function bindAutocompletePlaceChanged(autocomplete, kind) {
   if (!autocomplete || autocomplete.__patchedPlaceChanged) return;
   autocomplete.addListener("place_changed", () => {
-    const place = autocomplete.getPlace();
-    if (!place?.geometry) return;
-
-    const input = document.getElementById(kind === "start" ? "start" : "end");
-    if (!input) return;
-
     try {
-      const lp = document.getElementById("cr-ac-panel-" + input.id);
-      if (lp) lp.style.display = "none";
-    } catch (_) {}
+      const place = autocomplete.getPlace();
+      const ll = _safeLatLngFromPlace(place);
+      if (!ll) return;
 
-    input.value = place.formatted_address || place.name || input.value || "";
+      const input = document.getElementById(kind === "start" ? "start" : "end");
+      if (!input) return;
 
-    if (kind === "start") {
-      currentUserCoords = {
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng()
-      };
+      try {
+        const lp = document.getElementById("cr-ac-panel-" + input.id);
+        if (lp) lp.style.display = "none";
+      } catch (_) {}
+
+      input.value = (place && (place.formatted_address || place.name)) || input.value || "";
+
+      if (kind === "start") {
+        currentUserCoords = { lat: ll.lat, lng: ll.lng };
+      } else {
+        try {
+          window.__clearRoadEndCoords = { lat: ll.lat, lng: ll.lng };
+        } catch (_) {}
+      }
+
+      tryCalculateRoutesFromInputs();
+    } catch (_) {
+      /* ignore — bad or partial Places result must not break the app */
     }
-
-    tryCalculateRoutesFromInputs();
   });
   autocomplete.__patchedPlaceChanged = true;
 }
