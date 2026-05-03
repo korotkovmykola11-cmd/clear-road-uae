@@ -1,0 +1,39 @@
+---
+description: Clear Road UAE — map loading, secrets, and build invariants; do not regress Maps without analysis.
+alwaysApply: true
+---
+
+# Clear Road UAE — project protection rules
+
+**Do not break map loading.** The app is expected to work with a valid key when served over HTTP.
+
+## Local workflow (reference)
+
+- Build: `npm run build`
+- Local test: `npx serve dist` (or project script; use the URL printed by serve, e.g. `http://localhost:58580`)
+- **Never** validate Maps by opening `dist/index.html` via `file://`
+
+## Strict rules — do not change without explicit owner request
+
+1. Do **not** change Google Maps script loading (tag placement / URL shape meant for the loader).
+2. Do **not** change `callback=initMap`.
+3. Do **not** change `defer` / `async` on the Google Maps script.
+4. Do **not** move `window.initMap = initMap`.
+5. Do **not** move `initMap` unless explicitly requested.
+6. Do **not** move `calculateRoutes` or `initAutocomplete` without verifying **full script load order** and any `async` race with the Maps callback.
+7. Do **not** touch `src/secrets/maps-api-key.txt`.
+8. Do **not** print or expose API keys in chat, logs, or commits.
+9. Do **not** modify API key injection logic in `scripts/build.mjs`.
+10. Do **not** replace a real key with dev-fallback in production-oriented flows.
+
+## Before merging behavior-affecting changes
+
+- Run `npm run build`
+- Run `npx serve dist` and test on **localhost** (not `file://`)
+- Confirm: no Google Maps console error
+- Confirm: no raw JS text visible in the page
+- Confirm: inputs, route calculation, and map still work
+
+## If map loading regresses
+
+Stop; report the **exact** console error and **exact** cause (file / area) **before** applying a fix.

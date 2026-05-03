@@ -8,6 +8,7 @@
     "build": "node scripts/build.mjs",
     "build:check": "node scripts/build.mjs --verify-only",
     "build:prod": "node scripts/build.mjs --require-maps-key",
+    "serve:dist": "npx --yes http-server ./dist -p 3000 -c-1",
     "extract:css": "node scripts/extract-css.mjs",
     "extract:i18n": "node scripts/extract-i18n.mjs",
     "extract:empty-state": "node scripts/extract-empty-state-js.mjs",

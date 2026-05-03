@@ -1,9 +1,58 @@
 /**
  * Сборка артефакта для деплоя: один dist/index.html (вариант A).
+ *
+ * --- ТЗ-0. Инварианты (зафиксировано; не менять порядок слоёв без осознанной причины) ---
+ * 1) Поток: input/index.html → этот скрипт → dist/index.html (один артефакт).
+ * 2) После закрытия основного inline <script> в input порядок внешних слоёв:
+ *    cr-tz1-directions-route-extract → cr-tz1-route-metrics-traffic → cr-tz1-route-role-segments → cr-tz1-drive-gps-warnings → cr-tz1-drive-voice-timed-warnings → cr-tz1-drive-lane-timed-hud → cr-tz1-drive-main-instruction → cr-tz1-drive-voice-nav-turns → cr-tz2-normalization-layer → cr-tz1-tz2-decision-helpers → cr-tz1-drive-update-ui → cr-tz3-score-engine → cr-tz4-why-generator → cr-ai-decision-layer → cr-tz1-drive-voice-ai-advice → cr-route-cards-ui-cleanup → cr-render-results-decision-ui → cr-route-compare-modal-ui → cr-drive-start-nav-entry → cr-tz6-production-safety → cr-tz2-gps-stability → cr-tz7-live-recalculation →
+ *    cr-tz3-predictive-stability → cr-tz4-uae-local → cr-tz5-filters → cr-tz6-quick-start →
+ *    cr-tz7-main-i18n → tz8-rtl → … (далее по списку плейсхолдеров ниже и по цепочке inject в main()).
+ *    TZ6 safety оборачивает функции из main; TZ2 GPS — поверх TZ6; не вставлять между ними посторонние скрипты с тем же глобальным API. Сразу после main: cr-tz1-directions-route-extract (extractRoutesFromDirectionsResult), затем cr-tz1-route-metrics-traffic (calculateRouteMetrics, trafficRank, …), затем cr-tz1-route-role-segments (getRouteRole, buildRouteSegments), затем cr-tz1-drive-gps-warnings (buildDriveViewModel, getWarningPhaseForType, getEffectiveDistanceToStepMeters, …), затем cr-tz1-drive-voice-timed-warnings (buildTimedWarning, normalizeVoiceText, speakDriveInstruction, …), затем cr-tz1-drive-lane-timed-hud (getDriveTimedWarning, getDriveLaneGuidance, …), затем cr-tz1-drive-main-instruction (getCleanDriveMainInstruction, formatDriveMeters, …), затем cr-tz1-drive-voice-nav-turns (speakStartNavigation, maybeSpeakDriveNavigation, …), затем cr-tz2-normalization-layer (normalizeRoute, normalizeRoutes), затем cr-tz1-tz2-decision-helpers (_tz1Minutes, _tz2TollCost, …), затем cr-tz1-drive-update-ui (updateDriveUI, applySmoothedDriveEta, …), затем cr-tz3-score-engine (scoreRoutes), затем cr-tz4-why-generator (applyWhyToRoutes), затем cr-ai-decision-layer, затем cr-tz1-drive-voice-ai-advice (getAIAdviceText, speakCurrentDecision, …), затем cr-route-cards-ui-cleanup, Decision UI (renderResults), модалка сравнения (openRouteDetails), слой выезда (drive entry), далее TZ6…
+ * 3) Контроль после правок слоёв: node scripts/build.mjs --verify-only (или npm run build:check);
+ *    вручную: карта, маршрут, GPS (через http://localhost, не file://).
+ * --- конец ТЗ-0 ---
+ *
+ * --- ТЗ-1. Окружение и диагностика (карта / GPS / голос не из-за «забытого» слоя в билде) ---
+ * 1) Открывать приложение только по HTTP: http://localhost:PORT или http://127.0.0.1:PORT из dist\.
+ *    Не открывать dist\index.html как file:// — Maps, Places и geolocation часто ведут себя некорректно.
+ * 2) Ключ Google Maps: переменная CLEAR_ROAD_MAPS_API_KEY или GOOGLE_MAPS_API_KEY при сборке;
+ *    либо первая строка src/secrets/maps-api-key.txt (файл не коммитить с прод-ключом).
+ *    В Google Cloud Console для ключа задать ограничение по HTTP referrer под ваш хост (например http://localhost:3000/*).
+ *    Прод-сборка: npm run build:prod (--require-maps-key) — без ключа сборка падает.
+ * 3) Быстрая диагностика в браузере: добавить к URL ?cr_selfcheck=1 — в консоли таблица (google.maps, карта, GPS, Places).
+ *    При ошибках ключа смотреть консоль: gm_authFailure, RefererNotAllowedMapError, InvalidKeyMapError.
+ * 4) GPS: разрешение браузера «Местоположение»; на localhost обычно допустимо; голос/Web Speech — HTTPS или localhost, микрофон по запросу.
+ * --- конец ТЗ-1 ---
+ *
+ * --- ТЗ-2. Картографирование монолита ---
+ * Полная карта с якорями (поиск по файлу) и порядком выноса [v01]… зафиксирована в input/index.html
+ * в начале основного <script>: блок «ТЗ-2. КАРТА МОНОЛИТА» сразу после CLEAR_ROAD_MAINTAINER_INDEX.
+ * Номера строк намеренно не дублируются здесь — они плывут при правках; ориентир только якорные строки.
+ * --- конец ТЗ-2 ---
+ *
  * CSS: src/styles/app.css → __CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__
  * i18n: src/i18n/app-i18n.js → __CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__
  * cr-empty-state: src/js/cr-route-empty-state-final-v2.js → __CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__
- * tz3-predictive-stability: src/js/cr-tz3-predictive-stability-layer.js → __CLEAR_ROAD_BUILD_JS_TZ3_PREDICTIVE_STABILITY__ (после основного inline script, до tz4-uae-local)
+ * cr-tz1-directions-route-extract: src/js/cr-tz1-directions-route-extract.js → __CLEAR_ROAD_BUILD_JS_TZ1_DIRECTIONS_ROUTE_EXTRACT__ (первый внешний script после основного inline </script>, до cr-tz1-route-metrics-traffic)
+ * cr-tz1-route-metrics-traffic: src/js/cr-tz1-route-metrics-traffic.js → __CLEAR_ROAD_BUILD_JS_TZ1_ROUTE_METRICS_TRAFFIC__ (после cr-tz1-directions-route-extract, до cr-tz1-route-role-segments; в основном script должны остаться глобальные t, stripHtml до вызовов)
+ * cr-tz1-route-role-segments: src/js/cr-tz1-route-role-segments.js → __CLEAR_ROAD_BUILD_JS_TZ1_ROUTE_ROLE_SEGMENTS__ (после cr-tz1-route-metrics-traffic, до cr-tz1-drive-gps-warnings)
+ * cr-tz1-drive-gps-warnings: src/js/cr-tz1-drive-gps-warnings.js → __CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_GPS_WARNINGS__ (после cr-tz1-route-role-segments, до cr-tz1-drive-voice-timed-warnings)
+ * cr-tz1-drive-voice-timed-warnings: src/js/cr-tz1-drive-voice-timed-warnings.js → __CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_VOICE_TIMED_WARNINGS__ (после cr-tz1-drive-gps-warnings, до cr-tz1-drive-voice-nav-turns)
+ * cr-tz1-drive-voice-nav-turns: src/js/cr-tz1-drive-voice-nav-turns.js → __CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_VOICE_NAV_TURNS__ (после cr-tz1-drive-voice-timed-warnings, до cr-tz2-normalization-layer)
+ * cr-tz2-normalization-layer: src/js/cr-tz2-normalization-layer.js → __CLEAR_ROAD_BUILD_JS_TZ2_NORMALIZATION_LAYER__ (после cr-tz1-drive-voice-nav-turns, до cr-tz1-tz2-decision-helpers)
+ * cr-tz1-tz2-decision-helpers: src/js/cr-tz1-tz2-decision-helpers.js → __CLEAR_ROAD_BUILD_JS_TZ1_TZ2_DECISION_HELPERS__ (после cr-tz2-normalization-layer, до cr-tz3-score-engine; ТЗ-1 patch + ТЗ-2 decision helpers)
+ * cr-tz3-score-engine: src/js/cr-tz3-score-engine.js → __CLEAR_ROAD_BUILD_JS_TZ3_SCORE_ENGINE__ (после cr-tz1-tz2-decision-helpers, до cr-tz4-why-generator; нужен для scoreRoutes в AI decision и обёрток TZ4 UAE / TZ5 filters)
+ * cr-tz4-why-generator: src/js/cr-tz4-why-generator.js → __CLEAR_ROAD_BUILD_JS_TZ4_WHY_GENERATOR__ (после cr-tz3-score-engine, до cr-ai-decision-layer; buildCanonicalDecisionState вызывает applyWhyToRoutes)
+ * cr-ai-decision-layer: src/js/cr-ai-decision-layer.js → __CLEAR_ROAD_BUILD_JS_AI_DECISION_LAYER__ (после cr-tz4-why-generator, до cr-tz1-drive-voice-ai-advice)
+ * cr-tz1-drive-voice-ai-advice: src/js/cr-tz1-drive-voice-ai-advice.js → __CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_VOICE_AI_ADVICE__ (после cr-ai-decision-layer, до cr-route-cards-ui-cleanup; нужны calculateConfidence, _tz1EscapeHTML из уже загруженных слоёв)
+ * cr-route-cards-ui-cleanup: src/js/cr-route-cards-ui-cleanup.js → __CLEAR_ROAD_BUILD_JS_ROUTE_CARDS_UI_CLEANUP__ (после cr-tz1-drive-voice-ai-advice, до cr-render-results-decision-ui)
+ * cr-render-results-decision-ui: src/js/cr-render-results-decision-ui.js → __CLEAR_ROAD_BUILD_JS_RENDER_RESULTS_DECISION_UI__ (после cr-route-cards-ui-cleanup, до cr-route-compare-modal-ui)
+ * cr-route-compare-modal-ui: src/js/cr-route-compare-modal-ui.js → __CLEAR_ROAD_BUILD_JS_ROUTE_COMPARE_MODAL_UI__ (после cr-render-results-decision-ui, до cr-drive-start-nav-entry)
+ * cr-drive-start-nav-entry: src/js/cr-drive-start-nav-entry.js → __CLEAR_ROAD_BUILD_JS_DRIVE_START_NAV__ (после cr-route-compare-modal-ui, до tz6-production-safety)
+ * tz6-production-safety: src/js/cr-tz6-production-safety-layer.js → __CLEAR_ROAD_BUILD_JS_TZ6_PRODUCTION_SAFETY__ (после cr-drive-start-nav-entry, до tz2-gps-stability)
+ * tz2-gps-stability: src/js/cr-tz2-gps-stability-layer.js → __CLEAR_ROAD_BUILD_JS_TZ2_GPS_STABILITY__ (после tz6-production-safety, до tz7-live-recalc)
+ * tz7-live-recalc: src/js/cr-tz7-live-recalculation-layer.js → __CLEAR_ROAD_BUILD_JS_TZ7_LIVE_RECALC__ (после tz2-gps-stability, до tz3-predictive-stability)
+ * tz3-predictive-stability: src/js/cr-tz3-predictive-stability-layer.js → __CLEAR_ROAD_BUILD_JS_TZ3_PREDICTIVE_STABILITY__ (после tz7-live-recalc, до tz4-uae-local)
  * tz4-uae-local: src/js/cr-tz4-uae-local-layer.js → __CLEAR_ROAD_BUILD_JS_TZ4_UAE_LOCAL__ (после tz3-predictive-stability, до tz5-filters)
  * tz5-filters: src/js/cr-tz5-filters-preferences-layer.js → __CLEAR_ROAD_BUILD_JS_TZ5_FILTERS__ (после tz4-uae-local, до tz6-quick-start)
  * tz6-quick-start: src/js/cr-tz6-quick-start-layer.js → __CLEAR_ROAD_BUILD_JS_TZ6_QUICK_START__ (после tz5-filters, до tz7-main-i18n)
@@ -42,6 +91,30 @@ const parentIndexHtml = resolve(projectRoot, "..", "index.html");
 const cssFile = join(projectRoot, "src", "styles", "app.css");
 const i18nFile = join(projectRoot, "src", "i18n", "app-i18n.js");
 const emptyStateJsFile = join(projectRoot, "src", "js", "cr-route-empty-state-final-v2.js");
+const tz1DirectionsRouteExtractJsFile = join(projectRoot, "src", "js", "cr-tz1-directions-route-extract.js");
+const tz1RouteMetricsTrafficJsFile = join(projectRoot, "src", "js", "cr-tz1-route-metrics-traffic.js");
+const tz1RouteRoleSegmentsJsFile = join(projectRoot, "src", "js", "cr-tz1-route-role-segments.js");
+const tz1DriveGpsWarningsJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-gps-warnings.js");
+const tz1DriveVoiceTimedWarningsJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-voice-timed-warnings.js");
+const tz1DriveLaneTimedHudJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-lane-timed-hud.js");
+const tz1DriveUpcomingConditionJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-upcoming-condition.js");
+const tz1DriveMainInstructionJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-main-instruction.js");
+const tz1DriveVoiceNavTurnsJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-voice-nav-turns.js");
+const tz2NormalizationLayerJsFile = join(projectRoot, "src", "js", "cr-tz2-normalization-layer.js");
+const tz1Tz2DecisionHelpersJsFile = join(projectRoot, "src", "js", "cr-tz1-tz2-decision-helpers.js");
+const tz1DriveUpdateUiJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-update-ui.js");
+const tz3ScoreEngineJsFile = join(projectRoot, "src", "js", "cr-tz3-score-engine.js");
+const tz4WhyGeneratorJsFile = join(projectRoot, "src", "js", "cr-tz4-why-generator.js");
+const aiDecisionLayerJsFile = join(projectRoot, "src", "js", "cr-ai-decision-layer.js");
+const tz1DriveVoiceAiAdviceJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-voice-ai-advice.js");
+const tz1DriveLiveGpsTrackingJsFile = join(projectRoot, "src", "js", "cr-tz1-drive-live-gps-tracking.js");
+const routeCardsUiCleanupJsFile = join(projectRoot, "src", "js", "cr-route-cards-ui-cleanup.js");
+const renderResultsDecisionUiJsFile = join(projectRoot, "src", "js", "cr-render-results-decision-ui.js");
+const routeCompareModalUiJsFile = join(projectRoot, "src", "js", "cr-route-compare-modal-ui.js");
+const driveStartNavJsFile = join(projectRoot, "src", "js", "cr-drive-start-nav-entry.js");
+const tz6ProductionSafetyJsFile = join(projectRoot, "src", "js", "cr-tz6-production-safety-layer.js");
+const tz2GpsStabilityJsFile = join(projectRoot, "src", "js", "cr-tz2-gps-stability-layer.js");
+const tz7LiveRecalculationJsFile = join(projectRoot, "src", "js", "cr-tz7-live-recalculation-layer.js");
 const tz3PredictiveStabilityJsFile = join(projectRoot, "src", "js", "cr-tz3-predictive-stability-layer.js");
 const tz4UaeLocalJsFile = join(projectRoot, "src", "js", "cr-tz4-uae-local-layer.js");
 const tz5FiltersJsFile = join(projectRoot, "src", "js", "cr-tz5-filters-preferences-layer.js");
@@ -56,6 +129,11 @@ const tz12FinalAuditJsFile = join(projectRoot, "src", "js", "cr-tz12-final-audit
 const tz13PremiumVoiceJsFile = join(projectRoot, "src", "js", "cr-tz13-premium-voice.js");
 const tz1ElevenlabsTtsJsFile = join(projectRoot, "src", "js", "cr-tz1-elevenlabs-tts.js");
 const tz2RouteIntegrityJsFile = join(projectRoot, "src", "js", "cr-tz2-route-data-integrity.js");
+const crRerouteDecisionJsFile = join(projectRoot, "src", "js", "cr-reroute-decision.js");
+const crDriveBindingJsFile = join(projectRoot, "src", "js", "cr-drive-binding.js");
+const crPredictiveLayerJsFile = join(projectRoot, "src", "js", "cr-predictive-layer.js");
+const crRoutingCoreJsFile = join(projectRoot, "src", "js", "cr-routing-core.js");
+const crAutocompleteGeoJsFile = join(projectRoot, "src", "js", "cr-autocomplete-geo.js");
 const uxDiagBootstrapJsFile = join(projectRoot, "src", "js", "cr-ux-diag-bootstrap.js");
 const tz1Tz2FinalPatchJsFile = join(projectRoot, "src", "js", "cr-tz1-tz2-final-patch.js");
 const tz3I18nCleanJsFile = join(projectRoot, "src", "js", "cr-tz3-i18n-clean-layer.js");
@@ -69,6 +147,30 @@ const MAPS_KEY_DEV_FALLBACK = "AIzaSyDLG6edII5ZKCffP_4qnwiNWg2X9IaLMM4";
 const PLACEHOLDER_CSS = "__CLEAR_ROAD_BUILD_CSS_PLACEHOLDER__";
 const PLACEHOLDER_I18N = "__CLEAR_ROAD_BUILD_I18N_PLACEHOLDER__";
 const PLACEHOLDER_EMPTY_STATE_JS = "__CLEAR_ROAD_BUILD_JS_EMPTY_STATE_V2__";
+const PLACEHOLDER_TZ1_DIRECTIONS_ROUTE_EXTRACT_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DIRECTIONS_ROUTE_EXTRACT__";
+const PLACEHOLDER_TZ1_ROUTE_METRICS_TRAFFIC_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_ROUTE_METRICS_TRAFFIC__";
+const PLACEHOLDER_TZ1_ROUTE_ROLE_SEGMENTS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_ROUTE_ROLE_SEGMENTS__";
+const PLACEHOLDER_TZ1_DRIVE_GPS_WARNINGS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_GPS_WARNINGS__";
+const PLACEHOLDER_TZ1_DRIVE_VOICE_TIMED_WARNINGS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_VOICE_TIMED_WARNINGS__";
+const PLACEHOLDER_TZ1_DRIVE_LANE_TIMED_HUD_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_LANE_TIMED_HUD__";
+const PLACEHOLDER_TZ1_DRIVE_UPCOMING_CONDITION_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_UPCOMING_CONDITION__";
+const PLACEHOLDER_TZ1_DRIVE_MAIN_INSTRUCTION_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_MAIN_INSTRUCTION__";
+const PLACEHOLDER_TZ1_DRIVE_VOICE_NAV_TURNS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_VOICE_NAV_TURNS__";
+const PLACEHOLDER_TZ2_NORMALIZATION_LAYER_JS = "__CLEAR_ROAD_BUILD_JS_TZ2_NORMALIZATION_LAYER__";
+const PLACEHOLDER_TZ1_TZ2_DECISION_HELPERS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_TZ2_DECISION_HELPERS__";
+const PLACEHOLDER_TZ1_DRIVE_UPDATE_UI_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_UPDATE_UI__";
+const PLACEHOLDER_TZ3_SCORE_ENGINE_JS = "__CLEAR_ROAD_BUILD_JS_TZ3_SCORE_ENGINE__";
+const PLACEHOLDER_TZ4_WHY_GENERATOR_JS = "__CLEAR_ROAD_BUILD_JS_TZ4_WHY_GENERATOR__";
+const PLACEHOLDER_AI_DECISION_LAYER_JS = "__CLEAR_ROAD_BUILD_JS_AI_DECISION_LAYER__";
+const PLACEHOLDER_TZ1_DRIVE_VOICE_AI_ADVICE_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_VOICE_AI_ADVICE__";
+const PLACEHOLDER_TZ1_DRIVE_LIVE_GPS_TRACKING_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_DRIVE_LIVE_GPS_TRACKING__";
+const PLACEHOLDER_ROUTE_CARDS_UI_CLEANUP_JS = "__CLEAR_ROAD_BUILD_JS_ROUTE_CARDS_UI_CLEANUP__";
+const PLACEHOLDER_RENDER_RESULTS_DECISION_UI_JS = "__CLEAR_ROAD_BUILD_JS_RENDER_RESULTS_DECISION_UI__";
+const PLACEHOLDER_ROUTE_COMPARE_MODAL_UI_JS = "__CLEAR_ROAD_BUILD_JS_ROUTE_COMPARE_MODAL_UI__";
+const PLACEHOLDER_DRIVE_START_NAV_JS = "__CLEAR_ROAD_BUILD_JS_DRIVE_START_NAV__";
+const PLACEHOLDER_TZ6_PRODUCTION_SAFETY_JS = "__CLEAR_ROAD_BUILD_JS_TZ6_PRODUCTION_SAFETY__";
+const PLACEHOLDER_TZ2_GPS_STABILITY_JS = "__CLEAR_ROAD_BUILD_JS_TZ2_GPS_STABILITY__";
+const PLACEHOLDER_TZ7_LIVE_RECALC_JS = "__CLEAR_ROAD_BUILD_JS_TZ7_LIVE_RECALC__";
 const PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS = "__CLEAR_ROAD_BUILD_JS_TZ3_PREDICTIVE_STABILITY__";
 const PLACEHOLDER_TZ4_UAE_LOCAL_JS = "__CLEAR_ROAD_BUILD_JS_TZ4_UAE_LOCAL__";
 const PLACEHOLDER_TZ5_FILTERS_JS = "__CLEAR_ROAD_BUILD_JS_TZ5_FILTERS__";
@@ -83,6 +185,11 @@ const PLACEHOLDER_TZ12_FINAL_AUDIT_JS = "__CLEAR_ROAD_BUILD_JS_TZ12_FINAL_AUDIT_
 const PLACEHOLDER_TZ13_PREMIUM_VOICE_JS = "__CLEAR_ROAD_BUILD_JS_TZ13_PREMIUM_VOICE__";
 const PLACEHOLDER_TZ1_TTS_ELEVENLABS_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_TTS_ELEVENLABS__";
 const PLACEHOLDER_TZ2_ROUTE_INTEGRITY_JS = "__CLEAR_ROAD_BUILD_JS_TZ2_ROUTE_INTEGRITY__";
+const PLACEHOLDER_CR_REROUTE_DECISION_JS = "__CLEAR_ROAD_BUILD_JS_CR_REROUTE_DECISION__";
+const PLACEHOLDER_CR_DRIVE_BINDING_JS = "__CLEAR_ROAD_BUILD_JS_CR_DRIVE_BINDING__";
+const PLACEHOLDER_CR_PREDICTIVE_LAYER_JS = "__CLEAR_ROAD_BUILD_JS_CR_PREDICTIVE_LAYER__";
+const PLACEHOLDER_CR_ROUTING_CORE_JS = "__CLEAR_ROAD_BUILD_JS_CR_ROUTING_CORE__";
+const PLACEHOLDER_CR_AUTOCOMPLETE_GEO_JS = "__CLEAR_ROAD_BUILD_JS_CR_AUTOCOMPLETE_GEO__";
 const PLACEHOLDER_UX_DIAG_BOOTSTRAP_JS = "__CLEAR_ROAD_BUILD_JS_UX_DIAG_BOOTSTRAP__";
 const PLACEHOLDER_TZ1_TZ2_FINAL_JS = "__CLEAR_ROAD_BUILD_JS_TZ1_TZ2_FINAL__";
 const PLACEHOLDER_TZ3_I18N_CLEAN_JS = "__CLEAR_ROAD_BUILD_JS_TZ3_I18N_CLEAN__";
@@ -155,6 +262,570 @@ function injectEmptyStateJs(html) {
     process.exit(1);
   }
   return html.split(PLACEHOLDER_EMPTY_STATE_JS).join(js);
+}
+
+function injectTz1DirectionsRouteExtractJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DIRECTIONS_ROUTE_EXTRACT_JS)) return html;
+  if (!existsSync(tz1DirectionsRouteExtractJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 directions route extract, но нет файла:", tz1DirectionsRouteExtractJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DirectionsRouteExtractJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 directions route extract:", tz1DirectionsRouteExtractJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function extractRoutesFromDirectionsResult") ||
+    !js.includes("function validateExtractedRoutes")
+  ) {
+    console.error(
+      "TZ1 directions route extract: ожидаются extractRoutesFromDirectionsResult и validateExtractedRoutes:",
+      tz1DirectionsRouteExtractJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DIRECTIONS_ROUTE_EXTRACT_JS).join(js);
+}
+
+function injectTz1RouteMetricsTrafficJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_ROUTE_METRICS_TRAFFIC_JS)) return html;
+  if (!existsSync(tz1RouteMetricsTrafficJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 route metrics/traffic, но нет файла:", tz1RouteMetricsTrafficJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1RouteMetricsTrafficJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 route metrics/traffic:", tz1RouteMetricsTrafficJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function calculateRouteMetrics") ||
+    !js.includes("function trafficRank") ||
+    !js.includes("function getStressBadge")
+  ) {
+    console.error(
+      "TZ1 route metrics/traffic: ожидаются calculateRouteMetrics, trafficRank, getStressBadge:",
+      tz1RouteMetricsTrafficJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_ROUTE_METRICS_TRAFFIC_JS).join(js);
+}
+
+function injectTz1RouteRoleSegmentsJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_ROUTE_ROLE_SEGMENTS_JS)) return html;
+  if (!existsSync(tz1RouteRoleSegmentsJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 route role/segments, но нет файла:", tz1RouteRoleSegmentsJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1RouteRoleSegmentsJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 route role/segments:", tz1RouteRoleSegmentsJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function getRouteRole") || !js.includes("function buildRouteSegments")) {
+    console.error(
+      "TZ1 route role/segments: ожидаются getRouteRole и buildRouteSegments:",
+      tz1RouteRoleSegmentsJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_ROUTE_ROLE_SEGMENTS_JS).join(js);
+}
+
+function injectTz1DriveGpsWarningsJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_GPS_WARNINGS_JS)) return html;
+  if (!existsSync(tz1DriveGpsWarningsJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive/GPS/warnings, но нет файла:", tz1DriveGpsWarningsJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveGpsWarningsJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive/GPS/warnings:", tz1DriveGpsWarningsJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function buildDriveViewModel") ||
+    !js.includes("function getDistanceToStepEndMeters") ||
+    !js.includes("function getLiveRemainingMeters") ||
+    !js.includes("function getWarningPhaseForType") ||
+    !js.includes("function getEffectiveDistanceToStepMeters")
+  ) {
+    console.error(
+      "TZ1 drive/GPS/warnings: ожидаются buildDriveViewModel, getLiveRemainingMeters, getDistanceToStepEndMeters, getWarningPhaseForType, getEffectiveDistanceToStepMeters:",
+      tz1DriveGpsWarningsJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_GPS_WARNINGS_JS).join(js);
+}
+
+function injectTz1DriveVoiceTimedWarningsJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_TIMED_WARNINGS_JS)) return html;
+  if (!existsSync(tz1DriveVoiceTimedWarningsJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive voice/timed warnings, но нет файла:", tz1DriveVoiceTimedWarningsJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveVoiceTimedWarningsJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive voice/timed warnings:", tz1DriveVoiceTimedWarningsJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function buildTimedWarning") ||
+    !js.includes("function normalizeVoiceText") ||
+    !js.includes("function speakDriveInstruction")
+  ) {
+    console.error(
+      "TZ1 drive voice/timed warnings: ожидаются buildTimedWarning, normalizeVoiceText, speakDriveInstruction:",
+      tz1DriveVoiceTimedWarningsJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_VOICE_TIMED_WARNINGS_JS).join(js);
+}
+
+function injectTz1DriveLaneTimedHudJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_LANE_TIMED_HUD_JS)) return html;
+  if (!existsSync(tz1DriveLaneTimedHudJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive lane/timed HUD, но нет файла:", tz1DriveLaneTimedHudJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveLaneTimedHudJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive lane/timed HUD:", tz1DriveLaneTimedHudJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function getDriveTimedWarning") ||
+    !js.includes("function getDriveLaneGuidance") ||
+    !js.includes("function buildLaneGuidanceText")
+  ) {
+    console.error(
+      "TZ1 drive lane/timed HUD: ожидаются getDriveTimedWarning, getDriveLaneGuidance, buildLaneGuidanceText:",
+      tz1DriveLaneTimedHudJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_LANE_TIMED_HUD_JS).join(js);
+}
+
+function injectTz1DriveUpcomingConditionJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_UPCOMING_CONDITION_JS)) return html;
+  if (!existsSync(tz1DriveUpcomingConditionJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive upcoming condition, но нет файла:", tz1DriveUpcomingConditionJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveUpcomingConditionJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive upcoming condition:", tz1DriveUpcomingConditionJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function getUpcomingCondition")) {
+    console.error("TZ1 drive upcoming condition: ожидается getUpcomingCondition:", tz1DriveUpcomingConditionJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_UPCOMING_CONDITION_JS).join(js);
+}
+
+function injectTz1DriveMainInstructionJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_MAIN_INSTRUCTION_JS)) return html;
+  if (!existsSync(tz1DriveMainInstructionJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive main instruction, но нет файла:", tz1DriveMainInstructionJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveMainInstructionJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive main instruction:", tz1DriveMainInstructionJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function getCleanDriveMainInstruction") ||
+    !js.includes("function formatDriveMeters") ||
+    !js.includes("function getDriveIcon")
+  ) {
+    console.error(
+      "TZ1 drive main instruction: ожидаются getCleanDriveMainInstruction, formatDriveMeters, getDriveIcon:",
+      tz1DriveMainInstructionJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_MAIN_INSTRUCTION_JS).join(js);
+}
+
+function injectTz1DriveVoiceNavTurnsJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_NAV_TURNS_JS)) return html;
+  if (!existsSync(tz1DriveVoiceNavTurnsJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive voice nav turns, но нет файла:", tz1DriveVoiceNavTurnsJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveVoiceNavTurnsJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive voice nav turns:", tz1DriveVoiceNavTurnsJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function speakStartNavigation") ||
+    !js.includes("function maybeSpeakDriveNavigation") ||
+    !js.includes("function getRouteStepsForVoice")
+  ) {
+    console.error(
+      "TZ1 drive voice nav turns: ожидаются getRouteStepsForVoice, speakStartNavigation, maybeSpeakDriveNavigation:",
+      tz1DriveVoiceNavTurnsJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_VOICE_NAV_TURNS_JS).join(js);
+}
+
+function injectTz2NormalizationLayerJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ2_NORMALIZATION_LAYER_JS)) return html;
+  if (!existsSync(tz2NormalizationLayerJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ2 normalization layer, но нет файла:", tz2NormalizationLayerJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz2NormalizationLayerJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ2 normalization layer:", tz2NormalizationLayerJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function normalizeRoute") || !js.includes("function normalizeRoutes") || !js.includes("function validateNormalizedRoutes")) {
+    console.error("TZ2 normalization layer: ожидаются normalizeRoute, normalizeRoutes, validateNormalizedRoutes:", tz2NormalizationLayerJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ2_NORMALIZATION_LAYER_JS).join(js);
+}
+
+function injectTz1Tz2DecisionHelpersJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_TZ2_DECISION_HELPERS_JS)) return html;
+  if (!existsSync(tz1Tz2DecisionHelpersJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1+TZ2 decision helpers, но нет файла:", tz1Tz2DecisionHelpersJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1Tz2DecisionHelpersJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1+TZ2 decision helpers:", tz1Tz2DecisionHelpersJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function _tz1Minutes") || !js.includes("function _tz2TollCost")) {
+    console.error("TZ1+TZ2 decision helpers: ожидаются _tz1Minutes и _tz2TollCost:", tz1Tz2DecisionHelpersJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_TZ2_DECISION_HELPERS_JS).join(js);
+}
+
+function injectTz1DriveUpdateUiJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_UPDATE_UI_JS)) return html;
+  if (!existsSync(tz1DriveUpdateUiJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive update UI, но нет файла:", tz1DriveUpdateUiJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveUpdateUiJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive update UI:", tz1DriveUpdateUiJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function updateDriveUI") ||
+    !js.includes("function applySmoothedDriveEta") ||
+    !js.includes("_driveDisplayedEtaMin")
+  ) {
+    console.error(
+      "TZ1 drive update UI: ожидаются updateDriveUI, applySmoothedDriveEta, состояние ETA:",
+      tz1DriveUpdateUiJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_UPDATE_UI_JS).join(js);
+}
+
+function injectTz3ScoreEngineJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ3_SCORE_ENGINE_JS)) return html;
+  if (!existsSync(tz3ScoreEngineJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ3 score engine, но нет файла:", tz3ScoreEngineJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz3ScoreEngineJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ3 score engine:", tz3ScoreEngineJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function scoreRoute") || !js.includes("function scoreRoutes") || !js.includes("function validateScoredRoutes")) {
+    console.error("TZ3 score engine: ожидаются scoreRoute, scoreRoutes, validateScoredRoutes:", tz3ScoreEngineJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ3_SCORE_ENGINE_JS).join(js);
+}
+
+function injectTz4WhyGeneratorJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ4_WHY_GENERATOR_JS)) return html;
+  if (!existsSync(tz4WhyGeneratorJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ4 WHY generator, но нет файла:", tz4WhyGeneratorJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz4WhyGeneratorJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ4 WHY generator:", tz4WhyGeneratorJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function applyWhyToRoutes") || !js.includes("function generateWhy")) {
+    console.error("TZ4 WHY generator: ожидаются applyWhyToRoutes и generateWhy:", tz4WhyGeneratorJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ4_WHY_GENERATOR_JS).join(js);
+}
+
+function injectAiDecisionLayerJs(html) {
+  if (!html.includes(PLACEHOLDER_AI_DECISION_LAYER_JS)) return html;
+  if (!existsSync(aiDecisionLayerJsFile)) {
+    console.error("В HTML есть плейсхолдер AI decision layer, но нет файла:", aiDecisionLayerJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(aiDecisionLayerJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой AI decision layer:", aiDecisionLayerJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_AI_DECISION_LAYER_JS).join(js);
+}
+
+function injectTz1DriveVoiceAiAdviceJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_AI_ADVICE_JS)) return html;
+  if (!existsSync(tz1DriveVoiceAiAdviceJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive voice AI advice, но нет файла:", tz1DriveVoiceAiAdviceJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveVoiceAiAdviceJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive voice AI advice:", tz1DriveVoiceAiAdviceJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function getAIAdviceText") ||
+    !js.includes("function speakCurrentDecision") ||
+    !js.includes("function getBestComparableAlternative")
+  ) {
+    console.error(
+      "TZ1 drive voice AI advice: ожидаются getBestComparableAlternative, getAIAdviceText, speakCurrentDecision:",
+      tz1DriveVoiceAiAdviceJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_VOICE_AI_ADVICE_JS).join(js);
+}
+
+function injectCrRerouteDecisionJs(html) {
+  if (!html.includes(PLACEHOLDER_CR_REROUTE_DECISION_JS)) return html;
+  if (!existsSync(crRerouteDecisionJsFile)) {
+    console.error("В HTML есть плейсхолдер cr-reroute-decision, но нет файла:", crRerouteDecisionJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(crRerouteDecisionJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой cr-reroute-decision:", crRerouteDecisionJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function getRerouteDecision")) {
+    console.error("cr-reroute-decision: ожидается getRerouteDecision:", crRerouteDecisionJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_CR_REROUTE_DECISION_JS).join(js);
+}
+
+function injectCrDriveBindingJs(html) {
+  if (!html.includes(PLACEHOLDER_CR_DRIVE_BINDING_JS)) return html;
+  if (!existsSync(crDriveBindingJsFile)) {
+    console.error("В HTML есть плейсхолдер cr-drive-binding, но нет файла:", crDriveBindingJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(crDriveBindingJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой cr-drive-binding:", crDriveBindingJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function exitDriveMode")) {
+    console.error("cr-drive-binding: ожидается exitDriveMode:", crDriveBindingJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_CR_DRIVE_BINDING_JS).join(js);
+}
+
+function injectCrPredictiveLayerJs(html) {
+  if (!html.includes(PLACEHOLDER_CR_PREDICTIVE_LAYER_JS)) return html;
+  if (!existsSync(crPredictiveLayerJsFile)) {
+    console.error("В HTML есть плейсхолдер cr-predictive-layer, но нет файла:", crPredictiveLayerJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(crPredictiveLayerJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой cr-predictive-layer:", crPredictiveLayerJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function runPredictiveCheck")) {
+    console.error("cr-predictive-layer: ожидается runPredictiveCheck:", crPredictiveLayerJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_CR_PREDICTIVE_LAYER_JS).join(js);
+}
+
+function injectCrRoutingCoreJs(html) {
+  if (!html.includes(PLACEHOLDER_CR_ROUTING_CORE_JS)) return html;
+  if (!existsSync(crRoutingCoreJsFile)) {
+    console.error("В HTML есть плейсхолдер cr-routing-core, но нет файла:", crRoutingCoreJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(crRoutingCoreJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой cr-routing-core:", crRoutingCoreJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function calculateRoutes") || !js.includes("function drawRoutes")) {
+    console.error("cr-routing-core: ожидаются calculateRoutes и drawRoutes:", crRoutingCoreJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_CR_ROUTING_CORE_JS).join(js);
+}
+
+function injectCrAutocompleteGeoJs(html) {
+  if (!html.includes(PLACEHOLDER_CR_AUTOCOMPLETE_GEO_JS)) return html;
+  if (!existsSync(crAutocompleteGeoJsFile)) {
+    console.error("В HTML есть плейсхолдер cr-autocomplete-geo, но нет файла:", crAutocompleteGeoJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(crAutocompleteGeoJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой cr-autocomplete-geo:", crAutocompleteGeoJsFile);
+    process.exit(1);
+  }
+  if (!js.includes("function initAutocomplete") || !js.includes("function patchGpsEntrypoints")) {
+    console.error("cr-autocomplete-geo: ожидаются initAutocomplete и patchGpsEntrypoints:", crAutocompleteGeoJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_CR_AUTOCOMPLETE_GEO_JS).join(js);
+}
+
+function injectTz1DriveLiveGpsTrackingJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ1_DRIVE_LIVE_GPS_TRACKING_JS)) return html;
+  if (!existsSync(tz1DriveLiveGpsTrackingJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ1 drive live GPS tracking, но нет файла:", tz1DriveLiveGpsTrackingJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz1DriveLiveGpsTrackingJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ1 drive live GPS tracking:", tz1DriveLiveGpsTrackingJsFile);
+    process.exit(1);
+  }
+  if (
+    !js.includes("function handleLiveDrivePosition") ||
+    !js.includes("function startLiveDriveTracking") ||
+    !js.includes("function stopLiveDriveTracking")
+  ) {
+    console.error(
+      "TZ1 drive live GPS tracking: ожидаются handleLiveDrivePosition, startLiveDriveTracking, stopLiveDriveTracking:",
+      tz1DriveLiveGpsTrackingJsFile
+    );
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ1_DRIVE_LIVE_GPS_TRACKING_JS).join(js);
+}
+
+function injectRouteCardsUiCleanupJs(html) {
+  if (!html.includes(PLACEHOLDER_ROUTE_CARDS_UI_CLEANUP_JS)) return html;
+  if (!existsSync(routeCardsUiCleanupJsFile)) {
+    console.error("В HTML есть плейсхолдер route-cards UI cleanup, но нет файла:", routeCardsUiCleanupJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(routeCardsUiCleanupJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой route-cards UI cleanup:", routeCardsUiCleanupJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_ROUTE_CARDS_UI_CLEANUP_JS).join(js);
+}
+
+function injectRenderResultsDecisionUiJs(html) {
+  if (!html.includes(PLACEHOLDER_RENDER_RESULTS_DECISION_UI_JS)) return html;
+  if (!existsSync(renderResultsDecisionUiJsFile)) {
+    console.error("В HTML есть плейсхолдер render-results decision UI, но нет файла:", renderResultsDecisionUiJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(renderResultsDecisionUiJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой render-results decision UI:", renderResultsDecisionUiJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_RENDER_RESULTS_DECISION_UI_JS).join(js);
+}
+
+function injectRouteCompareModalUiJs(html) {
+  if (!html.includes(PLACEHOLDER_ROUTE_COMPARE_MODAL_UI_JS)) return html;
+  if (!existsSync(routeCompareModalUiJsFile)) {
+    console.error("В HTML есть плейсхолдер route-compare modal UI, но нет файла:", routeCompareModalUiJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(routeCompareModalUiJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой route-compare modal UI:", routeCompareModalUiJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_ROUTE_COMPARE_MODAL_UI_JS).join(js);
+}
+
+function injectDriveStartNavJs(html) {
+  if (!html.includes(PLACEHOLDER_DRIVE_START_NAV_JS)) return html;
+  if (!existsSync(driveStartNavJsFile)) {
+    console.error("В HTML есть плейсхолдер drive start-nav entry, но нет файла:", driveStartNavJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(driveStartNavJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой drive start-nav entry:", driveStartNavJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_DRIVE_START_NAV_JS).join(js);
+}
+
+function injectTz6ProductionSafetyJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ6_PRODUCTION_SAFETY_JS)) return html;
+  if (!existsSync(tz6ProductionSafetyJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ6 production safety, но нет файла:", tz6ProductionSafetyJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz6ProductionSafetyJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ6 production safety:", tz6ProductionSafetyJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ6_PRODUCTION_SAFETY_JS).join(js);
+}
+
+function injectTz2GpsStabilityJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ2_GPS_STABILITY_JS)) return html;
+  if (!existsSync(tz2GpsStabilityJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ2 GPS stability, но нет файла:", tz2GpsStabilityJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz2GpsStabilityJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ2 GPS stability:", tz2GpsStabilityJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ2_GPS_STABILITY_JS).join(js);
+}
+
+function injectTz7LiveRecalculationJs(html) {
+  if (!html.includes(PLACEHOLDER_TZ7_LIVE_RECALC_JS)) return html;
+  if (!existsSync(tz7LiveRecalculationJsFile)) {
+    console.error("В HTML есть плейсхолдер TZ7 live recalculation, но нет файла:", tz7LiveRecalculationJsFile);
+    process.exit(1);
+  }
+  const js = readFileSync(tz7LiveRecalculationJsFile, "utf8");
+  if (!js.trim()) {
+    console.error("Пустой TZ7 live recalculation:", tz7LiveRecalculationJsFile);
+    process.exit(1);
+  }
+  return html.split(PLACEHOLDER_TZ7_LIVE_RECALC_JS).join(js);
 }
 
 function injectTz3PredictiveStabilityJs(html) {
@@ -496,6 +1167,122 @@ function validateArtifact(html) {
     console.error("В артефакте остался плейсхолдер empty-state JS — сборка не завершена.");
     process.exit(1);
   }
+  if (html.includes(PLACEHOLDER_TZ1_DIRECTIONS_ROUTE_EXTRACT_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 directions route extract JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_ROUTE_METRICS_TRAFFIC_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 route metrics/traffic JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_ROUTE_ROLE_SEGMENTS_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 route role/segments JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_GPS_WARNINGS_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive/GPS/warnings JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_TIMED_WARNINGS_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive voice/timed warnings JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_LANE_TIMED_HUD_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive lane/timed HUD JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_UPCOMING_CONDITION_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive upcoming condition JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_MAIN_INSTRUCTION_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive main instruction JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_NAV_TURNS_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive voice nav turns JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ2_NORMALIZATION_LAYER_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ2 normalization layer JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_TZ2_DECISION_HELPERS_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1+TZ2 decision helpers JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_UPDATE_UI_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive update UI JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ3_SCORE_ENGINE_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ3 score engine JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ4_WHY_GENERATOR_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ4 WHY generator JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_AI_DECISION_LAYER_JS)) {
+    console.error("В артефакте остался плейсхолдер AI decision layer JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_AI_ADVICE_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive voice AI advice JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_CR_REROUTE_DECISION_JS)) {
+    console.error("В артефакте остался плейсхолдер cr-reroute-decision JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_LIVE_GPS_TRACKING_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ1 drive live GPS tracking JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_CR_DRIVE_BINDING_JS)) {
+    console.error("В артефакте остался плейсхолдер cr-drive-binding JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_ROUTE_CARDS_UI_CLEANUP_JS)) {
+    console.error("В артефакте остался плейсхолдер route-cards UI cleanup JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_RENDER_RESULTS_DECISION_UI_JS)) {
+    console.error("В артефакте остался плейсхолдер render-results decision UI JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_ROUTE_COMPARE_MODAL_UI_JS)) {
+    console.error("В артефакте остался плейсхолдер route-compare modal UI JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_CR_PREDICTIVE_LAYER_JS)) {
+    console.error("В артефакте остался плейсхолдер cr-predictive-layer JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_CR_ROUTING_CORE_JS)) {
+    console.error("В артефакте остался плейсхолдер cr-routing-core JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_CR_AUTOCOMPLETE_GEO_JS)) {
+    console.error("В артефакте остался плейсхолдер cr-autocomplete-geo JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_DRIVE_START_NAV_JS)) {
+    console.error("В артефакте остался плейсхолдер drive start-nav entry JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ6_PRODUCTION_SAFETY_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ6 production safety JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ2_GPS_STABILITY_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ2 GPS stability JS — сборка не завершена.");
+    process.exit(1);
+  }
+  if (html.includes(PLACEHOLDER_TZ7_LIVE_RECALC_JS)) {
+    console.error("В артефакте остался плейсхолдер TZ7 live recalculation JS — сборка не завершена.");
+    process.exit(1);
+  }
   if (html.includes(PLACEHOLDER_TZ3_PREDICTIVE_STABILITY_JS)) {
     console.error("В артефакте остался плейсхолдер TZ3 predictive stability JS — сборка не завершена.");
     process.exit(1);
@@ -593,6 +1380,30 @@ function validateArtifact(html) {
     ["closing html", /<\/html>\s*$/i.test(html.trim())],
     ["css bulk", html.includes("clear-road.css block") || html.includes(":root {")],
     ["cr-empty-state JS", html.includes("crFixRouteEmptyStateFinalV2")],
+    ["TZ1 directions route extract v11", html.includes("function extractRoutesFromDirectionsResult") && html.includes("function validateExtractedRoutes")],
+    ["TZ1 route metrics/traffic v12", html.includes("function calculateRouteMetrics") && html.includes("function trafficRank") && html.includes("function stepLooksLikeHighway")],
+    ["TZ1 route role/segments v13", html.includes("function getRouteRole") && html.includes("function buildRouteSegments")],
+    ["TZ1 drive/GPS/warnings v14", html.includes("function buildDriveViewModel") && html.includes("function getDistanceToStepEndMeters") && html.includes("function getStepWarningMeta") && html.includes("function getWarningPhaseForType") && html.includes("function getEffectiveDistanceToStepMeters")],
+    ["TZ1 drive voice/timed warnings v15", html.includes("function buildTimedWarning") && html.includes("function normalizeVoiceText") && html.includes("function buildContextAwareVoicePrompt")],
+    ["TZ1 drive lane/timed HUD v18", html.includes("function getDriveTimedWarning") && html.includes("function getDriveLaneGuidance") && html.includes("function buildLaneGuidanceText")],
+    ["TZ1 drive upcoming condition v21 (getUpcomingCondition)", html.includes("function getUpcomingCondition")],
+    ["TZ1 drive main instruction v19", html.includes("function getCleanDriveMainInstruction") && html.includes("function formatDriveMeters") && html.includes("function getNextMeaningfulDriveAction")],
+    ["TZ1 drive voice nav turns v17", html.includes("function maybeSpeakDriveNavigation") && html.includes("function speakStartNavigation") && html.includes("function getRouteStepsForVoice")],
+    ["TZ2 normalization layer v10 (normalizeRoute)", html.includes("function normalizeRoute") && html.includes("function validateNormalizedRoutes") && html.includes("function applyClearRoadRouteSanityMarks")],
+    ["TZ1+TZ2 decision helpers v08 (_tz1Minutes)", html.includes("function _tz1Minutes") && html.includes("function _tz2TollCost") && html.includes("function _tz2BuildScoreBreakdown")],
+    ["TZ1 drive update UI v20 (updateDriveUI)", html.includes("function updateDriveUI") && html.includes("function applySmoothedDriveEta")],
+    ["TZ3 score engine (scoreRoute, scoreRoutes)", html.includes("function scoreRoute") && html.includes("function scoreRoutes") && html.includes("function validateScoredRoutes")],
+    ["TZ4 WHY generator (generateWhy, applyWhyToRoutes)", html.includes("function generateWhy") && html.includes("function applyWhyToRoutes") && html.includes("function clearRoadOfficialBestRoute")],
+    ["AI decision layer (TZ-5)", html.includes("function buildAIDecision") && html.includes("function buildCanonicalDecisionState")],
+    ["TZ1 drive voice AI advice v16", html.includes("function getAIAdviceText") && html.includes("function speakCurrentDecision") && html.includes("function buildRerouteVoiceText")],
+    ["TZ1 drive live GPS tracking v22 (handleLiveDrivePosition)", html.includes("function handleLiveDrivePosition") && html.includes("function startLiveDriveTracking") && html.includes("function evaluateReroute")],
+    ["route cards UI cleanup (TZ-9 cards)", html.includes("function tz8RenderAlternativeCard") && html.includes("ROUTE CARDS UI CLEANUP")],
+    ["renderResults decision UI", html.includes("function renderResults") && html.includes("DECISION UI BINDING")],
+    ["route compare modal UI (openRouteDetails)", html.includes("function openRouteDetails") && html.includes("function tz10RouteDetailsViewModel")],
+    ["drive start-nav entry", html.includes("function handleStartNavTap") && html.includes("function startDrive")],
+    ["TZ6 production safety", html.includes("clearRoadTZ6Safety")],
+    ["TZ2 GPS stability", html.includes("clearRoadTZ2Gps")],
+    ["TZ7 live recalculation", html.includes("clearRoadTZ7LiveRecalculation")],
     ["TZ3 predictive stability", html.includes("clearRoadTZ3Predictive")],
     ["TZ4 UAE local / Salik", html.includes("clearRoadTZ4UAE")],
     ["TZ5 filters / preferences", html.includes("clearRoadTZ5Filters")],
@@ -638,6 +1449,180 @@ function validateSourceInput(html) {
   if (html.includes(PLACEHOLDER_EMPTY_STATE_JS)) {
     if (!existsSync(emptyStateJsFile) || !readFileSync(emptyStateJsFile, "utf8").trim()) {
       console.error("input содержит плейсхолдер empty-state JS — нужен непустой", emptyStateJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DIRECTIONS_ROUTE_EXTRACT_JS)) {
+    if (!existsSync(tz1DirectionsRouteExtractJsFile) || !readFileSync(tz1DirectionsRouteExtractJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 directions route extract — нужен непустой", tz1DirectionsRouteExtractJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_ROUTE_METRICS_TRAFFIC_JS)) {
+    if (!existsSync(tz1RouteMetricsTrafficJsFile) || !readFileSync(tz1RouteMetricsTrafficJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 route metrics/traffic — нужен непустой", tz1RouteMetricsTrafficJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_ROUTE_ROLE_SEGMENTS_JS)) {
+    if (!existsSync(tz1RouteRoleSegmentsJsFile) || !readFileSync(tz1RouteRoleSegmentsJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 route role/segments — нужен непустой", tz1RouteRoleSegmentsJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_GPS_WARNINGS_JS)) {
+    if (!existsSync(tz1DriveGpsWarningsJsFile) || !readFileSync(tz1DriveGpsWarningsJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive/GPS/warnings — нужен непустой", tz1DriveGpsWarningsJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_TIMED_WARNINGS_JS)) {
+    if (!existsSync(tz1DriveVoiceTimedWarningsJsFile) || !readFileSync(tz1DriveVoiceTimedWarningsJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive voice/timed warnings — нужен непустой", tz1DriveVoiceTimedWarningsJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_LANE_TIMED_HUD_JS)) {
+    if (!existsSync(tz1DriveLaneTimedHudJsFile) || !readFileSync(tz1DriveLaneTimedHudJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive lane/timed HUD — нужен непустой", tz1DriveLaneTimedHudJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_UPCOMING_CONDITION_JS)) {
+    if (!existsSync(tz1DriveUpcomingConditionJsFile) || !readFileSync(tz1DriveUpcomingConditionJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive upcoming condition — нужен непустой", tz1DriveUpcomingConditionJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_MAIN_INSTRUCTION_JS)) {
+    if (!existsSync(tz1DriveMainInstructionJsFile) || !readFileSync(tz1DriveMainInstructionJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive main instruction — нужен непустой", tz1DriveMainInstructionJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_NAV_TURNS_JS)) {
+    if (!existsSync(tz1DriveVoiceNavTurnsJsFile) || !readFileSync(tz1DriveVoiceNavTurnsJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive voice nav turns — нужен непустой", tz1DriveVoiceNavTurnsJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ2_NORMALIZATION_LAYER_JS)) {
+    if (!existsSync(tz2NormalizationLayerJsFile) || !readFileSync(tz2NormalizationLayerJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ2 normalization layer — нужен непустой", tz2NormalizationLayerJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_TZ2_DECISION_HELPERS_JS)) {
+    if (!existsSync(tz1Tz2DecisionHelpersJsFile) || !readFileSync(tz1Tz2DecisionHelpersJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1+TZ2 decision helpers — нужен непустой", tz1Tz2DecisionHelpersJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_UPDATE_UI_JS)) {
+    if (!existsSync(tz1DriveUpdateUiJsFile) || !readFileSync(tz1DriveUpdateUiJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive update UI — нужен непустой", tz1DriveUpdateUiJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ3_SCORE_ENGINE_JS)) {
+    if (!existsSync(tz3ScoreEngineJsFile) || !readFileSync(tz3ScoreEngineJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ3 score engine — нужен непустой", tz3ScoreEngineJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ4_WHY_GENERATOR_JS)) {
+    if (!existsSync(tz4WhyGeneratorJsFile) || !readFileSync(tz4WhyGeneratorJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ4 WHY generator — нужен непустой", tz4WhyGeneratorJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_AI_DECISION_LAYER_JS)) {
+    if (!existsSync(aiDecisionLayerJsFile) || !readFileSync(aiDecisionLayerJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер AI decision layer — нужен непустой", aiDecisionLayerJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_VOICE_AI_ADVICE_JS)) {
+    if (!existsSync(tz1DriveVoiceAiAdviceJsFile) || !readFileSync(tz1DriveVoiceAiAdviceJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive voice AI advice — нужен непустой", tz1DriveVoiceAiAdviceJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_CR_REROUTE_DECISION_JS)) {
+    if (!existsSync(crRerouteDecisionJsFile) || !readFileSync(crRerouteDecisionJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер cr-reroute-decision — нужен непустой", crRerouteDecisionJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ1_DRIVE_LIVE_GPS_TRACKING_JS)) {
+    if (!existsSync(tz1DriveLiveGpsTrackingJsFile) || !readFileSync(tz1DriveLiveGpsTrackingJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ1 drive live GPS tracking — нужен непустой", tz1DriveLiveGpsTrackingJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_CR_DRIVE_BINDING_JS)) {
+    if (!existsSync(crDriveBindingJsFile) || !readFileSync(crDriveBindingJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер cr-drive-binding — нужен непустой", crDriveBindingJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_ROUTE_CARDS_UI_CLEANUP_JS)) {
+    if (!existsSync(routeCardsUiCleanupJsFile) || !readFileSync(routeCardsUiCleanupJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер route-cards UI cleanup — нужен непустой", routeCardsUiCleanupJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_RENDER_RESULTS_DECISION_UI_JS)) {
+    if (!existsSync(renderResultsDecisionUiJsFile) || !readFileSync(renderResultsDecisionUiJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер render-results decision UI — нужен непустой", renderResultsDecisionUiJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_ROUTE_COMPARE_MODAL_UI_JS)) {
+    if (!existsSync(routeCompareModalUiJsFile) || !readFileSync(routeCompareModalUiJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер route-compare modal UI — нужен непустой", routeCompareModalUiJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_CR_PREDICTIVE_LAYER_JS)) {
+    if (!existsSync(crPredictiveLayerJsFile) || !readFileSync(crPredictiveLayerJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер cr-predictive-layer — нужен непустой", crPredictiveLayerJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_CR_ROUTING_CORE_JS)) {
+    if (!existsSync(crRoutingCoreJsFile) || !readFileSync(crRoutingCoreJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер cr-routing-core — нужен непустой", crRoutingCoreJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_CR_AUTOCOMPLETE_GEO_JS)) {
+    if (!existsSync(crAutocompleteGeoJsFile) || !readFileSync(crAutocompleteGeoJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер cr-autocomplete-geo — нужен непустой", crAutocompleteGeoJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_DRIVE_START_NAV_JS)) {
+    if (!existsSync(driveStartNavJsFile) || !readFileSync(driveStartNavJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер drive start-nav entry — нужен непустой", driveStartNavJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ6_PRODUCTION_SAFETY_JS)) {
+    if (!existsSync(tz6ProductionSafetyJsFile) || !readFileSync(tz6ProductionSafetyJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ6 production safety — нужен непустой", tz6ProductionSafetyJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ2_GPS_STABILITY_JS)) {
+    if (!existsSync(tz2GpsStabilityJsFile) || !readFileSync(tz2GpsStabilityJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ2 GPS stability — нужен непустой", tz2GpsStabilityJsFile);
+      process.exit(1);
+    }
+  }
+  if (html.includes(PLACEHOLDER_TZ7_LIVE_RECALC_JS)) {
+    if (!existsSync(tz7LiveRecalculationJsFile) || !readFileSync(tz7LiveRecalculationJsFile, "utf8").trim()) {
+      console.error("input содержит плейсхолдер TZ7 live recalculation — нужен непустой", tz7LiveRecalculationJsFile);
       process.exit(1);
     }
   }
@@ -783,21 +1768,56 @@ function main() {
             injectTz13PremiumVoiceJs(
               injectTz12FinalAuditJs(
                 injectTz11CleanupJs(
-                  injectTz10AiAssistantJs(
+                    injectTz10AiAssistantJs(
                     injectEmptyStateJs(
-                      injectTz3PredictiveStabilityJs(
-                        injectTz4UaeLocalJs(
-                          injectTz5FiltersJs(
-                            injectTz6QuickStartJs(
-                              injectTz7MainI18nJs(
-                                injectTz8RtlJs(
-                                  injectTz7Tz8BundleJs(
-                                    injectTz6bFinalJs(
-                                      injectTz6AiCleanJs(
-                                        injectTz4MobileJs(
-                                          injectTz3I18nCleanJs(
-                                            injectTz1Tz2FinalJs(
-                                              injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                      injectTz1DirectionsRouteExtractJs(
+                      injectTz1RouteMetricsTrafficJs(
+                      injectTz1RouteRoleSegmentsJs(
+                      injectTz1DriveGpsWarningsJs(
+                      injectTz1DriveVoiceTimedWarningsJs(
+                      injectTz1DriveLaneTimedHudJs(
+                      injectTz1DriveUpcomingConditionJs(
+                      injectTz1DriveMainInstructionJs(
+                      injectTz1DriveVoiceNavTurnsJs(
+                      injectTz2NormalizationLayerJs(
+                      injectTz1Tz2DecisionHelpersJs(
+                      injectTz1DriveUpdateUiJs(
+                      injectTz3ScoreEngineJs(
+                      injectTz4WhyGeneratorJs(
+                      injectAiDecisionLayerJs(
+                      injectTz1DriveVoiceAiAdviceJs(
+                      injectCrRerouteDecisionJs(
+                      injectTz1DriveLiveGpsTrackingJs(
+                      injectCrDriveBindingJs(
+                        injectRouteCardsUiCleanupJs(
+                          injectRenderResultsDecisionUiJs(
+                            injectRouteCompareModalUiJs(
+                            injectCrPredictiveLayerJs(
+                            injectCrRoutingCoreJs(
+                            injectCrAutocompleteGeoJs(
+                              injectDriveStartNavJs(
+                              injectTz6ProductionSafetyJs(
+                              injectTz2GpsStabilityJs(
+                                injectTz7LiveRecalculationJs(
+                                  injectTz3PredictiveStabilityJs(
+                                    injectTz4UaeLocalJs(
+                                      injectTz5FiltersJs(
+                                        injectTz6QuickStartJs(
+                                          injectTz7MainI18nJs(
+                                            injectTz8RtlJs(
+                                              injectTz7Tz8BundleJs(
+                                                injectTz6bFinalJs(
+                                                  injectTz6AiCleanJs(
+                                                    injectTz4MobileJs(
+                                                      injectTz3I18nCleanJs(
+                                                        injectTz1Tz2FinalJs(
+                                                          injectUxDiagBootstrapJs(injectI18n(injectCss(html)))
+                                                        )
+                                                      )
+                                                    )
+                                                  )
+                                                )
+                                              )
                                             )
                                           )
                                         )
@@ -806,12 +1826,35 @@ function main() {
                                   )
                                 )
                               )
+                              )
+                              )
+                              )
                             )
                           )
                         )
                       )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
+                      )
                     )
-                  )
+                    )
                 )
               )
             )
@@ -855,6 +1898,22 @@ function main() {
   console.log("   CSS:", cssFile);
   console.log("   i18n:", i18nFile);
   console.log("   empty-state JS:", emptyStateJsFile);
+  console.log("   TZ1 directions route extract JS:", tz1DirectionsRouteExtractJsFile);
+  console.log("   TZ1 route metrics/traffic JS:", tz1RouteMetricsTrafficJsFile);
+  console.log("   TZ1 route role/segments JS:", tz1RouteRoleSegmentsJsFile);
+  console.log("   TZ1 drive/GPS/warnings JS:", tz1DriveGpsWarningsJsFile);
+  console.log("   TZ2 normalization layer JS:", tz2NormalizationLayerJsFile);
+  console.log("   TZ1+TZ2 decision helpers JS:", tz1Tz2DecisionHelpersJsFile);
+  console.log("   TZ3 score engine JS:", tz3ScoreEngineJsFile);
+  console.log("   TZ4 WHY generator JS:", tz4WhyGeneratorJsFile);
+  console.log("   AI decision layer JS:", aiDecisionLayerJsFile);
+  console.log("   route cards UI cleanup JS:", routeCardsUiCleanupJsFile);
+  console.log("   render-results decision UI JS:", renderResultsDecisionUiJsFile);
+  console.log("   route compare modal UI JS:", routeCompareModalUiJsFile);
+  console.log("   drive start-nav entry JS:", driveStartNavJsFile);
+  console.log("   TZ6 production safety JS:", tz6ProductionSafetyJsFile);
+  console.log("   TZ2 GPS stability JS:", tz2GpsStabilityJsFile);
+  console.log("   TZ7 live recalculation JS:", tz7LiveRecalculationJsFile);
   console.log("   TZ3 predictive stability JS:", tz3PredictiveStabilityJsFile);
   console.log("   TZ4 UAE local JS:", tz4UaeLocalJsFile);
   console.log("   TZ5 filters JS:", tz5FiltersJsFile);
