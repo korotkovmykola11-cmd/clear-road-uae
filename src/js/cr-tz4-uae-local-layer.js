@@ -118,6 +118,15 @@
   }
 
   function tz4uaeDetectSalikRoad(text, route, ctx) {
+    if (tz4uaeSuppressDubaiRoadSalikDefault(ctx)) {
+      return {
+        gates: [],
+        count: 0,
+        confidence: "high",
+        source: "northern-emirates-no-dubai"
+      };
+    }
+
     const s = String(text || "").toLowerCase();
     const gates = [];
     const add = function(id, label) {
@@ -139,26 +148,6 @@
     if (/al\s+mamzar/.test(s) && !/al\s+mamzar\s+(north|south)/.test(s)) add("al-mamzar", "Al Mamzar");
     if (/jebel\s+ali/.test(s)) add("jebel-ali", "Jebel Ali");
     if (/business\s+bay\s+crossing|business\s+bay\s+bridge/.test(s)) add("business-bay", "Business Bay Crossing");
-
-    const suppress = tz4uaeSuppressDubaiRoadSalikDefault(ctx);
-    if (suppress && !gates.length) {
-      return {
-        gates: [],
-        count: 0,
-        confidence: "high",
-        source: "northern-emirates-no-dubai-gates"
-      };
-    }
-
-    const onlyOuterFree = /\be311\b|sheikh mohammed bin zayed|\be611\b|emirates road/.test(s) && !(/\be11\b|sheikh zayed|al\s+safa|al\s+barsha|al\s+mamzar|garhoud|maktoum|airport tunnel|business bay|jebel ali/.test(s));
-    if (onlyOuterFree && !gates.length) {
-      return {
-        gates: [],
-        count: 0,
-        confidence: "high",
-        source: "free-corridor"
-      };
-    }
 
     const count = gates.length;
     return {
@@ -217,10 +206,12 @@
     const patterns =
       /dubai\s+mall|golden\s+mile|galleria|nakheel\s+mall|west\s+palm|palm\s+jumeirah|the\s+town\s+mall|dubai\s+investment|(?:^|\s)dip(?:\s|,|$)|dubai\s+sports\s+city|palm\s+monorail|parkonic|jebel\s+ali\s+town|sharjah.*beach|beach.*sharjah|al\s+khan|al\s+majaz/;
     if (patterns.test(s)) return {
-      level: "salik_parking_possible", key: "uae_parking_salik_parkonic_line"
+      level: "paid_dest",
+      key: "uae_parking_dest_short"
     };
     if (/\bmall\b|multi\s*storey|multistorey|paid\s+parking/.test(s)) return {
-      level: "paid_unknown", levelRaw: "possible", key: "uae_parking_may_be_paid_dest"
+      level: "paid_dest",
+      key: "uae_parking_dest_short"
     };
     return {
       level: "none",

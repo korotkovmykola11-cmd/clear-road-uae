@@ -10,22 +10,47 @@ function crI18nSub(str, o) {
   return s;
 }
 
-function crSalikSummaryForAdvisor(route, tk) {
+function crSalikSummaryForAdvisor(route, tk, allRoutes) {
   if (!route || typeof tk !== "function") return "";
-  if (crSalikUncertain(route)) return tk("salik_disclaimer_uncertain");
+  const list =
+    Array.isArray(allRoutes) && allRoutes.length
+      ? allRoutes
+      : typeof analyzedRoutes !== "undefined" && Array.isArray(analyzedRoutes)
+        ? analyzedRoutes.filter(function(r) {
+            return r && Number.isFinite(r.index);
+          })
+        : null;
+  const salikMatters =
+    list && list.length
+      ? crUaeSalikMattersAcrossRoutes(list)
+      : crRouteSalikAed(route) >= 0.01;
+
+  if (crSalikUncertain(route) && salikMatters) return tk("salik_disclaimer_uncertain");
   const sub = crI18nSub;
   const g = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : 0) || 0));
   const road = crRouteSalikAed(route);
   const darb = crRouteDarbAed(route);
   if (route.uaeDestAbuDhabi) {
-    let s =
-      road < 0.01
-        ? tk("ai_adv_road_salik_free_ad")
-        : sub(tk("ai_adv_salik_paid"), { aed: Math.round(road * 100) / 100, n: g });
-    if (darb >= 0.01) s += " · " + sub(tk("ai_adv_darb_paid"), { aed: Math.round(darb * 100) / 100, n: Math.max(0, Math.round(Number(route.darbCount) || 0)) });
-    else if (route.uaeDarbPossible) s += " · " + tk("ai_adv_darb_possible_short");
+    let s = "";
+    if (salikMatters) {
+      s =
+        road < 0.01
+          ? tk("ai_adv_road_salik_free_ad")
+          : sub(tk("ai_adv_salik_paid"), { aed: Math.round(road * 100) / 100, n: g });
+    }
+    if (darb >= 0.01) {
+      s +=
+        (s ? " · " : "") +
+        sub(tk("ai_adv_darb_paid"), {
+          aed: Math.round(darb * 100) / 100,
+          n: Math.max(0, Math.round(Number(route.darbCount) || 0))
+        });
+    } else if (route.uaeDarbPossible) {
+      s += (s ? " · " : "") + tk("ai_adv_darb_possible_short");
+    }
     return s;
   }
+  if (!salikMatters) return "";
   if (road < 0.01) return tk("ai_adv_salik_free");
   return sub(tk("ai_adv_salik_paid"), { aed: Math.round(road * 100) / 100, n: g });
 }
@@ -107,6 +132,33 @@ function crRouteDarbAed(route) {
   return Number.isFinite(c) ? c : 0;
 }
 
+/** Dubai road Salik is relevant to show if any route is tolled or options differ in Salik cost. */
+function crUaeSalikMattersAcrossRoutes(routes) {
+  const list = Array.isArray(routes)
+    ? routes.filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+    : [];
+  if (!list.length) return false;
+  const costs = list.map(function(r) {
+    return crRouteSalikAed(r);
+  });
+  let i;
+  for (i = 0; i < costs.length; i++) {
+    if (costs[i] >= 0.01) return true;
+  }
+  const min = Math.min.apply(null, costs);
+  const max = Math.max.apply(null, costs);
+  return max - min >= 0.01;
+}
+
+/** Darb UI: only when estimate or possibility applies (no "not applicable" row). */
+function crUaeShowDarbRow(route) {
+  if (!route) return false;
+  if (crRouteDarbAed(route) >= 0.01) return true;
+  return !!route.uaeDarbPossible;
+}
+
 function crSalikUncertain(route) {
   return !!(route && route.salikEstimateUncertain);
 }
@@ -166,6 +218,7 @@ function crBuildSalikHeroExtras(panelRoute, matchedBest, analyzedRoutes, tk, sub
   };
   const list = Array.isArray(analyzedRoutes) ? analyzedRoutes : [];
   if (!panelRoute || !list.length) return out;
+  if (!crUaeSalikMattersAcrossRoutes(list)) return out;
 
   var sw = crComputeSalikWaitHint(panelRoute, tk, sub);
   if (sw) out.salikWaitOverride = sw;
@@ -514,12 +567,19 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
   }
 
   if (list.length < 2) {
-    decision = sub(tk("ai_adv_one_route_decision"), {
-      n: crRouteDisplayNum(panelRoute),
-      min: crHeroMinutesForRoute(panelRoute),
-      km: crRouteKmForAi(panelRoute),
-      salik: crSalikSummaryForAdvisor(panelRoute, tk)
-    });
+    decision = sub(
+      tk(
+        crUaeSalikMattersAcrossRoutes(list)
+          ? "ai_adv_one_route_decision"
+          : "ai_adv_one_route_decision_plain"
+      ),
+      {
+        n: crRouteDisplayNum(panelRoute),
+        min: crHeroMinutesForRoute(panelRoute),
+        km: crRouteKmForAi(panelRoute),
+        salik: crSalikSummaryForAdvisor(panelRoute, tk, list)
+      }
+    );
     reason = tk("ai_adv_one_route_why");
   } else {
     const sortedTime = list.slice().sort(function(a, b) {
@@ -530,24 +590,32 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
     const calmest = refs.calmest;
     const freeBest = crFindFastestFreeRoute(list);
 
-    decision = sub(tk("ai_adv_compare_decision"), {
-      total: list.length,
-      n: crRouteDisplayNum(best),
-      min: crHeroMinutesForRoute(best),
-      km: crRouteKmForAi(best),
-      salik: crSalikSummaryForAdvisor(best, tk)
-    });
+    const salikMatters = crUaeSalikMattersAcrossRoutes(list);
+
+    decision = sub(
+      tk(salikMatters ? "ai_adv_compare_decision" : "ai_adv_compare_decision_plain"),
+      {
+        total: list.length,
+        n: crRouteDisplayNum(best),
+        min: crHeroMinutesForRoute(best),
+        km: crRouteKmForAi(best),
+        salik: crSalikSummaryForAdvisor(best, tk, list)
+      }
+    );
 
     const parts = [];
     if (fastest && Number(fastest.index) !== Number(best.index)) {
       const diff = crHeroMinutesForRoute(fastest) - crHeroMinutesForRoute(best);
       if (diff !== 0) {
         parts.push(
-          sub(tk("ai_adv_fastest_note"), {
-            n: crRouteDisplayNum(fastest),
-            min: crHeroMinutesForRoute(fastest),
-            diff: Math.abs(Math.round(diff))
-          })
+          sub(
+            tk(salikMatters ? "ai_adv_fastest_note" : "ai_adv_fastest_note_plain"),
+            {
+              n: crRouteDisplayNum(fastest),
+              min: crHeroMinutesForRoute(fastest),
+              diff: Math.abs(Math.round(diff))
+            }
+          )
         );
       }
     }
@@ -561,7 +629,7 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
     if (freeBest && Number(freeBest.index) !== Number(best.index)) {
       const td = crHeroMinutesForRoute(freeBest) - crHeroMinutesForRoute(best);
       const save = crRouteSalikAed(best) - crRouteSalikAed(freeBest);
-      if (save > 0.5) {
+      if (salikMatters && save > 0.5) {
         parts.push(
           sub(tk("ai_adv_free_alt_note"), {
             n: crRouteDisplayNum(freeBest),
@@ -579,26 +647,34 @@ function crBuildAiHeroCopy(panelRoute, matchedBest, analyzedRoutes) {
     parts.push(sub(tk("ai_adv_traffic_delay"), { traf: trLabel, delay: delayB }));
 
     reason = parts.join(" ");
-    if (!String(reason).trim()) reason = tk("ai_adv_why_balance");
+    if (!String(reason).trim()) {
+      reason = tk(salikMatters ? "ai_adv_why_balance" : "ai_adv_why_balance_plain");
+    }
 
     if (!viewingBest) {
-      compareAlts = sub(tk("ai_adv_viewing_alt"), {
-        n: crRouteDisplayNum(panelRoute),
-        min: crHeroMinutesForRoute(panelRoute),
-        salik: crSalikSummaryForAdvisor(panelRoute, tk),
-        bestN: crRouteDisplayNum(best)
-      });
+      compareAlts = sub(
+        tk(salikMatters ? "ai_adv_viewing_alt" : "ai_adv_viewing_alt_plain"),
+        {
+          n: crRouteDisplayNum(panelRoute),
+          min: crHeroMinutesForRoute(panelRoute),
+          salik: crSalikSummaryForAdvisor(panelRoute, tk, list),
+          bestN: crRouteDisplayNum(best)
+        }
+      );
     } else {
       const second = sortedTime.find(function(r) {
         return r && Number(r.index) !== Number(best.index);
       });
       if (second) {
         const md = crHeroMinutesForRoute(second) - crHeroMinutesForRoute(best);
-        compareAlts = sub(tk("ai_adv_vs_second"), {
-          n: crRouteDisplayNum(second),
-          m: Math.abs(Math.round(md)),
-          salik: crSalikSummaryForAdvisor(second, tk)
-        });
+        compareAlts = sub(
+          tk(salikMatters ? "ai_adv_vs_second" : "ai_adv_vs_second_plain"),
+          {
+            n: crRouteDisplayNum(second),
+            m: Math.abs(Math.round(md)),
+            salik: crSalikSummaryForAdvisor(second, tk, list)
+          }
+        );
       }
     }
   }
@@ -680,13 +756,14 @@ function crBuildRouteAdvisorVoiceBrief(route) {
   const mainAlt = alts[0];
   const chunks = [];
 
+  const salikMatters = crUaeSalikMattersAcrossRoutes(routes);
   if (isBest) {
     chunks.push(sub(tk("ai_voice_recommend_num"), { n: num }));
     if (mainAlt) {
       const d = minutes(mainAlt) - minutes(route);
       if (d >= 2) chunks.push(sub(tk("ai_voice_faster_than_alt"), { m: Math.round(d) }));
       else if (d <= -2) chunks.push(sub(tk("ai_voice_alt_faster_warning"), { m: Math.round(-d) }));
-      else chunks.push(tk("ai_voice_time_close"));
+      else chunks.push(tk(salikMatters ? "ai_voice_time_close" : "ai_voice_time_close_traffic"));
     }
   } else {
     chunks.push(sub(tk("ai_voice_you_picked_num"), { n: num }));
@@ -696,7 +773,7 @@ function crBuildRouteAdvisorVoiceBrief(route) {
     }
   }
 
-  if (crSalikUncertain(route)) chunks.push(tk("salik_disclaimer_uncertain"));
+  if (crSalikUncertain(route) && salikMatters) chunks.push(tk("salik_disclaimer_uncertain"));
   else {
     const aed = crRouteSalikAed(route);
     if (route.uaeDestAbuDhabi) {
@@ -704,7 +781,7 @@ function crBuildRouteAdvisorVoiceBrief(route) {
       const d = crRouteDarbAed(route);
       if (d >= 0.01) chunks.push(sub(tk("ai_voice_darb_cost"), { aed: Math.round(d * 100) / 100 }));
       else if (route.uaeDarbPossible) chunks.push(tk("ai_voice_darb_possible"));
-    } else {
+    } else if (salikMatters) {
       if (aed >= 0.01) chunks.push(sub(tk("ai_voice_salik_road_cost"), { aed: Math.round(aed * 100) / 100 }));
       else chunks.push(tk("ai_voice_salik_road_free"));
     }
@@ -716,7 +793,11 @@ function crBuildRouteAdvisorVoiceBrief(route) {
   const freeAlt = routes.find(function(r) {
     return Number(r.index) !== Number(route.index) && crRouteSalikAed(r) < 0.01 && crRouteDarbAed(r) < 0.01;
   });
-  if (freeAlt && (crRouteSalikAed(route) >= 0.01 || crRouteDarbAed(route) >= 0.01)) {
+  if (
+    salikMatters &&
+    freeAlt &&
+    (crRouteSalikAed(route) >= 0.01 || crRouteDarbAed(route) >= 0.01)
+  ) {
     chunks.push(sub(tk("ai_voice_save_take_alt"), { n: crRouteDisplayNum(freeAlt) }));
   }
 
@@ -728,9 +809,16 @@ try {
 
 function crBuildRouteCardAdvisorInnerHtml(route, displayNum, ctx, tk) {
   const points = buildRouteSellingPoints(route, displayNum);
+  const routes = Array.isArray(analyzedRoutes)
+    ? analyzedRoutes.filter(function(r) {
+        return r && Number.isFinite(r.index);
+      })
+    : [];
+  const salikMatters = crUaeSalikMattersAcrossRoutes(routes);
   let whenKey = "route_card_when_alt";
-  if (ctx.best && route && Number(route.index) === Number(ctx.best.index)) whenKey = "route_card_when_best";
-  else if (ctx.fastest && route && Number(route.index) === Number(ctx.fastest.index)) whenKey = "route_card_when_fastest";
+  if (ctx.best && route && Number(route.index) === Number(ctx.best.index)) {
+    whenKey = salikMatters ? "route_card_when_best" : "route_card_when_best_plain";
+  } else if (ctx.fastest && route && Number(route.index) === Number(ctx.fastest.index)) whenKey = "route_card_when_fastest";
   else if (ctx.calmest && route && Number(route.index) === Number(ctx.calmest.index)) whenKey = "route_card_when_calm";
   else if (crRouteSalikAed(route) < 0.01 && crRouteDarbAed(route) < 0.01 && ctx.best && (crRouteSalikAed(ctx.best) >= 0.01 || crRouteDarbAed(ctx.best) >= 0.01)) whenKey = "route_card_when_tollfree";
   const when = tk(whenKey);
@@ -824,7 +912,7 @@ try {
   window.crBuildRouteAiCopy = crBuildRouteAiCopy;
 } catch (_) {}
 
-function crSalikCardHtml(route, tk) {
+function crSalikCardHtml(route, tk, allRoutes) {
   const sub = function(str, o) {
     let s = String(str || "");
     Object.keys(o || {}).forEach(function(k) {
@@ -832,64 +920,82 @@ function crSalikCardHtml(route, tk) {
     });
     return s;
   };
+  const routeList =
+    Array.isArray(allRoutes) && allRoutes.length
+      ? allRoutes
+      : typeof analyzedRoutes !== "undefined" && Array.isArray(analyzedRoutes)
+        ? analyzedRoutes.filter(function(r) {
+            return r && Number.isFinite(r.index);
+          })
+        : [];
+
+  const salikMatters = crUaeSalikMattersAcrossRoutes(routeList);
   const roadAed = crRouteSalikAed(route);
+  const showRoad =
+    salikMatters &&
+    roadAed >= 0.01;
   const roadGates = Math.max(0, Math.round(Number(route.salikCount != null ? route.salikCount : 0) || 0));
   const darbAed = crRouteDarbAed(route);
   const darbGates = Math.max(0, Math.round(Number(route.darbCount != null ? route.darbCount : 0) || 0));
+  const showDarb = crUaeShowDarbRow(route);
   const park = route.uaeDestParking || { level: "none", key: null };
+  const showPark = !!(park && park.level !== "none" && park.key);
   const destAd = !!route.uaeDestAbuDhabi;
 
-  let roadVal =
-    roadAed < 0.01
-      ? tk("uae_row_road_free")
-      : sub(tk("uae_row_road_paid"), { aed: Math.round(roadAed * 100) / 100, n: roadGates });
-  if (crSalikUncertain(route)) roadVal += " · " + tk("salik_disclaimer_uncertain");
+  let roadHtml = "";
+  if (showRoad) {
+    let roadVal = sub(tk("uae_row_road_paid"), {
+      aed: Math.round(roadAed * 100) / 100,
+      n: roadGates
+    });
+    if (crSalikUncertain(route)) roadVal += " · " + tk("salik_disclaimer_uncertain");
+    roadHtml =
+      '<div class="dashboard-route-salik-row"><span class="dashboard-route-salik-k">' +
+      _tz1EscapeHTML(tk("uae_row_road_label")) +
+      "</span> " +
+      _tz1EscapeHTML(roadVal) +
+      "</div>";
+  }
 
-  let darbVal = "";
-  if (destAd || darbAed >= 0.01 || route.uaeDarbPossible) {
+  let darbHtml = "";
+  if (showDarb) {
+    let darbVal = "";
     if (darbAed >= 0.01) {
       darbVal = sub(tk("uae_row_darb_paid"), { aed: Math.round(darbAed * 100) / 100, n: darbGates });
       if (route.darbEstimateUncertain) darbVal += " · " + tk("uae_darb_may_vary");
     } else if (route.uaeDarbPossible) {
       darbVal = tk("uae_row_darb_possible");
-    } else {
-      darbVal = tk("uae_row_darb_none_detected");
     }
-    darbVal = '<div class="dashboard-route-salik-row dashboard-route-salik-row--darb"><span class="dashboard-route-salik-k">' +
-      _tz1EscapeHTML(tk("uae_row_darb_label")) +
+    if (darbVal) {
+      darbHtml =
+        '<div class="dashboard-route-salik-row dashboard-route-salik-row--darb"><span class="dashboard-route-salik-k">' +
+        _tz1EscapeHTML(tk("uae_row_darb_label")) +
+        "</span> " +
+        _tz1EscapeHTML(darbVal) +
+        "</div>";
+    }
+  }
+
+  let parkHtml = "";
+  if (showPark) {
+    parkHtml =
+      '<div class="dashboard-route-salik-row"><span class="dashboard-route-salik-k">' +
+      _tz1EscapeHTML(tk("uae_row_parking_label")) +
       "</span> " +
-      _tz1EscapeHTML(darbVal) +
-      "</div>";
-  } else {
-    darbVal =
-      '<div class="dashboard-route-salik-row dashboard-route-salik-row--darb"><span class="dashboard-route-salik-k">' +
-      _tz1EscapeHTML(tk("uae_row_darb_label")) +
-      "</span> " +
-      _tz1EscapeHTML(tk("uae_row_darb_na")) +
+      _tz1EscapeHTML(tk(park.key)) +
       "</div>";
   }
 
-  let parkVal = tk("uae_row_parking_unknown");
-  if (park.key) parkVal = tk(park.key);
+  const adNote =
+    destAd && showDarb
+      ? '<div class="dashboard-route-salik-note dashboard-route-salik-note--ad">' +
+        _tz1EscapeHTML(tk("uae_not_salik_this_is_darb")) +
+        "</div>"
+      : "";
 
-  const adNote = destAd ? '<div class="dashboard-route-salik-note dashboard-route-salik-note--ad">' + _tz1EscapeHTML(tk("uae_not_salik_this_is_darb")) + "</div>" : "";
+  if (!roadHtml && !darbHtml && !parkHtml && !adNote) return "";
 
-  return (
-    '<div class="dashboard-route-salik">' +
-    '<div class="dashboard-route-salik-row"><span class="dashboard-route-salik-k">' +
-    _tz1EscapeHTML(tk("uae_row_road_label")) +
-    "</span> " +
-    _tz1EscapeHTML(roadVal) +
-    "</div>" +
-    '<div class="dashboard-route-salik-row"><span class="dashboard-route-salik-k">' +
-    _tz1EscapeHTML(tk("uae_row_parking_label")) +
-    "</span> " +
-    _tz1EscapeHTML(parkVal) +
-    "</div>" +
-    darbVal +
-    adNote +
-    "</div>"
-  );
+  return '<div class="dashboard-route-salik">' + roadHtml + parkHtml + darbHtml + adNote + "</div>";
 }
 
 function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs) {
@@ -979,7 +1085,7 @@ function crRenderAlternativeRoutesListHtml(allRoutes, best, selectedRoute, refs)
       _tz1EscapeHTML(arrivalStr) +
       "</div>";
     inner += crBuildRouteCardAdvisorInnerHtml(route, num, ctx, tk);
-    inner += crSalikCardHtml(route, tk);
+    inner += crSalikCardHtml(route, tk, sorted);
     inner +=
       '<button type="button" class="dashboard-route-select-btn" onclick="event.stopPropagation();selectDisplayedRouteFromUi(' +
       idx +
